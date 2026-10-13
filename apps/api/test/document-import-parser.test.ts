@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs";
-
 import { describe, expect, test } from "vitest";
 
 import {
   DOCUMENT_IMPORT_MAX_MODULES,
+  DOCUMENT_IMPORT_TEMPLATE,
   type DocumentImportIssue,
 } from "@inpulse/api-contract";
 import {
@@ -149,23 +148,8 @@ describe("parseDocumentTemplate 语法", () => {
     expect(codes(result.issues)).toContain("EMPTY_DOCUMENT");
   });
 
-  test("前端下载模板可被解析器接受（模板与解析器一致性）", () => {
-    const source = readFileSync(
-      new URL(
-        "../../web/src/features/document-import/DocumentImportModal.tsx",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    const start = source.indexOf("export const DOCUMENT_IMPORT_TEMPLATE = [");
-    const end = source.indexOf('].join("\\n");', start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const literal = source
-      .slice(source.indexOf("[", start), end + 1)
-      .replace(/,\s*\]$/, "]");
-    const template = (JSON.parse(literal) as string[]).join("\n");
-    const result = parseDocumentTemplate(template);
+  test("共享模板常量可被解析器接受（模板与解析器一致性）", () => {
+    const result = parseDocumentTemplate(DOCUMENT_IMPORT_TEMPLATE);
     expect(result.issues).toEqual([]);
     expect(result.project?.code).toBe("SHOP");
     expect(result.modules[0]?.name).toBe("支付");

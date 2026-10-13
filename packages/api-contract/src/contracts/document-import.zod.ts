@@ -13,6 +13,8 @@ export const DOCUMENT_IMPORT_MAX_TASKS = 500;
 export const DOCUMENT_IMPORT_MAX_TOTAL_ENTITIES = 1_000;
 export const DOCUMENT_IMPORT_TEMPLATE_VERSION = "1";
 export const DOCUMENT_IMPORT_MAX_MEMBERS = 300;
+/** ADR-067 AI 辅助草稿的预检问题上限：只作提示，不阻断返回草稿。 */
+export const DOCUMENT_IMPORT_ASSIST_MAX_ISSUES = 50;
 
 const digest = z
   .string()
@@ -228,6 +230,42 @@ export const projectDocumentImportReplayContextSchema = z
   .strict()
   .meta({ id: "ProjectDocumentImportReplayContext" });
 
+/**
+ * ADR-067 AI 辅助转换：把用户自己的项目文档（任意结构）转成固定模板草稿。
+ * 纯校验接口：不写任何持久化状态；草稿必须经用户确认后走既有预览/导入链路。
+ */
+export const documentImportAssistRequestSchema = z
+  .object({
+    mode: z
+      .enum(["IN_PROJECT", "WHOLE_PROJECT"])
+      .describe(
+        "IN_PROJECT 对应项目内导入（模式 A，草稿不含项目段）；WHOLE_PROJECT 对应整项目导入（模式 B，草稿必须含项目段与项目编码）",
+      ),
+    text: z
+      .string()
+      .min(1)
+      .max(DOCUMENT_IMPORT_MAX_TEXT_LENGTH)
+      .describe("用户原始文档抽取后的纯文本（UTF-8），不要求符合固定模板"),
+  })
+  .strict()
+  .meta({ id: "DocumentImportAssistRequest" });
+
+export const documentImportAssistResponseSchema = z
+  .object({
+    markdown: z
+      .string()
+      .min(1)
+      .max(DOCUMENT_IMPORT_MAX_TEXT_LENGTH)
+      .describe("服务端按固定模板预检后的草稿全文，供用户确认后进入预览"),
+    model: z.string().min(1).max(200).describe("实际调用并返回结果的模型标识"),
+    issues: z
+      .array(documentImportIssueSchema)
+      .max(DOCUMENT_IMPORT_ASSIST_MAX_ISSUES)
+      .describe("解析器预检问题（ERROR 不阻止返回草稿，需用户修正后预览）"),
+  })
+  .strict()
+  .meta({ id: "DocumentImportAssistResponse" });
+
 export type ProjectDocumentImportPreviewRequest = z.infer<
   typeof projectDocumentImportPreviewRequestSchema
 >;
@@ -263,6 +301,12 @@ export type DocumentImportSummary = z.infer<typeof documentImportSummarySchema>;
 export type DocumentImportDuplicate = z.infer<
   typeof documentImportDuplicateSchema
 >;
+export type DocumentImportAssistRequest = z.infer<
+  typeof documentImportAssistRequestSchema
+>;
+export type DocumentImportAssistResponse = z.infer<
+  typeof documentImportAssistResponseSchema
+>;
 
 export const documentImportSchemas = {
   ProjectDocumentImportPreviewRequest: {
@@ -288,6 +332,16 @@ export const documentImportSchemas = {
   ProjectDocumentImportReplayContext: {
     schema: projectDocumentImportReplayContextSchema,
     summary: "文档导入重放资源引用",
+    sensitiveFieldPaths: [],
+  },
+  DocumentImportAssistRequest: {
+    schema: documentImportAssistRequestSchema,
+    summary: "AI 辅助文档转换请求：模式与用户文档原文",
+    sensitiveFieldPaths: [],
+  },
+  DocumentImportAssistResponse: {
+    schema: documentImportAssistResponseSchema,
+    summary: "AI 辅助文档转换响应：模板草稿、模型与预检问题",
     sensitiveFieldPaths: [],
   },
   DocumentImportIssue: {
@@ -351,3 +405,58 @@ export const documentImportSchemas = {
     sensitiveFieldPaths: [],
   },
 } as const;
+
+/**
+ * ADR-064 固定模板全文（ADR-067 自 apps/web 迁入，唯一来源）：
+ * 前端「下载模板 / 格式速查」经契约生成物引用同一文本（漂移检查守护），
+ * 服务端 AI 提示词与解析器一致性测试直接引用本常量；顶部以 > 开头的说明行
+ * 会被解析器忽略，方便把格式规则与模板放在同一个文件里，也方便直接粘贴
+ * 其它工具（含 AI）按此模板填写后的整段输出。
+ */
+export const DOCUMENT_IMPORT_TEMPLATE = [
+  "> InPulse 文档导入模板（模板版本 1）",
+  "> 填写说明：以下以 > 开头的行是说明行，导入时会被忽略，可以保留、也可以删除。",
+  "> 1. 只认识三类行：",
+  ">    - 标题行：# 项目：名称 / ## 模块：名称 / ### 功能：名称 / #### 任务：标题",
+  ">    - 字段行：- 字段名：值（必须以 - 开头；冒号用全角「：」或半角「:」都可以）",
+  ">    - 说明行（以 > 开头）与代码围栏行（``` 或 ~~~）会被忽略，不会导入",
+  "> 2. 字段名必须与下面完全一致，不要自创、不要改名：",
+  ">    项目段：- 项目编码（整项目导入时必填；大写字母开头，只用大写字母、数字、下划线，2-32 位）",
+  ">            - 项目说明；- 初始成员（逗号分隔，写登录名或姓名）",
+  ">    模块段：- 说明",
+  ">    功能段：- 当前说明；- 验收标准；- 标签（逗号分隔）",
+  ">    任务段：- 负责人（必填，逗号分隔，写登录名或姓名）",
+  ">            - 优先级（普通 / 高 / 紧急，或 NORMAL / HIGH / URGENT；不填为普通）",
+  ">            - 截止（必须 YYYY-MM-DD，例如 2026-12-31）；- 描述",
+  ">            - 影响功能（只有模块级任务 ### 任务 可以写，逗号分隔）",
+  "> 3. 层级：任务放在「#### 任务」下，或作为「### 任务」模块级任务；不要跳级、不要错位。",
+  "> 4. 范围：从项目列表「从文档导入整项目」导入时，文档必须包含「# 项目」段；",
+  ">    从模块页「从文档导入」导入已有项目时，不要写「# 项目」段。",
+  "> 5. 负责人必须是系统里已有的用户（写登录名或姓名）；整项目导入时他们会自动加入项目成员。",
+  "> 6. 没填的可选字段会按默认值处理；不要把示例放进代码块（围栏内的正文也会被解析）。",
+  ">",
+  "> 下面是示例结构，请把示例文字替换成你的真实内容（结构保留）：",
+  "",
+  "# 项目：商城系统",
+  "- 项目编码：SHOP",
+  "- 项目说明：一句话说明项目目标与范围",
+  "- 初始成员：zhangsan, lisi",
+  "",
+  "## 模块：支付",
+  "- 说明：支付与退款能力",
+  "",
+  "### 功能：微信支付退款回调",
+  "- 当前说明：现在如何处理回调",
+  "- 验收标准：处理完成后应满足的条件",
+  "- 标签：支付, 重要",
+  "",
+  "#### 任务：修复重复回调",
+  "- 负责人：zhangsan",
+  "- 优先级：高",
+  "- 截止：2026-12-31",
+  "- 描述：问题背景与期望结果",
+  "",
+  "### 任务：模块级任务示例",
+  "- 负责人：lisi",
+  "- 影响功能：微信支付退款回调",
+].join("\n");

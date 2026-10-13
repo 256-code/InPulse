@@ -162,8 +162,57 @@ const applyRoute = (input: {
 });
 
 /**
+ * ADR-067 AI 辅助转换：`POST /document-imports/assist`。
+ * 纯校验接口（无任何持久化副作用）：会话认证、无 CSRF、无幂等；调用管理员
+ * 配置的 OpenAI 兼容端点把用户文档转成模板草稿，不开启数据库事务。
+ */
+const assistRoute: RouteDefinition = {
+  method: "POST",
+  path: "/document-imports/assist",
+  operationId: "assistDocumentImport",
+  summary:
+    "把用户自己的项目文档（任意结构）交给服务端配置的 OpenAI 兼容端点转成固定模板草稿，返回解析器预检问题；不写任何持久化状态，无 CSRF 与幂等记录。",
+  request: {
+    path: "none",
+    query: "none",
+    headers: "none",
+    body: {
+      contentTypes: [
+        {
+          contentType: "application/json",
+          schemaRef: "DocumentImportAssistRequest",
+        },
+      ],
+    },
+  },
+  responses: {
+    "200": json("DocumentImportAssistResponse"),
+    "400": json("ErrorResponse"),
+    "401": json("ErrorResponse"),
+    "422": json("ErrorResponse"),
+    "500": json("ErrorResponse"),
+    "503": json("ErrorResponse"),
+  },
+  authPolicy: "session",
+  // ADR-067：纯校验接口（不写任何持久化状态）显式声明 none。
+  csrfPolicy: "none",
+  idempotencyPolicy: "none",
+  idempotencyExceptionAdr: "none",
+  idempotencyContractVersion: "none",
+  idempotencyFingerprintVersion: "none",
+  behaviorHeaders: "none",
+  idempotencyReplayPolicy: "none",
+  replayAuthorizationPolicy: "none",
+  securityFlowPolicy: "none",
+  versionPolicy: "none",
+  concurrencyPolicy: "none",
+  auditAction: "none",
+};
+
+/**
  * ADR-064 文档导入：项目内导入（带 projectId）与整项目导入（不带 projectId）
  * 各两条路由，预览为纯校验接口，执行为数据库级幂等写命令。
+ * ADR-067 追加 AI 辅助转换路由（纯校验，无持久化副作用）。
  */
 export const documentImportRoutes: readonly RouteDefinition[] = [
   previewRoute({
@@ -194,4 +243,5 @@ export const documentImportRoutes: readonly RouteDefinition[] = [
       "单事务创建整个项目：项目、初始成员（含任务负责人自动加入）、模块、功能与任务，写审计、活动、通知与搜索投影；项目编码全局唯一，同摘要文档禁止重复导入。",
     hasProject: false,
   }),
+  assistRoute,
 ];

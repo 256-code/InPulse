@@ -429,6 +429,12 @@
       "fingerprint": "1dabb97faeae65867c61100f10ec5d1dbb849a1c720def5f23eeb07ff69ae547"
     }
   ],
+  "updateAiAssistSettings": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "931aa072765e2bf364cd9fa8b93bdfdd7f62db5f8f9f2954ad2e0e85c8d53eca"
+    }
+  ],
   "updateFeature": [
     {
       "version": "1.0.0",

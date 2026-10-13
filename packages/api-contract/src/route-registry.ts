@@ -1,3 +1,4 @@
+import { aiAssistSettingsRoutes } from "./ai-assist-settings-routes.js";
 import { taskCreateRoutes } from "./task-create-routes.js";
 import { documentImportRoutes } from "./document-import-routes.js";
 import { aggregateReadRoutes } from "./aggregate-read-routes.js";
@@ -36,6 +37,7 @@ export * from "./route-definition.js";
 export const routeRegistry = [
   ...externalLinkRoutes,
   ...adminUserRoutes,
+  ...aiAssistSettingsRoutes,
   ...projectMemberRoutes,
   ...projectRoutes,
   ...moduleRoutes,

@@ -25,6 +25,14 @@ const API_PORT = parsePort(process.env["E2E_API_PORT"], 3100);
 const WEB_PORT = parsePort(process.env["E2E_WEB_PORT"], 4173);
 const API_BASE_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_BASE_URL = `http://127.0.0.1:${WEB_PORT}`;
+// ADR-067：AI 辅助转换的 stub 上游只监听本机回环（CI 不访问外网），
+// API 通过 AI_ASSIST_ENDPOINT 指向它；密钥文件在 E2E 临时目录里动态生成。
+const AI_STUB_PORT = parsePort(process.env["E2E_AI_STUB_PORT"], 3199);
+const AI_STUB_BASE_URL = `http://127.0.0.1:${AI_STUB_PORT}`;
+export const AI_ASSIST_API_KEY_FILE = path.join(
+  E2E_KEYRING_DIR,
+  "ai-assist-api-key",
+);
 const databaseUrl = requiredE2eDatabaseUrl();
 
 mkdirSync(E2E_KEYRING_DIR, { recursive: true });
@@ -43,6 +51,7 @@ writeFileSync(
   `1:${randomBytes(32).toString("hex")}\n`,
   "utf8",
 );
+writeFileSync(AI_ASSIST_API_KEY_FILE, randomBytes(24).toString("hex"), "utf8");
 
 export default defineConfig({
   testDir: "./tests",
@@ -71,6 +80,17 @@ export default defineConfig({
   },
   webServer: [
     {
+      command: "node helpers/ai-assist-stub.mjs",
+      cwd: E2E_ROOT,
+      url: `${AI_STUB_BASE_URL}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        E2E_AI_STUB_PORT: String(AI_STUB_PORT),
+      },
+    },
+    {
       command: "node dist/main.js",
       cwd: path.resolve(ROOT, "apps/api"),
       url: `${API_BASE_URL}/api/v1/health`,
@@ -91,6 +111,11 @@ export default defineConfig({
         AUDIT_HMAC_KEYRING_FILE: AUDIT_KEYRING_FILE,
         AUDIT_HMAC_KEYRING_TEST_PATH: "1",
         AUDIT_HMAC_KEY_VERSION: "1",
+        AI_ASSIST_ENABLED: "1",
+        AI_ASSIST_ENDPOINT: `${AI_STUB_BASE_URL}/v1/chat/completions`,
+        AI_ASSIST_MODEL: "e2e-stub-model",
+        AI_ASSIST_API_KEY_FILE: AI_ASSIST_API_KEY_FILE,
+        AI_ASSIST_API_KEY_TEST_PATH: "1",
       },
     },
     {

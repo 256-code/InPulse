@@ -2,8 +2,10 @@ import React from "react";
 import { ConfigProvider } from "antd";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type { InpulseApiClient, ProjectListItem } from "@generated/api";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { ProjectTierProvider } from "@features/common/project-tier-context";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import { ProjectsPageView } from "./ProjectsPageView";
@@ -64,18 +66,22 @@ describe("项目分档与侧栏项目树", () => {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <ProjectTierProvider>
-            <ProjectsPageView
-              creatorName="特哥"
-              projects={[openProject, maintenanceProject]}
-              client={client}
-            />
-            <ProjectTree
-              activeScope={null}
-              onNavigate={vi.fn()}
-              client={client}
-            />
-          </ProjectTierProvider>
+          <MemoryRouter>
+            <AuthStateProvider>
+              <ProjectTierProvider>
+                <ProjectsPageView
+                  creatorName="特哥"
+                  projects={[openProject, maintenanceProject]}
+                  client={client}
+                />
+                <ProjectTree
+                  activeScope={null}
+                  onNavigate={vi.fn()}
+                  client={client}
+                />
+              </ProjectTierProvider>
+            </AuthStateProvider>
+          </MemoryRouter>
         </QueryClientProvider>
       </ConfigProvider>,
     );

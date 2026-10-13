@@ -377,5 +377,21 @@ export function renderIndexSource(): string {
   return `${generatedHeader}
 export * from "./client";
 export * from "./types";
+export * from "./document-import-template";
 `;
+}
+
+/**
+ * 渲染前端模板常量生成物（ADR-067）：文本来自 contracts/document-import.zod.ts 的
+ * DOCUMENT_IMPORT_TEMPLATE；web 通过 @generated/api 引用同一文本，不引入跨包运行时依赖，
+ * 一致性由漂移检查按字节守护。
+ */
+export function renderDocumentImportTemplateSource(template: string): string {
+  return (
+    generatedHeader +
+    "/** ADR-064 固定模板全文（由契约生成，禁止手工修改）。 */\n" +
+    "export const DOCUMENT_IMPORT_TEMPLATE = " +
+    JSON.stringify(template) +
+    ";\n"
+  );
 }

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   createApiClient,
+  type DocumentImportAssistResponse,
   type InpulseApiClient,
   type ProjectDocumentImportPreviewResponse,
   type ProjectDocumentImportResult,
@@ -10,11 +11,12 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 /**
- * ADR-064 文档导入数据层。
+ * ADR-064 文档导入数据层；ADR-067 追加 AI 辅助转换（assistDocumentImport）。
  *
  * 预览是只读校验接口（不写任何持久化状态）；执行是数据库级幂等写命令，
  * 先签发 CSRF Token 再携带一次性 Idempotency-Key，所有请求都走生成客户端。
  * 文档原文长度上限与契约常量 `DOCUMENT_IMPORT_MAX_TEXT_LENGTH` 保持一致。
+ * AI 分析与导入链路完全独立：生成草稿不落库，用户确认后仍走既有预览/导入。
  */
 export const DOCUMENT_IMPORT_MAX_TEXT_LENGTH = 200_000;
 
@@ -173,4 +175,71 @@ export function useApplyDocumentImport({
       }
     },
   });
+}
+
+/** 契约层的分析模式：整项目导入对应 WHOLE_PROJECT，项目内导入对应 IN_PROJECT。 */
+export type DocumentImportAssistMode = "IN_PROJECT" | "WHOLE_PROJECT";
+
+export function resolveDocumentImportAssistMode(
+  mode: DocumentImportMode,
+): DocumentImportAssistMode {
+  return mode === "NEW_PROJECT" ? "WHOLE_PROJECT" : "IN_PROJECT";
+}
+
+/**
+ * ADR-067 AI 辅助转换：纯校验接口（csrf / idempotency 均 none），
+ * 请求只携带模式与抽取后的纯文本，不发送文件本身。
+ */
+export function useAssistDocumentImport({
+  mode,
+  client,
+}: DocumentImportOptions) {
+  const apiClient = useMemo(() => client ?? createApiClient(), [client]);
+  const assistMode = resolveDocumentImportAssistMode(mode);
+  return useMutation({
+    mutationFn: (text: string): Promise<DocumentImportAssistResponse> =>
+      apiClient.assistDocumentImport({ mode: assistMode, text }),
+  });
+}
+
+const AI_ASSIST_REASON_MESSAGES: Readonly<Record<string, string>> = {
+  auth: "AI 服务鉴权失败，请管理员在「成员与设置 → AI 辅助转换」中检查 API 密钥。",
+  "rate-limited": "AI 服务请求过于频繁（上游限流），请稍后重试。",
+  timeout: "AI 服务响应超时，请稍后重试或精简文档。",
+  network: "无法连接 AI 服务（网络故障），请稍后重试或先手动粘贴模板。",
+  "context-limit": "文档超出模型上下文上限，请精简或分次生成后再试。",
+  "invalid-response": "AI 服务返回了无法识别的内容，请稍后重试。",
+};
+
+/** ADR-067 固定错误码 → 固定中文提示；上游细节只通过 reason 归类，不下发原文。 */
+export function describeDocumentImportAssistError(error: unknown): string {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case "AI_ASSIST_DISABLED":
+        return "AI 辅助转换未启用或配置无效，请管理员在「成员与设置 → AI 辅助转换」中配置后重试。";
+      case "AI_ASSIST_UPSTREAM_FAILED": {
+        const reason = error.details["reason"];
+        if (typeof reason === "string" && reason in AI_ASSIST_REASON_MESSAGES) {
+          return (
+            AI_ASSIST_REASON_MESSAGES[reason] ??
+            "AI 服务暂时不可用，请稍后重试。"
+          );
+        }
+        return "AI 服务暂时不可用，请稍后重试或先手动粘贴模板。";
+      }
+      default:
+        break;
+    }
+    switch (error.status) {
+      case 401:
+        return "登录状态已失效，请重新登录后再试。";
+      case 400:
+        return "请求内容为空或超出长度上限，请检查后重试。";
+      case 422:
+        return "文本超过 20 万字符上限，请精简后重试。";
+      default:
+        return "AI 分析暂时失败，请稍后重试，或先手动粘贴模板。";
+    }
+  }
+  return "AI 分析暂时失败，请稍后重试，或先手动粘贴模板。";
 }

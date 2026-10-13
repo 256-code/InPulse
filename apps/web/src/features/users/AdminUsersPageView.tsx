@@ -13,6 +13,7 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
+import { AiAssistSettingsPanel } from "@features/settings/AiAssistSettingsPanel";
 import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
 import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
 import { adminUserErrorMessage, useAdminUsers } from "./admin-user-query";
@@ -21,7 +22,11 @@ import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 type LifecycleAction = "disable" | "enable" | "forceLogout";
 
 /** 设计师稿 latest-version/views/settings.tsx L9-11：左栏区块导航。 */
-type SettingsTab = "members" | "permissions" | "notifications";
+export type SettingsTab =
+  | "members"
+  | "permissions"
+  | "notifications"
+  | "aiAssist";
 
 type EditorValues = {
   readonly name: string;
@@ -50,6 +55,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   client,
   currentUserId,
   onOpenProjects,
+  initialTab,
 }) => {
   const { query, mutation } = useAdminUsers(client);
   const [editor, setEditor] = useState<AdminUserItem | null>(null);
@@ -61,7 +67,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("members");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "members");
   const submitting = useRef(false);
   const {
     control,
@@ -201,6 +207,10 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
     false;
 
+  // 非管理员不展示 AI 辅助转换页签；深链命中该页签时回退到成员页。
+  const effectiveTab: SettingsTab =
+    activeTab === "aiAssist" && !selfIsAdmin ? "members" : activeTab;
+
   // 当前登录账号置顶（便于先确认自身身份与权限），其后是其他系统管理员，最后是普通成员；同组内保持服务端顺序。
   const members = useMemo(() => {
     const items = query.data?.items ?? [];
@@ -226,8 +236,8 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
         <nav className="settings-nav" aria-label="成员与设置导航">
           <button
             type="button"
-            className={activeTab === "members" ? "selected" : undefined}
-            aria-current={activeTab === "members" ? "page" : undefined}
+            className={effectiveTab === "members" ? "selected" : undefined}
+            aria-current={effectiveTab === "members" ? "page" : undefined}
             onClick={() => setActiveTab("members")}
           >
             <InpulseIcon name="users" size={15} />
@@ -241,8 +251,8 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           ) : null}
           <button
             type="button"
-            className={activeTab === "permissions" ? "selected" : undefined}
-            aria-current={activeTab === "permissions" ? "page" : undefined}
+            className={effectiveTab === "permissions" ? "selected" : undefined}
+            aria-current={effectiveTab === "permissions" ? "page" : undefined}
             onClick={() => setActiveTab("permissions")}
           >
             <InpulseIcon name="shield" size={15} />
@@ -250,19 +260,33 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           </button>
           <button
             type="button"
-            className={activeTab === "notifications" ? "selected" : undefined}
-            aria-current={activeTab === "notifications" ? "page" : undefined}
+            className={effectiveTab === "notifications" ? "selected" : undefined}
+            aria-current={effectiveTab === "notifications" ? "page" : undefined}
             onClick={() => setActiveTab("notifications")}
           >
             <InpulseIcon name="bell" size={15} />
             通知策略
           </button>
+          {selfIsAdmin ? (
+            <button
+              type="button"
+              className={effectiveTab === "aiAssist" ? "selected" : undefined}
+              aria-current={effectiveTab === "aiAssist" ? "page" : undefined}
+              onClick={() => setActiveTab("aiAssist")}
+            >
+              <InpulseIcon name="zap" size={15} />
+              AI 辅助转换
+            </button>
+          ) : null}
         </nav>
 
-        {activeTab === "permissions" ? <PermissionMatrixPanel /> : null}
-        {activeTab === "notifications" ? <NotificationPolicyPanel /> : null}
+        {effectiveTab === "permissions" ? <PermissionMatrixPanel /> : null}
+        {effectiveTab === "notifications" ? <NotificationPolicyPanel /> : null}
+        {effectiveTab === "aiAssist" ? (
+          <AiAssistSettingsPanel {...(client ? { client } : {})} />
+        ) : null}
 
-        {activeTab === "members" ? (
+        {effectiveTab === "members" ? (
           <section className="panel settings-panel">
             <CalmSectionTitle
               title="成员与角色"
@@ -534,4 +558,5 @@ export interface AdminUsersPageViewProps {
   readonly client?: InpulseApiClient | undefined;
   readonly currentUserId?: number | undefined;
   readonly onOpenProjects?: (() => void) | undefined;
+  readonly initialTab?: SettingsTab | undefined;
 }

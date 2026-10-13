@@ -9,7 +9,7 @@ import {
 } from "@features/common/resource-lifecycle";
 import { useProjects } from "@features/projects/project-query";
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InpulseApiClient } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AdminUsersPageView } from "@features/users/AdminUsersPageView";
@@ -22,6 +22,8 @@ export interface SettingsPageProps {
 export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") === "aiAssist" ? "aiAssist" : undefined;
   const [selectProject, setSelectProject] = useState(false);
   const projects = useProjects({ client, enabled: selectProject });
   return (
@@ -29,6 +31,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
       <AdminUsersPageView
         currentUserId={user?.id}
         onOpenProjects={() => setSelectProject(true)}
+        {...(initialTab ? { initialTab } : {})}
         {...(client ? { client } : {})}
       />
       <AppModal

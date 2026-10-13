@@ -10,6 +10,7 @@
     "start:backup": "node dist/backup-cli.js",
     "audit-archive": "tsx src/cli.ts",
     "backup": "tsx src/backup-cli.ts",
+    "ai-assist:check": "tsx src/ai-assist-check-cli.ts",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:integration": "vitest run --config vitest.integration.config.ts"

@@ -24,6 +24,8 @@
 #          WORM_CREDENTIALS_FILE 与 ARCHIVE_SIGNING_KEY_FILE，不挂载在线审计 HMAC
 #        - backup 读 DB_PASSWORD_FILE（角色 app_backup）、BACKUP_ENCRYPTION_KEY_FILE、
 #          OFFSITE_CREDENTIALS_FILE，以及发布清单注入的 BACKUP_GIT_SHA / BACKUP_IMAGE_REF
+#        - api 的 ADR-067 AI 辅助转换读 AI_ASSIST_*（默认关闭；启用时密钥只经
+#          /run/secrets/ai_assist_api_key，禁用时该文件用空占位即可）
 #      技术设计 §11.2 的泛化 `DB_PASSWORD_FILE` 与代码命名仍未统一，属于生产前
 #      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
 #   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
@@ -145,6 +147,16 @@ services:
       # 全部失真）；非法值会使 API 启动失败（apps/api/src/trusted-proxy.ts
       # fail closed）。与本文件 networks.backend 的 ipam 子网保持一致。
       TRUSTED_PROXY_CIDRS: "172.30.0.0/24"
+      # ADR-067 AI 辅助转换：默认关闭（AI_ASSIST_ENABLED 非真值即整体关闭）。
+      # 启用时密钥只经 Secret 文件提供（/run/secrets/ai_assist_api_key 只读挂载），
+      # 禁止环境变量兜底；禁用时该 Secret 文件可以是空占位（配置加载器只在
+      # 启用时读取），但 Compose 仍要求文件存在才能启动 api 容器。
+      AI_ASSIST_ENABLED: "${AI_ASSIST_ENABLED:-0}"
+      AI_ASSIST_ENDPOINT: "${AI_ASSIST_ENDPOINT:-}"
+      AI_ASSIST_MODEL: "${AI_ASSIST_MODEL:-}"
+      AI_ASSIST_TIMEOUT_MS: "${AI_ASSIST_TIMEOUT_MS:-60000}"
+      AI_ASSIST_MAX_TOKENS: "${AI_ASSIST_MAX_TOKENS:-8192}"
+      AI_ASSIST_API_KEY_FILE: /run/secrets/ai_assist_api_key
     depends_on:
       db:
         condition: service_healthy
@@ -178,6 +190,11 @@ services:
         mode: "0400"
       - source: db_audit_reader_password
         target: /run/secrets/db_audit_reader_password
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: ai_assist_api_key
+        target: /run/secrets/ai_assist_api_key
         uid: "10001"
         gid: "10001"
         mode: "0400"
@@ -373,6 +390,9 @@ secrets:
     file: ./secrets/audit_hmac_keyring
   sso_client_secret:
     file: ./secrets/sso_client_secret
+  # ADR-067：AI 辅助转换密钥（OpenAI 兼容中转站）；未启用时可放空占位文件。
+  ai_assist_api_key:
+    file: ./secrets/ai_assist_api_key
   audit_worm_credentials:
     file: ./secrets/audit_worm_credentials
   audit_archive_signing_key:

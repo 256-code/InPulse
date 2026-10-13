@@ -156,6 +156,7 @@ function ensureKeyrings() {
     "session.keyring",
     "idempotency.keyring",
     "audit.keyring",
+    "ai-assist-encryption.keyring",
   ]) {
     const target = path.join(KEYRING_DIR, name);
     if (existsSync(target)) {
@@ -541,6 +542,12 @@ function buildApiEnvironment(fileValues, sso, runtime) {
     AUDIT_HMAC_KEYRING_FILE: path.join(KEYRING_DIR, "audit.keyring"),
     AUDIT_HMAC_KEYRING_TEST_PATH: "1",
     AUDIT_HMAC_KEY_VERSION: "1",
+    AI_ASSIST_ENCRYPTION_KEY_FILE: path.join(
+      KEYRING_DIR,
+      "ai-assist-encryption.keyring",
+    ),
+    AI_ASSIST_ENCRYPTION_KEY_TEST_PATH: "1",
+    AI_ASSIST_ENCRYPTION_KEY_VERSION: "1",
   };
   if (runtime.apiHost !== undefined) {
     env["INPULSE_API_HOST"] = runtime.apiHost;

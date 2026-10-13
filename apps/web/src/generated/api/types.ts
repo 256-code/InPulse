@@ -128,6 +128,45 @@ export type AggregateTaskRef = {
   readonly featureId: (number | null);
 };
 
+export type AiAssistSettings = {
+  readonly enabled: boolean;
+  readonly source: ("DATABASE" | "ENVIRONMENT" | "NONE");
+  readonly ready: boolean;
+  readonly disabledReason: (("KILL_SWITCH" | "NOT_ENABLED" | "CONFIG_INVALID" | "ENCRYPTION_KEY_UNAVAILABLE") | null);
+  readonly endpoint: (string | null);
+  readonly model: (string | null);
+  readonly timeoutMs: number;
+  readonly maxTokens: number;
+  readonly keyConfigured: boolean;
+  readonly keyHint: (string | null);
+  readonly rowVersion: (number | null);
+  readonly updatedAt: (string | null);
+};
+
+export type AiAssistSettingsMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type AiAssistSettingsReplayContext = {
+  readonly actorUserId: number;
+  readonly settingsRowId: number;
+};
+
+export type AiAssistSettingsTestResponse = {
+  readonly ok: boolean;
+  readonly reason: (("KILL_SWITCH" | "NOT_ENABLED" | "CONFIG_INVALID" | "ENCRYPTION_KEY_UNAVAILABLE" | "AUTH" | "RATE_LIMITED" | "TIMEOUT" | "NETWORK" | "CONTEXT_LIMIT" | "INVALID_RESPONSE") | null);
+  readonly model: (string | null);
+};
+
+export type AiAssistSettingsUpdateRequest = {
+  readonly enabled: boolean;
+  readonly endpoint: string;
+  readonly model: string;
+  readonly timeoutMs: number;
+  readonly maxTokens: number;
+  readonly apiKey?: (string | null);
+};
+
 export type AuditLogItem = {
   readonly chainId: string;
   readonly sequenceNo: number;
@@ -251,6 +290,17 @@ export type DeleteModuleRequest = {
 
 export type DeleteTaskRequest = {
   readonly reason: (string | null);
+};
+
+export type DocumentImportAssistRequest = {
+  readonly mode: ("IN_PROJECT" | "WHOLE_PROJECT");
+  readonly text: string;
+};
+
+export type DocumentImportAssistResponse = {
+  readonly markdown: string;
+  readonly model: string;
+  readonly issues: readonly DocumentImportIssue[];
 };
 
 export type DocumentImportDuplicate = {

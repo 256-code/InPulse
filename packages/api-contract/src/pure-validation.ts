@@ -7,4 +7,8 @@
 export const pureValidationOperationIds = [
   "previewProjectDocumentImport",
   "previewProjectImport",
+  // ADR-067：AI 辅助转换只生成草稿文本，不写任何持久化状态。
+  "assistDocumentImport",
+  // ADR-068：测试连接只发最小探测请求，不写任何持久化状态。
+  "testAiAssistSettings",
 ] as const;

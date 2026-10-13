@@ -2,12 +2,14 @@ import React from "react";
 import { ConfigProvider } from "antd";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type {
   CreateProjectResponse,
   InpulseApiClient,
   ProjectListItem,
 } from "@generated/api";
+import { AuthStateProvider } from "@features/auth/auth-context";
 import { ProjectsPageView } from "./ProjectsPageView";
 
 const project: ProjectListItem = {
@@ -42,13 +44,17 @@ function mount(
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
-        <ProjectsPageView
-          creatorName="特哥"
-          projects={[project]}
-          onOpenModules={onOpenModules}
-          client={{} as InpulseApiClient}
-          {...overrides}
-        />
+        <MemoryRouter>
+          <AuthStateProvider>
+            <ProjectsPageView
+              creatorName="特哥"
+              projects={[project]}
+              onOpenModules={onOpenModules}
+              client={{} as InpulseApiClient}
+              {...overrides}
+            />
+          </AuthStateProvider>
+        </MemoryRouter>
       </QueryClientProvider>
     </ConfigProvider>,
   );

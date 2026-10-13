@@ -341,6 +341,49 @@ export const permissionMatrix = [
     },
   })),
   {
+    operationId: "getAiAssistSettings",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "updateAiAssistSettings",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；CSRF 与 Idempotency-Key 必填；密钥经 AES-256-GCM 加密落库、明文永不入库；写审计 admin.aiAssistSettings.update（不含密钥）",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
+    operationId: "testAiAssistSettings",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；纯校验探测（无持久化副作用，不要求 CSRF 与幂等键）",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
     operationId: "getSearch",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
@@ -712,6 +755,19 @@ export const permissionMatrix = [
       },
     }),
   ),
+  // ADR-067：AI 辅助转换面向任何已登录用户（与整项目导入一致的可见性），
+  // 不接触项目数据；未启用或上游故障统一 503，不泄露配置细节。
+  {
+    operationId: "assistDocumentImport",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
   {
     operationId: "deleteProject",
     outcomes: {

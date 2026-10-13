@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import {
   renderClientSource,
+  renderDocumentImportTemplateSource,
   renderIndexSource,
   renderTypesSource,
 } from "./client.js";
+import { DOCUMENT_IMPORT_TEMPLATE } from "./contracts/document-import.zod.js";
 import {
   mergeFingerprintHistory,
   type ContractFingerprints,
@@ -75,6 +77,10 @@ export function renderArtifacts(
     {
       path: `${clientArtifactDirectory}/index.ts`,
       content: renderIndexSource(),
+    },
+    {
+      path: `${clientArtifactDirectory}/document-import-template.ts`,
+      content: renderDocumentImportTemplateSource(DOCUMENT_IMPORT_TEMPLATE),
     },
   ];
 }

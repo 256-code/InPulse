@@ -139,6 +139,293 @@
         ]
       }
     },
+    "/admin/ai-assist": {
+      "get": {
+        "operationId": "getAiAssistSettings",
+        "summary": "系统管理员读取 AI 辅助转换的当前生效配置与状态；只返回密钥尾号与是否已配置，永不回显密钥；响应 no-store。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAssistSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "adminSession",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        }
+      },
+      "put": {
+        "operationId": "updateAiAssistSettings",
+        "summary": "系统管理员保存 AI 辅助转换配置：整体替换非敏感项，apiKey 缺省表示保持已存密钥，提供时经 AES-256-GCM 加密落库；写审计（不含密钥）。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAssistSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突、重复操作或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务未就绪（就绪探针未通过），或按 ADR-067 可选 AI 服务未启用 / 配置非法 / 上游故障",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "adminSession",
+          "csrfPolicy": "required",
+          "idempotencyPolicy": "idempotencyRequired",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "1.0.0",
+          "idempotencyFingerprintVersion": "1.0.0",
+          "behaviorHeaders": [],
+          "idempotencyReplayPolicy": {
+            "version": "1.0.0",
+            "success": {
+              "200": {
+                "body": {
+                  "responseSchemaRef": "AiAssistSettings",
+                  "safeBodyFieldPaths": [
+                    "disabledReason",
+                    "enabled",
+                    "endpoint",
+                    "keyConfigured",
+                    "keyHint",
+                    "maxTokens",
+                    "model",
+                    "ready",
+                    "rowVersion",
+                    "source",
+                    "timeoutMs",
+                    "updatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "replayAuthorizationPolicy": {
+            "version": "1.0.0",
+            "resources": {
+              "contextSchemaRef": "AiAssistSettingsReplayContext",
+              "resultRefExtractor": "aiAssistSettingsRow",
+              "currentReadAuthorizer": "adminAiAssistSettingsAuthorizer"
+            }
+          },
+          "securityFlowPolicy": "none",
+          "versionPolicy": {
+            "apiVersion": "v1",
+            "schemaVersion": "1.0.0",
+            "ifMatch": "none"
+          },
+          "concurrencyPolicy": {
+            "rowVersion": "none",
+            "lockOrder": "none",
+            "retry": "单行配置 SELECT ... FOR UPDATE 显式行锁，更新成功后递增 row_version；不自动重试"
+          },
+          "auditAction": "admin.aiAssistSettings.update"
+        },
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 43
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiAssistSettingsUpdateRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/ai-assist/test": {
+      "post": {
+        "operationId": "testAiAssistSettings",
+        "summary": "系统管理员用当前生效配置向上游发送 max_tokens=1 的最小探测请求，验证端点 / 密钥 / 模型可用；不写任何持久化状态、不发送用户数据、不写审计。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAssistSettingsTestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "已登录但无全局权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "adminSession",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        }
+      }
+    },
     "/admin/users": {
       "get": {
         "operationId": "listAdminUsers",
@@ -1735,6 +2022,99 @@
         ]
       }
     },
+    "/document-imports/assist": {
+      "post": {
+        "operationId": "assistDocumentImport",
+        "summary": "把用户自己的项目文档（任意结构）交给服务端配置的 OpenAI 兼容端点转成固定模板草稿，返回解析器预检问题；不写任何持久化状态，无 CSRF 与幂等记录。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentImportAssistResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务未就绪（就绪探针未通过），或按 ADR-067 可选 AI 服务未启用 / 配置非法 / 上游故障",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentImportAssistRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/external-links/{targetType}/{targetId}": {
       "get": {
         "operationId": "listExternalLinks",
@@ -2368,7 +2748,7 @@
             }
           },
           "503": {
-            "description": "服务未就绪（就绪探针未通过）",
+            "description": "服务未就绪（就绪探针未通过），或按 ADR-067 可选 AI 服务未启用 / 配置非法 / 上游故障",
             "content": {
               "application/json": {
                 "schema": {
@@ -16086,6 +16466,263 @@
         ],
         "additionalProperties": false
       },
+      "AiAssistSettings": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "配置记录的启用开关（最终是否可用还要看 ready）"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "DATABASE",
+              "ENVIRONMENT",
+              "NONE"
+            ],
+            "description": "DATABASE 为管理员在线配置；ENVIRONMENT 为无数据库行时的遗留环境变量模式；NONE 为未配置"
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "当前实际是否可发起 AI 辅助转换"
+          },
+          "disabledReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILL_SWITCH",
+                  "NOT_ENABLED",
+                  "CONFIG_INVALID",
+                  "ENCRYPTION_KEY_UNAVAILABLE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 600000
+          },
+          "maxTokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000
+          },
+          "keyConfigured": {
+            "type": "boolean"
+          },
+          "keyHint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "密钥尾 4 位提示；不回显密钥本身"
+          },
+          "rowVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "source",
+          "ready",
+          "disabledReason",
+          "endpoint",
+          "model",
+          "timeoutMs",
+          "maxTokens",
+          "keyConfigured",
+          "keyHint",
+          "rowVersion",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AiAssistSettingsMutationHeaders": {
+        "type": "object",
+        "properties": {
+          "x-csrf-token": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          }
+        },
+        "required": [
+          "x-csrf-token"
+        ],
+        "additionalProperties": false
+      },
+      "AiAssistSettingsReplayContext": {
+        "type": "object",
+        "properties": {
+          "actorUserId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          },
+          "settingsRowId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "actorUserId",
+          "settingsRowId"
+        ],
+        "additionalProperties": false
+      },
+      "AiAssistSettingsTestResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILL_SWITCH",
+                  "NOT_ENABLED",
+                  "CONFIG_INVALID",
+                  "ENCRYPTION_KEY_UNAVAILABLE",
+                  "AUTH",
+                  "RATE_LIMITED",
+                  "TIMEOUT",
+                  "NETWORK",
+                  "CONTEXT_LIMIT",
+                  "INVALID_RESPONSE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ok",
+          "reason",
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "AiAssistSettingsUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 600000
+          },
+          "maxTokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000
+          },
+          "apiKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "endpoint",
+          "model",
+          "timeoutMs",
+          "maxTokens"
+        ],
+        "additionalProperties": false
+      },
       "AuditLogItem": {
         "type": "object",
         "properties": {
@@ -16762,6 +17399,61 @@
         },
         "required": [
           "reason"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportAssistRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "IN_PROJECT",
+              "WHOLE_PROJECT"
+            ],
+            "description": "IN_PROJECT 对应项目内导入（模式 A，草稿不含项目段）；WHOLE_PROJECT 对应整项目导入（模式 B，草稿必须含项目段与项目编码）"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000,
+            "description": "用户原始文档抽取后的纯文本（UTF-8），不要求符合固定模板"
+          }
+        },
+        "required": [
+          "mode",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentImportAssistResponse": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000,
+            "description": "服务端按固定模板预检后的草稿全文，供用户确认后进入预览"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "实际调用并返回结果的模型标识"
+          },
+          "issues": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentImportIssue"
+            },
+            "description": "解析器预检问题（ERROR 不阻止返回草稿，需用户修正后预览）"
+          }
+        },
+        "required": [
+          "markdown",
+          "model",
+          "issues"
         ],
         "additionalProperties": false
       },

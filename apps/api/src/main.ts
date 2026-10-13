@@ -1,11 +1,19 @@
 import "reflect-metadata";
 
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module.js";
 import { trustedProxySetting } from "./trusted-proxy.js";
 
+/**
+ * API JSON 请求体上限（ADR-064：与网关同为 1 MiB；20 万字符文档最坏约
+ * 600 KiB，加 JSON 转义开销后仍在限内）。
+ */
+const JSON_BODY_LIMIT = "1mb";
+
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useBodyParser("json", { limit: JSON_BODY_LIMIT });
   const express = app.getHttpAdapter().getInstance() as {
     set(setting: string, value: string): unknown;
   };

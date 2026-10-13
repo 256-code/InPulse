@@ -6061,3 +6061,19 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | FEATURE-TAGS-GATE-001 | 门禁 | 本批回归 | `pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check` 通过；`pnpm test:web` 99 文件 724 例全绿（基线 98 / 718） | 本地通过（2026-10-12） |
 
 未运行 / 已知偏差：① `test:unit` / `test:integration` / 契约门禁未重跑（未改服务端与契约）；② Playwright 全量未重跑（清单 74 例 / 29 文件），只跑 `features.spec.ts` 2 例；③ GitHub Actions 不触发（`test` 分支）；④ 新增控件与用例按 §8 需非作者人工评审；⑤ 去重与 50 上限拒绝只做在控件层（改造前逐行文本框同样允许重复行），服务端契约不变；⑥ 未提交、未推送。
+
+2026-10-13 新增（[ADR-067](adr/ADR-067.md)：文档导入内嵌 AI 辅助转换，本地落库）：F-32 文档导入新增可选「AI 分析我的文档」——粘贴或选择自有文档（`.txt` / `.md` / `.markdown` / `.docx` / `.pdf`，浏览器本地抽取、文件不上传），经 `POST /api/v1/document-imports/assist`（路由 107 条，纯校验 allowlist）由服务端转发到管理员配置的 OpenAI 兼容端点（中转站或自建）生成模板草稿；AI 只出草稿、永不直接写库，仍走既有「预览 → 确认导入」；密钥只经 `/run/secrets/*` fail closed、`AI_ASSIST_ENABLED` 默认关闭；新增 `mammoth` 与 `pdfjs-dist` 两个懒加载依赖（须独立依赖 PR 人工确认）。E2E 的零 CSP 违规断言抓出并修复 zod v4 对象 Schema 的 `Function("")` eval 探测（入口最早的 `jitless` 加固）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-CONFIG-UNIT-001 | API 单元 | 配置 fail-closed 与适配器错误分类 | `ai-assist.config.test.ts` 10 例（关闭 / 缺端点 / 缺模型 / 缺密钥文件 / 密钥为空 / 端点非 https / test 逃生开关）+ `ai-assist.client.test.ts` 8 例（请求最小字段、auth / rate-limited / timeout / network / context-limit / invalid-response、`finish_reason: length` 截断、输出超长与空内容拒绝）→ `pnpm --filter @inpulse/api test:unit` 76 文件 476 例全绿 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-WEB-UNIT-001 | Web 单元 | 本地抽取三分支 + 弹窗 AI 区块 | `document-text-extraction.test.ts` 14 例（txt/md 直读、docx、pdf、`.doc`/`.pptx` 拒绝、20 MiB 与 20 万字符上限、无文本提示）；`DocumentImportModal.test.tsx` 18 例（自动分析、模式映射、覆盖二次确认、未启用仍可达、错误文案）→ `pnpm --filter @inpulse/web test` 101 文件 750 例全绿 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-API-INTEGRATION-001 | 真实 PostgreSQL API 集成 | assist 路由全链路与零写入 | `document-import-assist.integration.test.ts` 9 例：200 全链路（stub 上游 + 解析器预检 issues）、401 匿名、422 输入超限、503 `AI_ASSIST_DISABLED` / `AI_ASSIST_UPSTREAM_FAILED`、不产生任何数据库写入 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-E2E-001 | 浏览器 E2E | docx 全链路 + pdf 强制 CSP 实测 | `apps/e2e/tests/document-import-ai.spec.ts` 2 例通过（stub 上游只监听本机回环：docx 抽取 → 自动分析 → 草稿 → 预览 → 导入后模块可见；pdf 同源 Worker 抽取成功且 `securitypolicyviolation` 为零）；E2E 全量 **76 例通过（6.1 分钟）** | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-CSP-001 | Web 单元 + E2E | zod eval 探测零违规 | `zod-strict-csp.test.ts` 2 例（jitless 生效；jitless 下构造与解析对象 Schema 不调用 `Function`）；`apps/web/src/app/zod-strict-csp.ts` 为 `main.tsx` 首个 import；E2E pdf 用例零违规断言 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-OPS-001 | Ops 单元 | 自检脚本参数与探测分类 | `apps/ops/test/ai-assist-check-cli.test.ts` 8 例（参数优先与环境回退、https / 回环约束、超时范围、auth / rate-limited / invalid-response / network 分类、最小请求形状）→ `pnpm --filter @inpulse/ops test:unit` 9 文件 60 例全绿；不纳入 CI | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-CONTRACT-001 | 契约 / 权限 | 路由 107 与纯校验 allowlist | `pnpm contract:validate` 107 条路由、`contract:drift` 无漂移、`permissions:check` 107 条通过；`permissions.test.ts` 路由扫描同步 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-DEPLOY-001 | 部署预检 | compose AI_ASSIST_* 接线 | `pnpm check:deploy:test`：`AI_ASSIST_*` 环境变量与 `/run/secrets/ai_assist_api_key`（`10001:10001` / mode `0400`）随合成 ref 渲染通过；`check:secrets` 通过（`AI_ASSIST_MAX_TOKENS` 示例留空） | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-GATE-001 | 门禁 | 整链回归 | `pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 workspace）、`pnpm build`、`db:migrations:check`（38 个）、`db:seed:check`、`check:deps`、`check:frontend:boundaries`、`check:deploy:test`、`check:secrets`、`check:docs` 通过 | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差：① GitHub Actions 未在本批执行（`test` 分支不触发工作流）；② E2E 的 AI 上游为本机回环 stub，未连真实中转站；③ `mammoth` 与 `pdfjs-dist` 为新增生产依赖，按仓库规则仍须独立依赖 PR 人工确认（本批已锁定精确版本、懒加载、PDF Worker 与 CSP 实测）；④ `pnpm deps:audit` 在本机 npm 镜像缺 audit endpoint，改用公共 registry 执行（结果见开发日志）。

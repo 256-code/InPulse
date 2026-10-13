@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  DOCUMENT_IMPORT_ASSIST_MAX_ISSUES,
+  documentImportAssistResponseSchema,
   projectDocumentImportPreviewResponseSchema,
   projectDocumentImportReplayContextSchema,
   projectDocumentImportResultSchema,
+  type DocumentImportAssistRequest,
+  type DocumentImportAssistResponse,
+  type DocumentImportIssue,
   type ProjectDocumentImportPreviewRequest,
   type ProjectDocumentImportPreviewResponse,
   type ProjectDocumentImportReplayContext,
@@ -26,6 +31,13 @@ import {
   IdempotencyHttpError,
   IdempotencyHttpService,
 } from "../idempotency/http-service.js";
+import { AiAssistRuntimeService } from "../modules/document-import/ai-assist-runtime.service.js";
+import {
+  AiAssistUpstreamError,
+  DocumentImportAiAssistClient,
+  type AiAssistDraft,
+} from "../modules/document-import/ai-assist.client.js";
+import { parseDocumentTemplate } from "../modules/document-import/document-template.parser.js";
 import { FeatureManagementError } from "../modules/features/features-management.service.js";
 import { ModuleManagementError } from "../modules/modules/modules-management.service.js";
 import {
@@ -60,6 +72,10 @@ export class DocumentImportHttpService {
     private readonly idempotency: IdempotencyHttpService,
     @Inject(DocumentImportWorkflow)
     private readonly workflow: DocumentImportWorkflow,
+    @Inject(AiAssistRuntimeService)
+    private readonly aiAssistRuntime: AiAssistRuntimeService,
+    @Inject(DocumentImportAiAssistClient)
+    private readonly aiAssist: DocumentImportAiAssistClient,
   ) {}
 
   /** 项目内导入预览：仅已登录且拥有项目写权限的用户。 */
@@ -82,6 +98,68 @@ export class DocumentImportHttpService {
       this.workflow.previewNewProject(tx, actorId, input.document),
     );
   }
+
+  /**
+   * ADR-067 AI 辅助转换：身份解析走只读短事务，上游调用在事务外执行
+   * （绝不在数据库事务内发起网络请求）；返回前用既有解析器预检草稿。
+   */
+  async assist(
+    headers: HttpHeaderBag,
+    input: DocumentImportAssistRequest,
+  ): Promise<DocumentImportAssistResponse> {
+    const actor = await this.sessions.resolveActor(
+      getHeader(headers, "cookie"),
+    );
+    if (actor === undefined) {
+      throw new ApiHttpError(
+        401,
+        DOCUMENT_IMPORT_SESSION_REQUIRED,
+        "登录状态已失效，请重新登录",
+      );
+    }
+    const resolution = await this.aiAssistRuntime.resolve();
+    if (resolution.kind === "DISABLED") {
+      throw new ApiHttpError(
+        503,
+        "AI_ASSIST_DISABLED",
+        "AI 辅助转换未启用或配置无效，请管理员在「成员与设置」中配置",
+        { reason: resolution.reason },
+      );
+    }
+    let draft: AiAssistDraft;
+    try {
+      draft = await this.aiAssist.generateDraft(resolution.config, {
+        mode: input.mode,
+        text: input.text,
+      });
+    } catch (error) {
+      if (error instanceof AiAssistUpstreamError) {
+        throw new ApiHttpError(
+          503,
+          "AI_ASSIST_UPSTREAM_FAILED",
+          "AI 服务暂时不可用，请稍后重试",
+          { reason: error.reason },
+        );
+      }
+      throw error;
+    }
+    const parsed = parseDocumentTemplate(draft.markdown);
+    const issues: DocumentImportIssue[] = [...parsed.issues];
+    if (draft.truncated) {
+      issues.push({
+        severity: "ERROR",
+        line: Math.min(draft.markdown.split("\n").length, 1_000_000),
+        code: "AI_ASSIST_TRUNCATED",
+        message: "AI 输出因长度上限可能不完整，请精简文档或分次生成后再预览。",
+      });
+    }
+    return documentImportAssistResponseSchema.parse({
+      markdown: draft.markdown,
+      model: draft.model,
+      issues: issues.slice(0, DOCUMENT_IMPORT_ASSIST_MAX_ISSUES),
+    });
+  }
+
   /** 项目内导入执行：项目锁内重新计划，单事务创建，整笔幂等。 */
   executeInProject(
     headers: HttpHeaderBag,

@@ -1747,6 +1747,12 @@ td small {
 .form-row label {
   min-width: 0;
 }
+.form-hint {
+  display: block;
+  margin: 4px 0 0;
+  color: #99a5b2;
+  font-size: 11px;
+}
 .check-list {
   display: flex;
   gap: 14px;
@@ -2554,6 +2560,32 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* ADR-067 AI 辅助转换区块：与格式速查同为浅底说明卡，实线边框表示这是可选的 AI 入口。 */
+.import-assist-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #d7e3f0;
+  border-radius: 10px;
+  background: #f8fbfe;
+  padding: 12px 14px;
+}
+.import-assist-panel .import-assist-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: #314c65;
+  font-size: 13px;
+  font-weight: 600;
+}
+.import-assist-panel .import-assist-note {
+  margin: 0;
+  color: #61788e;
+  font-size: 12px;
+  line-height: 1.7;
 }
 /* 文档导入弹窗的格式速查：左竖线 + 淡底，帮用户或 AI 对齐模板字段名，避免解析不匹配。 */
 .import-format-guide {

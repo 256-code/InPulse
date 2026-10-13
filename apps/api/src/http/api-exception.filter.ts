@@ -75,6 +75,20 @@ export class ApiExceptionFilter implements ExceptionFilter {
       };
     }
 
+    // body-parser 的 entity.too.large（Express 默认错误）按请求格式错误映射为 400，
+    // 不落入 500 兜底；网关侧另有 1 MiB 限制（ADR-064）。
+    if (isEntityTooLargeError(exception)) {
+      return {
+        status: 400,
+        body: {
+          code: "REQUEST_TOO_LARGE",
+          message: "请求体超过大小上限",
+          details: {},
+          requestId,
+        },
+      };
+    }
+
     if (exception instanceof HttpException) {
       return this.toHttpExceptionResponse(exception, requestId);
     }
@@ -140,4 +154,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
       },
     };
   }
+}
+
+/** json body-parser 超限错误的稳定标记（http-errors 的 type 字段）。 */
+function isEntityTooLargeError(exception: unknown): boolean {
+  if (typeof exception !== "object" || exception === null) {
+    return false;
+  }
+  return (exception as { type?: unknown }).type === "entity.too.large";
 }

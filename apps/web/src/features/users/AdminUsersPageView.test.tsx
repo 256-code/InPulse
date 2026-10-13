@@ -270,4 +270,44 @@ describe("F-03 settings sections", () => {
       screen.queryByRole("table", { name: "通知场景" }),
     ).not.toBeInTheDocument();
   });
+
+  it("管理员可打开 AI 辅助转换页签并加载配置", async () => {
+    const listAdminUsers = vi.fn().mockResolvedValue({ items: [admin, member] });
+    const getAiAssistSettings = vi.fn().mockResolvedValue({
+      enabled: false,
+      source: "NONE",
+      ready: false,
+      disabledReason: "NOT_ENABLED",
+      endpoint: null,
+      model: null,
+      timeoutMs: 60_000,
+      maxTokens: 8192,
+      keyConfigured: false,
+      keyHint: null,
+      rowVersion: null,
+      updatedAt: null,
+    });
+    mount(
+      { listAdminUsers, getAiAssistSettings } as unknown as InpulseApiClient,
+      admin.id,
+    );
+    await screen.findByText("Alice");
+    const rail = screen.getByRole("navigation", { name: "成员与设置导航" });
+    fireEvent.click(
+      within(rail).getByRole("button", { name: "AI 辅助转换" }),
+    );
+    expect(await screen.findByText("当前状态")).toBeInTheDocument();
+    expect(screen.getByText("当前未启用")).toBeInTheDocument();
+    expect(getAiAssistSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("普通成员看不到 AI 辅助转换页签", async () => {
+    const listAdminUsers = vi.fn().mockResolvedValue({ items: [admin, member] });
+    mount({ listAdminUsers } as unknown as InpulseApiClient, member.id);
+    await screen.findByText("Bob");
+    const rail = screen.getByRole("navigation", { name: "成员与设置导航" });
+    expect(
+      within(rail).queryByRole("button", { name: "AI 辅助转换" }),
+    ).not.toBeInTheDocument();
+  });
 });
