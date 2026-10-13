@@ -1011,6 +1011,24 @@
 - 回归防线：`DocumentImportModal.test.tsx` 新增 3 例（.md 读取与 BOM 剥离并预览、.pdf 拒绝、超 1 MiB 拒绝）。
 - 本地验证（2026-10-10）：前端 98 文件 718 例、`pnpm lint` / `pnpm typecheck` / `pnpm format:check` 通过；真实 dev 浏览器实测选择 `.md` 文件 → 预览成功、选择 `.pdf` 被本地拒绝。「未运行」：GitHub Actions（`test` 分支不触发）；集成测试与 Browser E2E 本轮未重跑（无服务端与契约改动）。
 
+## 2026-10-12 导入弹窗矮窗口页脚裁切修复
+
+用户反馈（原话）：「页面没全屏的时候布局有问题」（截图为非全屏窗口下「从文档导入整项目」弹窗底部「取消 / 预览」被裁掉）。纯前端呈现层修复 + E2E 回归用例，无契约 / 权限 / 数据库 / 迁移 / 依赖改动：
+
+- `apps/web/src/styles/design-system.css`：新增 `.surface-modal > .dialog-form { min-height: 0; overflow-y: auto; }`——正文直接挂在弹层下、没有 `.catalog-form` 包裹的弹窗（当前仅从文档导入整项目）此前 flex 子项 `min-height:auto` 把内容撑出 `max-height: calc(100dvh - 56px)` 的盒子，被 `.surface-modal` 的 `overflow:hidden` 裁掉页脚；选择器只命中直接子级，走 `.catalog-form` 滚动链的其它弹窗不受影响。
+- `apps/web/src/styles/design-system.css`：新增 `.catalog-modal .dialog-form { grid-auto-rows: max-content; }`——行轨不再随容器高度收缩，14 行文本框不被压扁，溢出交给滚动容器。
+- 回归防线：`apps/e2e/tests/document-import.spec.ts` 新增「F-32 文档导入弹窗在矮窗口下页脚不被裁切、正文可滚动（布局回归）」——`1280×620` 视口下断言「预览」按钮可见且底边 ≤620、`.dialog-form` `scrollHeight > clientHeight`、文本框高度 >200、`scrollIntoViewIfNeeded` 后「选择文件」进入视口；修复前该用例失败（按钮完整裁出），修复后通过。
+- 本地验证（2026-10-12）：`document-import.spec.ts` **3 例**、`modules + features + project-create` **4 例**通过；`pnpm test:web` **98 文件 718 例全绿**；`pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check` 通过；E2E 清单 74 例 / 29 文件（全量未重跑）。「未运行」：整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。未提交、未推送。
+
+## 2026-10-12 功能标签改为胶囊输入
+
+用户指示（原话）：「新建功能的标签能不能改成这样形式的」（示例为胶囊 + 虚线「＋ 新分类」按钮），随后「颜色不要黑色改成这样的颜色」（指向功能卡上的淡紫标签徽章 `badge-violet`）。纯前端控件与样式 + 单测 / E2E + 文档，无契约 / 权限 / 数据库 / 迁移 / 依赖改动：
+
+- 新增 `apps/web/src/features/features/FeatureTagsInput.tsx`：受控胶囊控件——已有标签为淡紫胶囊（`#eeeaff` 底 / `#6b58c4` 字，与 `.badge-violet` 同色）、内置 × 移除；虚线「＋ 新标签」展开行内输入，回车或失焦提交、Esc 取消、重复值去重、50 个上限就地拒绝并提示；表单值仍是换行分隔字符串，冲突合并与幂等摘要比较不变。
+- `FeaturesPageView.tsx` 标签字段由 `Input.TextArea` 换为 `FeatureTagsInput`，label 改为「标签（最多 50 个）」，RHF 的 ≤50 校验保留为兜底；`design-system.css` 新增 `.feature-tags` / `.feature-tag-row` / `.feature-tag-pill` / `.feature-tag-remove` / `.feature-tag-add` / `.feature-tag-entry` / `.feature-tag-limit`。
+- 回归防线：`FeatureTagsInput.test.tsx` 5 例（回车提交与去重、失焦提交与 Esc 取消、× 移除、50 上限拒绝、禁用）；`FeaturesPageView.test.tsx` 新增 1 例锁定数组提交；`apps/e2e/tests/features.spec.ts` 改走新控件（添加两枚胶囊 → 保存 → 编辑弹窗预填断言）。弹窗内 jsdom 断言用 `toBeInTheDocument`：antd 弹窗停在 `ant-zoom-appear-prepare` 的 `opacity: 0` 首帧，`toBeVisible` 在弹窗内不可用。
+- 本地验证（2026-10-12）：`pnpm test:web` **99 文件 724 例全绿**；`pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check` 通过；`features.spec.ts` **2 例全绿**（真实 PostgreSQL + 生产构建）；抓帧人工检查空态与填充态样式。「未运行」：整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、其余 Playwright 用例（清单仍 74 例 / 29 文件）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。未提交、未推送。
+
 ## 2026-10-12 本地测试环境补齐：ops 备份集成认 POSTGRES_BIN + 一键 test:integration:local
 
 用户要求「解决环境问题」。本批消除两处**本地**环境缺口，并修复一处被本地环境暴露出来的**生产路径缺陷**；不改 CI 行为，不改契约 / 迁移 / 权限：
@@ -1042,7 +1060,7 @@
 
 ## 2026-10-12 全局测试：非数据库整链门禁 + 真实数据库集成 + 全量浏览器 E2E 补跑
 
-用户指示（原话）：「全局测试一下」。在第一百三十条、第一百三十一条的改动之上补跑其标注为「未运行」的门禁，本轮无代码改动：
+用户指示（原话）：「全局测试一下」。在第一百三十二条、第一百三十三条的改动之上补跑其标注为「未运行」的门禁，本轮无代码改动：
 
 - `pnpm check` exit 0：lint / format:check / typecheck（8 workspace）/ test:unit / db:migrations:check（38 个）/ db:seed:check / contract:drift / contract:validate（106 条）/ build（含 `apps/web`）/ check:deploy:test（5 个 image ref）/ check:deps（788 源文件）/ check:frontend:boundaries（326 modules / 1645 dependencies，0 违规）/ permissions:check（106 / 106）/ deps:audit（No known vulnerabilities found）/ check:secrets（1199 文件）/ check:docs（113 个 Markdown）。
 - `POSTGRES_BIN=D:/PostgreSQL/18/pgsql/bin pnpm test:integration:local`（`app_ci`，迁移 0 applied / 38 already present）exit 0：database 27 例 + `apps/ops` 7 例 + `apps/api` 56 文件 539 例全绿。

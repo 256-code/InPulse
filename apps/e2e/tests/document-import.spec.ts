@@ -103,3 +103,43 @@ test("F-32 项目内从文档导入多个模块与功能", async ({ browser }) =
 
   await context.close();
 });
+
+test("F-32 文档导入弹窗在矮窗口下页脚不被裁切、正文可滚动（布局回归）", async ({
+  browser,
+}) => {
+  const runtime = await loadRuntime();
+  const { context, page } = await createAuthenticatedContext(browser, runtime);
+
+  // 模拟「窗口没全屏」：620px 高度下，弹窗内容（引导语 + 格式速查 + 14 行文本框）必然超过可用高度。
+  await page.setViewportSize({ width: 1280, height: 620 });
+  await page.goto("/projects");
+  await page.getByTestId("import-project-document-button").click();
+  const dialog = page.getByRole("dialog");
+
+  // 页脚（取消 / 预览）必须完整落在视口内，不能被 overflow 裁掉。
+  const preview = dialog.getByRole("button", { name: /预\s*览/ });
+  await expect(preview).toBeVisible();
+  await expect(preview).toBeInViewport();
+  const box = await preview.boundingBox();
+  expect(box, "预览按钮应有布局盒").not.toBeNull();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(620);
+
+  // 正文容器收缩并内部滚动：内容高于可视区，但弹窗自身不溢出。
+  const metrics = await dialog.locator(".dialog-form").evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+  // 内容保持自然高度（14 行文本框不被压缩成一小条），靠滚动而不是压扁来适配。
+  const textareaBox = await dialog.getByLabel("导入文档内容").boundingBox();
+  expect(textareaBox, "文本框应有布局盒").not.toBeNull();
+  expect(textareaBox!.height).toBeGreaterThan(200);
+
+  // 能真正滚动到底部的文件操作行。
+  const pickFile = dialog.getByRole("button", { name: "选择文件" });
+  await pickFile.scrollIntoViewIfNeeded();
+  await expect(pickFile).toBeInViewport();
+
+  await context.close();
+});

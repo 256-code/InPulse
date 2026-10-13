@@ -1,5 +1,6 @@
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { SimilarFeatures } from "./SimilarFeatures";
+import { FeatureTagsInput } from "./FeatureTagsInput";
 import { TasksPanel } from "../tasks/TasksPanel";
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Alert, Button, Input } from "antd";
@@ -872,9 +873,7 @@ export function FeaturesPageView({
                 <p role="alert">{errors.acceptanceCriteria?.message}</p>
               </div>
               <div className="calm-field">
-                <label htmlFor="feature-tags">
-                  标签（每行一个，最多 50 个）
-                </label>
+                <label htmlFor="feature-tags">标签（最多 50 个）</label>
                 <Controller
                   name="tags"
                   control={control}
@@ -884,10 +883,10 @@ export function FeaturesPageView({
                         50 || "标签最多 50 个",
                   }}
                   render={({ field }) => (
-                    <Input.TextArea
-                      {...field}
-                      id="feature-tags"
-                      rows={2}
+                    <FeatureTagsInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      inputId="feature-tags"
                       disabled={mutation.isPending || reloading || !!merge}
                     />
                   )}

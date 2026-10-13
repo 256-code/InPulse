@@ -25,7 +25,13 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     const create = page.getByRole("dialog", { name: "新增功能" });
     await create.getByLabel("功能名称").fill(name);
     await create.getByLabel("当前功能说明").fill("创建时的说明");
-    await create.getByLabel("标签（每行一个，最多 50 个）").fill("支付\n退款");
+    await create.getByRole("button", { name: "新标签" }).click();
+    const tagEntry = create.getByLabel("标签（最多 50 个）");
+    await tagEntry.fill("支付");
+    await tagEntry.press("Enter");
+    await tagEntry.fill("退款");
+    await tagEntry.press("Enter");
+    await expect(create.getByText("支付", { exact: true })).toBeVisible();
     await create.getByRole("button", { name: /保\s*存/ }).click();
     await expect(create).toBeHidden();
     await page.locator(".calm-feature-card").filter({ hasText: name }).click();
@@ -41,6 +47,9 @@ test("功能档案：模块入口、创建详情、双页面三方合并、刷�
     const edit = page.getByRole("dialog", { name: "编辑功能" });
     await expect(edit.getByTestId("feature-modal-lifecycle")).toHaveCount(0);
     await expect(edit.getByLabel("操作原因")).toHaveCount(0);
+    // 编辑弹窗里标签以胶囊预填（2026-10-12 起不再是逐行文本框）。
+    await expect(edit.getByText("支付", { exact: true })).toBeVisible();
+    await expect(edit.getByText("退款", { exact: true })).toBeVisible();
     await edit.getByLabel("功能名称").fill(`${name}-更新`);
     const other = await context.newPage();
     await other.goto(page.url());
