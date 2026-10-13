@@ -18,22 +18,27 @@ import {
 import { createMyTasksServerAdapter } from "@features/my-tasks/my-tasks-server";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskCenterPageView } from "@features/my-tasks/TaskCenterPageView";
+import {
+  loadIssuesPageView,
+  loadTaskDetailOverlay,
+} from "@features/project-overview/project-workspace-chunks";
 
 /**
  * 任务详情弹窗按需加载：任务中心的初始包不引入功能档案的完整任务面板，
  * 首次点击任务卡片时才加载详情弹窗与配套写入口。
  */
-const TaskDetailOverlay = lazy(
-  () => import("@features/tasks/TaskDetailOverlay"),
-);
+const TaskDetailOverlay = lazy(loadTaskDetailOverlay);
 
 /**
  * 遗留问题弹窗同样按需加载：与项目主页共用 F-20 视图，任务中心不再整页跳转到
  * `/issues`。视图自带 `useSearchParams` 状态，弹窗内用 `SearchParamsScope` 给它
  * 一份独立地址（项目筛选跟随任务中心当前筛选，与页面上的计数同口径），
  * 交互不污染浏览器地址栏。
+ *
+ * 装载与预热统一在 project-workspace-chunks：chunk 没到位时靠弹层外的 Suspense 整块不
+ * 渲染，入口按钮悬停即预热，详见该文件顶部的说明。
  */
-const IssuesPageView = lazy(() => import("@features/issues/IssuesPageView"));
+const IssuesPageView = lazy(loadIssuesPageView);
 
 export interface TasksPageProps {
   readonly client?: InpulseApiClient;
@@ -125,19 +130,21 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
         adapter={taskAdapter}
         client={client}
       />
+      {/* 弹层整体包在 Suspense 里（2026-10-12）：内容 chunk 没到位时什么都不渲染，
+          不再出现「只有标题、正文空白」的空壳弹层（详见 project-workspace-chunks）。 */}
       {issuesOpen ? (
-        <Modal
-          open
-          size="xl"
-          label="遗留问题"
-          eyebrow="任务中心"
-          title="遗留问题"
-          closeLabel="关闭遗留问题"
-          onCancel={handleCloseIssues}
-          className="project-workspace-modal"
-        >
-          <div className="project-workspace-modal-body">
-            <Suspense fallback={null}>
+        <Suspense fallback={null}>
+          <Modal
+            open
+            size="xl"
+            label="遗留问题"
+            eyebrow="任务中心"
+            title="遗留问题"
+            closeLabel="关闭遗留问题"
+            onCancel={handleCloseIssues}
+            className="project-workspace-modal"
+          >
+            <div className="project-workspace-modal-body">
               <SearchParamsScope
                 initial={
                   filters.projectId === null
@@ -151,9 +158,9 @@ export const TasksPage: React.FC<TasksPageProps> = ({ client, adapter }) => {
                   embedded
                 />
               </SearchParamsScope>
-            </Suspense>
-          </div>
-        </Modal>
+            </div>
+          </Modal>
+        </Suspense>
       ) : null}
       <Suspense fallback={null}>
         {detailTarget === null ? null : (

@@ -1248,13 +1248,6 @@
   margin-top: 15px;
 }
 
-.placeholder-note {
-  display: block;
-  margin-top: 4px;
-  color: #93a1b0;
-  font-size: 11px;
-}
-
 .cards-grid.calm-feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

@@ -31,6 +31,7 @@ import {
   ProjectSetupGuide,
   type ProjectSetupGuideInput,
 } from "./ProjectSetupGuide";
+import { projectWorkspacePreloadHandlers } from "./project-workspace-chunks";
 
 /** 迭代发布日期按北京时间渲染（服务端下发 UTC ISO 串）。 */
 function formatPublishedAt(iso: string): string {
@@ -164,7 +165,11 @@ export const ProjectOverviewPageView: React.FC<
 
   const renderLeftover = (item: ProjectOverviewLeftover) => (
     <li key={item.leftoverId}>
-      <button type="button" onClick={onOpenIssues}>
+      <button
+        type="button"
+        {...projectWorkspacePreloadHandlers("issues")}
+        onClick={onOpenIssues}
+      >
         <InpulseIcon name="alert" size={15} />
         <span>
           {item.summary}
@@ -245,6 +250,7 @@ export const ProjectOverviewPageView: React.FC<
           <button
             type="button"
             className="soft-blue-button"
+            {...projectWorkspacePreloadHandlers("members")}
             onClick={onOpenMembers}
           >
             <InpulseIcon name="users" size={15} />
@@ -335,6 +341,7 @@ export const ProjectOverviewPageView: React.FC<
               <button
                 type="button"
                 className="text-button"
+                {...projectWorkspacePreloadHandlers("records")}
                 onClick={onOpenRecords}
               >
                 查看全部
@@ -366,6 +373,7 @@ export const ProjectOverviewPageView: React.FC<
               <button
                 type="button"
                 className="text-button"
+                {...projectWorkspacePreloadHandlers("issues")}
                 onClick={onOpenIssues}
               >
                 进入遗留问题
