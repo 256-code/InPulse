@@ -266,7 +266,7 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
-| `getWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 只读当前登录用户自己的绑定状态；服务端从 Session 解析身份，不接受客户端指定用户；响应 `no-store` |
+| `getWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 只读当前登录用户自己的绑定状态（含管理员配置的机器人链接 `botProfileUrl`）；服务端从 Session 解析身份，不接受客户端指定用户；响应 `no-store` |
 | `createWecomBindingCode` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 签发一次性绑定码（ADR-023 allowlist securityFlow，见认证安全流程矩阵）：同源 + 当前 CSRF 必填；每次调用覆盖旧码；明文码只返回一次、服务端只存 SHA-256 Hash；10 分钟有效、一次性消费；不写通用幂等记录 |
 | `deleteWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 解除绑定（数据库级幂等，actorOnly 重放授权）：作废待用码并撤销 ACTIVE 绑定（REVOKED，不物理删除）；重复执行自然幂等 |
 
@@ -276,7 +276,7 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
-| `getWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读机器人配置与可用状态（`configured` / `ready` / `disabledReason` / botId / 密钥尾号）；响应 `no-store`、永不回显密钥；主密钥缺失 / 密文不可解按 `ENCRYPTION_KEY_UNAVAILABLE` / `CONFIG_INVALID` fail closed |
-| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret（secret 缺省或 null 保持原值，首次必填；AES-256-GCM 加密落库、明文不落库）；CSRF + 数据库级幂等；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
+| `getWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读机器人配置与可用状态（`configured` / `ready` / `disabledReason` / botId / 密钥尾号 / `botProfileUrl`）；响应 `no-store`、永不回显密钥；主密钥缺失 / 密文不可解按 `ENCRYPTION_KEY_UNAVAILABLE` / `CONFIG_INVALID` fail closed |
+| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret / botProfileUrl（secret 缺省或 null 保持原值，首次必填；botProfileUrl 缺省保持、null 清空；AES-256-GCM 加密落库、明文不落库）；CSRF + 数据库级幂等（1.1.0）；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
 
 两条路由都只服务完整管理员 Session（ADR-031 起不要求 TOTP 重认证），只访问单行配置 `app.wecom_robot_config`；写审计 `admin.wecomRobot.update`（不含密钥材料）。凭据进入数据库是本 ADR 对 ADR-069 §2.4 的修订；桥接侧读取解密后的凭据为下一批改造。

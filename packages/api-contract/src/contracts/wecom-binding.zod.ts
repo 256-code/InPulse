@@ -22,6 +22,14 @@ export const wecomBindingStatusSchema = z
       .datetime()
       .nullable()
       .describe("当前待用绑定码的过期时间；无待用码为 null"),
+    botProfileUrl: z
+      .string()
+      .min(1)
+      .max(512)
+      .nullable()
+      .describe(
+        "管理员配置的机器人资料链接；未配置为 null；用于指引成员在企业微信中打开机器人",
+      ),
   })
   .strict()
   .meta({ id: "WecomBindingStatus" });
@@ -65,7 +73,7 @@ export type WecomBindingReplayContext = z.infer<
 export const wecomBindingSchemas = {
   WecomBindingStatus: {
     schema: wecomBindingStatusSchema,
-    summary: "当前用户的企微机器人绑定状态与待用码过期时间",
+    summary: "当前用户的企微机器人绑定状态、待用码过期时间与机器人资料链接",
     sensitiveFieldPaths: [],
   },
   WecomBindingCode: {

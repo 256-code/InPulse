@@ -1328,7 +1328,7 @@
     "/admin/wecom-robot": {
       "get": {
         "operationId": "getWecomRobotConfig",
-        "summary": "系统管理员读取企业微信机器人的当前配置；只返回 botId 与密钥尾号，永不回显密钥；响应 no-store。",
+        "summary": "系统管理员读取企业微信机器人的当前配置；只返回 botId、密钥尾号与机器人链接，永不回显密钥；响应 no-store。",
         "responses": {
           "200": {
             "description": "成功",
@@ -1389,7 +1389,7 @@
       },
       "put": {
         "operationId": "updateWecomRobotConfig",
-        "summary": "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥），密钥经 AES-256-GCM 加密落库、明文永不入库；写审计（不含密钥）。",
+        "summary": "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥，botProfileUrl 缺省保持、null 清空），密钥经 AES-256-GCM 加密落库、明文永不入库；写审计（不含密钥）。",
         "responses": {
           "200": {
             "description": "成功",
@@ -1477,7 +1477,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.0.0",
+          "idempotencyContractVersion": "1.1.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -1488,6 +1488,7 @@
                   "responseSchemaRef": "WecomRobotConfig",
                   "safeBodyFieldPaths": [
                     "botId",
+                    "botProfileUrl",
                     "configured",
                     "disabledReason",
                     "ready",
@@ -27935,12 +27936,26 @@
               }
             ],
             "description": "当前待用绑定码的过期时间；无待用码为 null"
+          },
+          "botProfileUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "管理员配置的机器人资料链接；未配置为 null；用于指引成员在企业微信中打开机器人"
           }
         },
         "required": [
           "state",
           "boundAt",
-          "codeExpiresAt"
+          "codeExpiresAt",
+          "botProfileUrl"
         ],
         "additionalProperties": false
       },
@@ -28019,6 +28034,19 @@
               }
             ]
           },
+          "botProfileUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "机器人资料链接；未配置为 null；展示在成员「绑定企业微信」弹窗"
+          },
           "updatedAt": {
             "anyOf": [
               {
@@ -28053,6 +28081,7 @@
           "secretHint",
           "secretKeyVersion",
           "rowVersion",
+          "botProfileUrl",
           "updatedAt",
           "updatedByName"
         ],
@@ -28072,6 +28101,19 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "botProfileUrl": {
+            "description": "机器人资料链接（https，1–512）；缺省保持现值、null 清空",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
               },
               {
                 "type": "null"

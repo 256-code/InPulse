@@ -16,6 +16,7 @@ export interface WecomBindingStatusRecord {
   readonly state: "UNBOUND" | "PENDING" | "BOUND";
   readonly boundAt: string | null;
   readonly codeExpiresAt: string | null;
+  readonly botProfileUrl: string | null;
 }
 
 export interface WecomBindingCodeRecord {
@@ -86,14 +87,21 @@ export class WecomBindingStateService {
              AND c.consumed_at IS NULL
              AND c.expires_at > now()
            LIMIT 1
-        ) AS code_expires_at
+        ) AS code_expires_at,
+        (
+          SELECT r.bot_profile_url
+            FROM app.wecom_robot_config AS r
+           WHERE r.id = 1
+        ) AS bot_profile_url
     `) as unknown as readonly {
       bound_at: string | null;
       code_expires_at: string | null;
+      bot_profile_url: string | null;
     }[];
     const row = rows[0];
     const boundAt = row?.bound_at ?? null;
     const codeExpiresAt = row?.code_expires_at ?? null;
+    const botProfileUrl = row?.bot_profile_url ?? null;
     return {
       state:
         boundAt !== null
@@ -103,6 +111,7 @@ export class WecomBindingStateService {
             : "UNBOUND",
       boundAt,
       codeExpiresAt,
+      botProfileUrl,
     };
   }
 

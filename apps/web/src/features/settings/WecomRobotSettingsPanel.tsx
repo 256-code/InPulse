@@ -18,6 +18,7 @@ export interface WecomRobotSettingsPanelProps {
 interface FormValues {
   readonly botId: string;
   readonly secret: string;
+  readonly botProfileUrl: string;
 }
 
 /**
@@ -37,13 +38,17 @@ export const WecomRobotSettingsPanel: React.FC<
     setValue,
     formState: { errors },
   } = useForm<FormValues>({
-    defaultValues: { botId: "", secret: "" },
+    defaultValues: { botId: "", secret: "", botProfileUrl: "" },
   });
 
   const config = query.data;
   useEffect(() => {
     if (config === undefined) return;
-    reset({ botId: config.botId ?? "", secret: "" });
+    reset({
+      botId: config.botId ?? "",
+      secret: "",
+      botProfileUrl: config.botProfileUrl ?? "",
+    });
   }, [config, reset]);
 
   const submit = handleSubmit(async (values) => {
@@ -55,9 +60,11 @@ export const WecomRobotSettingsPanel: React.FC<
       return;
     }
     try {
+      const botProfileUrl = values.botProfileUrl.trim();
       await save.mutateAsync({
         botId: values.botId.trim(),
         secret: secret.length === 0 ? null : secret,
+        botProfileUrl: botProfileUrl.length === 0 ? null : botProfileUrl,
       });
       setValue("secret", "");
       setSuccess(
@@ -136,6 +143,9 @@ export const WecomRobotSettingsPanel: React.FC<
                 "；Secret 已配置（尾号 ****" +
                 (config.secretHint ?? "") +
                 "）" +
+                (config.botProfileUrl !== null
+                  ? "；机器人链接已配置"
+                  : "；未配置机器人链接") +
                 (config.updatedAt !== null
                   ? "；最近保存 " +
                     (config.updatedByName ?? "") +
@@ -214,6 +224,44 @@ export const WecomRobotSettingsPanel: React.FC<
                 Secret
                 只会在保存时提交一次，服务端加密存储、永不回显；更换机器人时连同新
                 Secret 一起填写。
+              </small>
+            )}
+          </div>
+          <div className="wecom-robot-field">
+            <label htmlFor="wecom-robot-bot-profile-url">
+              机器人链接（可选）
+            </label>
+            <Controller
+              name="botProfileUrl"
+              control={control}
+              rules={{
+                validate: (value) => {
+                  const trimmed = value.trim();
+                  if (trimmed.length === 0) return true;
+                  try {
+                    return (
+                      new URL(trimmed).protocol === "https:" ||
+                      "机器人链接必须是 https 开头的合法网址"
+                    );
+                  } catch {
+                    return "机器人链接必须是 https 开头的合法网址";
+                  }
+                },
+              }}
+              render={({ field }) => (
+                <Input
+                  id="wecom-robot-bot-profile-url"
+                  {...field}
+                  placeholder="https://work.weixin.qq.com/wework_admin/common/openBotProfile/..."
+                />
+              )}
+            />
+            {errors.botProfileUrl ? (
+              <small role="alert">{errors.botProfileUrl.message}</small>
+            ) : (
+              <small className="form-hint">
+                粘贴企业微信机器人资料页链接；将展示在成员的「绑定企业微信」弹窗，
+                指引他们在企业微信中打开机器人；留空表示不展示。
               </small>
             )}
           </div>

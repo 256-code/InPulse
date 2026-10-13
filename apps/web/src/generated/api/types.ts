@@ -2149,6 +2149,7 @@ export type WecomBindingStatus = {
   readonly state: ("UNBOUND" | "PENDING" | "BOUND");
   readonly boundAt: (string | null);
   readonly codeExpiresAt: (string | null);
+  readonly botProfileUrl: (string | null);
 };
 
 export type WecomRobotConfig = {
@@ -2159,6 +2160,7 @@ export type WecomRobotConfig = {
   readonly secretHint: (string | null);
   readonly secretKeyVersion: (number | null);
   readonly rowVersion: (number | null);
+  readonly botProfileUrl: (string | null);
   readonly updatedAt: (string | null);
   readonly updatedByName: (string | null);
 };
@@ -2166,6 +2168,7 @@ export type WecomRobotConfig = {
 export type WecomRobotConfigUpdateRequest = {
   readonly botId: string;
   readonly secret?: (string | null);
+  readonly botProfileUrl?: (string | null);
 };
 
 export type WecomRobotMutationHeaders = {

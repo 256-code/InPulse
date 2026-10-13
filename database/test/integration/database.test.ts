@@ -87,6 +87,7 @@ describe("PostgreSQL schema, invariants, and roles", () => {
       "0040_ai_assist_settings.sql",
       "0041_wecom_binding.sql",
       "0042_wecom_robot_config.sql",
+      "0043_wecom_robot_profile_url.sql",
     ]);
   });
 

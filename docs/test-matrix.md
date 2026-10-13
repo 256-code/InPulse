@@ -6141,7 +6141,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 ## 企业微信机器人绑定（ADR-069，阶段一）
 
-用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。
+用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。2026-10-13 扩展（迁移 `0043`，ADR-070）：绑定状态随机器人配置回传 `botProfileUrl`，弹窗（含待用码状态）展示机器人链接并提示去企业微信打开。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6150,16 +6150,18 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-BIND-API-003 | 真实 PostgreSQL 集成 | 唯一性与换绑 | 同一企微账号绑定第二个用户 WBC06（原绑定与新码都不受影响）；同一用户换绑新企微账号更新原行、`row_version` +1、不新增行 | 本地通过（2026-10-13） |
 | WECOM-BIND-API-004 | 真实 PostgreSQL 集成 | 解绑与幂等重放 | DELETE 204 且 GET 回 UNBOUND、绑定转 REVOKED；同 Key 重放 204；同 Key 缺 CSRF 头 422、格式合法但未知 Token 401；缺 Idempotency-Key 400 | 本地通过（2026-10-13） |
 | WECOM-BIND-API-005 | 真实 PostgreSQL 集成 | 兑换边界 | 解绑作废的码再兑换 WBC02；停用用户 WBC04 且不产生绑定；过期码 WBC05；非 32 字节 Hash WBC03 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-006 | 真实 PostgreSQL 集成 | 绑定状态返回机器人链接 | 未配置配置行时 `botProfileUrl` 为 null；管理员写入链接后，绑定状态返回该链接 | 本地通过（2026-10-13） |
 | WECOM-BIND-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 对两表 DELETE 42501；`app_backup` 只读（UPDATE / DELETE 42501）；runtime 不能 `SET ROLE app_owner`；迁移内 `DO $$` 部署断言随 0041 通过 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-001 | Web 单测 | 弹窗三态与生成 | UNBOUND 引导；点「生成绑定码」只签发 CSRF（携带 `x-csrf-token`、无幂等 Key）、展示一次性明文码；生成后失效重取第二次 GET 为 BOUND 时自动「已绑定」；PENDING 无明文时提示有效期并引导重新生成；读取失败错误提示且生成按钮禁用 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-002 | Web 单测 | 解绑与复制 | 已绑定显示绑定时间；Popconfirm 确认后调用 DELETE（携带 `x-csrf-token` 与 `wecom-unbind-` 前缀幂等 Key），成功后回到未绑定视图；「复制绑定码」写入剪贴板并提示 | 本地通过（2026-10-13） |
+| WECOM-BIND-UI-003 | Web 单测 | 弹窗机器人链接展示与复制 | 服务端下发链接时展示链接与「用上面的链接在企业微信中打开机器人；」步骤文案，「复制机器人链接」写入剪贴板并提示；待用码存在（明文不在客户端）时同样展示链接块；未配置链接时回落原引导且不渲染链接块 | 本地通过（2026-10-13） |
 | WECOM-BIND-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 113 条、`contract:drift`（6 产物）、`permissions:check` 113 / 113、`db:migrations:check` 40 个、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 阶段二投递（长连接桥接按绑定关系推送、失败重试与可观测性）未实现、未测试；③ 未做浏览器 E2E（绑定需真实企微侧发送绑定码，E2E 只覆盖到 Web 单测；如需 E2E 需引入企微长连接 stub）。
 
 ## 企业微信机器人配置（ADR-070）
 
-用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。
+用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。2026-10-13 扩展（迁移 `0043`）：管理员可再填写「机器人链接」（`bot_profile_url`），成员「绑定企业微信」弹窗（含待用码状态）展示该链接并提示去企业微信打开机器人。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6167,9 +6169,12 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-ROBOT-API-002 | 真实 PostgreSQL 集成 | 保存与加密 | 缺 Idempotency-Key 400、缺 CSRF 401、首次缺 Secret 422（details 指向 secret）；保存成功响应只回尾 4 位、库内为密文且可用主密钥解回明文、`row_version` = 1 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-API-003 | 真实 PostgreSQL 集成 | 幂等与换机器人 | 同 Key 同请求重放返回原响应且不改行；同 Key 换 body 409；仅换 botId 保留原 Secret、`row_version` 递增、写 `admin.wecomRobot.update` 审计（含 before / after 摘要与 secretChanged、不含密钥） | 本地通过（2026-10-13） |
 | WECOM-ROBOT-API-004 | 真实 PostgreSQL 集成 | 主密钥 fail closed | 主密钥不可用：GET 分类 `ENCRYPTION_KEY_UNAVAILABLE`；带新 Secret 的 PUT 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` 且不落明文 | 本地通过（2026-10-13） |
-| WECOM-ROBOT-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 无 DELETE（42501）；`app_backup` 只读；迁移内 `DO $$` 部署断言随 0042 通过；database 集成「已应用迁移清单」含 0042 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-005 | 真实 PostgreSQL 集成 | botProfileUrl 三态与校验 | 设置后响应回读；缺省保持；`null` 清空；非 https 422 `WECOM_ROBOT_CONFIG_VALIDATION_FAILED`（details 指向 botProfileUrl） | 本地通过（2026-10-13） |
+| WECOM-ROBOT-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 无 DELETE（42501）；`app_backup` 只读；迁移内 `DO $` 部署断言随 0042、0043 通过；database 集成「已应用迁移清单」含 0042、0043 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-DB-002 | 真实 PostgreSQL 集成 | botProfileUrl 列约束 | UPDATE 非 https / 超长（520 字符）被 CHECK 拒绝（23514）；合法 https 可写入 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UNIT-001 | API 单测 | keyring 解析与加解密 | 多版本解析（注释 / 空行 / 空白）、fail closed（非法版本 / 非法行 / 短键 / 重复版本 / 空 / 缺当前版本）、AES-256-GCM 往返（nonce‖tag‖body）、篡改与换版本解密被拒、过短密文、`/run/secrets` 路径防线、尾 4 位提示 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UI-001 | Web 单测 | 面板三态与提交 | 未配置提示 + 首次缺 Secret 本地拦截；首次保存先签发 CSRF 再携带一次性幂等 Key；已配置回填 botId 与尾号、留空提交 secret=null；主密钥不可用文案；读取失败错误 + 重试按钮 | 本地通过（2026-10-13） |
-| WECOM-ROBOT-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 115 条、`contract:drift`（6 产物）、`permissions:check` 115 / 115、契约单测 102 例、`db:migrations:check` 41 个；`lint` / `typecheck` / `format:check` / `check:docs` 见开发日志 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-UI-002 | Web 单测 | 机器人链接输入与校验 | 已配置回填链接；清空后提交 `botProfileUrl: null`；非 https 本地校验拦截提交并提示 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 115 条、`contract:drift`（6 产物）、`permissions:check` 115 / 115、契约单测 102 例、`db:migrations:check` 42 个；`lint` / `typecheck` / `format:check` / `check:docs` 见开发日志 | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 桥接侧读取数据库凭据与配置变化重连、阶段二投递未实现、未测试；③ 未做机器人配置页浏览器 E2E。

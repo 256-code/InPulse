@@ -20,6 +20,7 @@ const unconfigured: WecomRobotConfig = {
   secretHint: null,
   secretKeyVersion: null,
   rowVersion: null,
+  botProfileUrl: null,
   updatedAt: null,
   updatedByName: null,
 };
@@ -32,6 +33,8 @@ const configured: WecomRobotConfig = {
   secretHint: "yH0l",
   secretKeyVersion: 1,
   rowVersion: 3,
+  botProfileUrl:
+    "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
   updatedAt: "2026-10-13T06:00:00.000Z",
   updatedByName: "邵晨宇",
 };
@@ -112,6 +115,7 @@ describe("WecomRobotSettingsPanel（ADR-070）", () => {
     expect(body).toEqual({
       botId: "aib-new-bot",
       secret: testSecret,
+      botProfileUrl: null,
     });
     expect(init.headers["x-csrf-token"]).toBe("a".repeat(43));
     expect(init.headers["Idempotency-Key"]).toMatch(/^wecom-robot-/);
@@ -142,7 +146,47 @@ describe("WecomRobotSettingsPanel（ADR-070）", () => {
     expect(body).toEqual({
       botId: "aibde5jXbgE_0Gz4O3ozl32C0H4BLhWZAzH",
       secret: null,
+      botProfileUrl:
+        "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
     });
+  });
+
+  it("机器人链接回显；清空后提交 null", async () => {
+    const { updateWecomRobotConfig } = mount({ configs: [configured] });
+    await screen.findByText(/已配置，桥接可用/);
+    expect(
+      (screen.getByLabelText("机器人链接（可选）") as HTMLInputElement).value,
+    ).toBe(
+      "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+    );
+
+    fireEvent.change(screen.getByLabelText("机器人链接（可选）"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() =>
+      expect(updateWecomRobotConfig).toHaveBeenCalledTimes(1),
+    );
+    const [body] = updateWecomRobotConfig.mock.calls[0] as [
+      { readonly botProfileUrl: string | null },
+    ];
+    expect(body.botProfileUrl).toBeNull();
+  });
+
+  it("机器人链接非 https 时本地校验拦截提交", async () => {
+    const { updateWecomRobotConfig } = mount({ configs: [configured] });
+    await screen.findByText(/已配置，桥接可用/);
+
+    fireEvent.change(screen.getByLabelText("机器人链接（可选）"), {
+      target: { value: "http://work.weixin.qq.com/openBotProfile/x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    expect(
+      await screen.findByText("机器人链接必须是 https 开头的合法网址"),
+    ).toBeInTheDocument();
+    expect(updateWecomRobotConfig).not.toHaveBeenCalled();
   });
 
   it("主密钥不可用时展示 fail-closed 状态文案", async () => {

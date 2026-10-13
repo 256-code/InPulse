@@ -124,11 +124,17 @@ export class WecomRobotConfigService {
       keyVersion = current.secretKeyVersion;
       secretHint = current.secretHint;
     }
+    // botProfileUrl 语义（与契约同口径）：缺省保持现值、null 清空、字符串设置。
+    const botProfileUrl =
+      input.botProfileUrl === undefined
+        ? (current?.botProfileUrl ?? null)
+        : input.botProfileUrl;
     await this.repository.upsert(tx, {
       botId,
       secretCiphertext: ciphertext,
       secretKeyVersion: keyVersion,
       secretHint,
+      botProfileUrl,
       updatedBy: meta.actorId,
     });
     const updated = await this.repository.find(tx);
@@ -161,6 +167,7 @@ export class WecomRobotConfigService {
         secretHint: null,
         secretKeyVersion: null,
         rowVersion: null,
+        botProfileUrl: null,
         updatedAt: null,
         updatedByName: null,
       };
@@ -174,6 +181,7 @@ export class WecomRobotConfigService {
       secretHint: row.secretHint,
       secretKeyVersion: row.secretKeyVersion,
       rowVersion: row.rowVersion,
+      botProfileUrl: row.botProfileUrl,
       updatedAt: row.updatedAt,
       updatedByName: row.updatedByName,
     };
@@ -215,6 +223,7 @@ export class WecomRobotConfigService {
       secretHint: row.secretHint,
       secretKeyVersion: row.secretKeyVersion,
       rowVersion: row.rowVersion,
+      botProfileUrl: row.botProfileUrl,
     };
   }
 }

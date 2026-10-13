@@ -29,6 +29,9 @@ const ROBOT_KEY_HEX = "ae".repeat(32);
 /** 测试专用假 Secret；真实凭据绝不进入仓库。 */
 const TEST_ROBOT_SECRET = "inpulse-test-robot-secret-1";
 const TEST_ROBOT_SECRET_ALT = "inpulse-test-robot-secret-2";
+/** 测试专用机器人资料链接；真实链接绝不进入仓库。 */
+const TEST_ROBOT_PROFILE_URL =
+  "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only";
 
 interface SessionActor {
   readonly userId: number;
@@ -294,6 +297,7 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
       secretHint: null,
       secretKeyVersion: null,
       rowVersion: null,
+      botProfileUrl: null,
       updatedAt: null,
       updatedByName: null,
     });
@@ -359,7 +363,11 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
       cookie: admin.cookie,
       csrf,
       idempotencyKey: idempotencyKey(),
-      body: { botId: "aib-test-robot-1", secret },
+      body: {
+        botId: "aib-test-robot-1",
+        secret,
+        botProfileUrl: TEST_ROBOT_PROFILE_URL,
+      },
     });
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
@@ -369,6 +377,7 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
     expect(body["secretHint"]).toBe(TEST_ROBOT_SECRET.slice(-4));
     expect(body["secretKeyVersion"]).toBe(1);
     expect(body["rowVersion"]).toBe(1);
+    expect(body["botProfileUrl"]).toBe(TEST_ROBOT_PROFILE_URL);
     expect(typeof body["updatedAt"]).toBe("string");
     expect(body["updatedByName"]).toBeTruthy();
     expect(JSON.stringify(body)).not.toContain(secret);
@@ -377,16 +386,19 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
     const rows = (await sql`
       SELECT secret_ciphertext AS "ciphertext",
              secret_key_version AS "keyVersion",
-             secret_hint AS "hint"
+             secret_hint AS "hint",
+             bot_profile_url AS "profileUrl"
         FROM app.wecom_robot_config
        WHERE id = 1
     `) as unknown as readonly {
       ciphertext: Buffer;
       keyVersion: number;
       hint: string;
+      profileUrl: string | null;
     }[];
     const row = rows[0]!;
     expect(row.hint).toBe(TEST_ROBOT_SECRET.slice(-4));
+    expect(row.profileUrl).toBe(TEST_ROBOT_PROFILE_URL);
     expect(row.ciphertext.includes(Buffer.from(secret, "utf8"))).toBe(false);
     const keyring = parseWecomRobotEncryptionKeyring(
       `${KEY_VERSION}:${ROBOT_KEY_HEX}\n`,
@@ -401,6 +413,71 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
     const followUpBody = (await followUp.json()) as Record<string, unknown>;
     expect(followUpBody["configured"]).toBe(true);
     expect(followUpBody["ready"]).toBe(true);
+  });
+
+  test("botProfileUrl：缺省保持、null 清空、非 https → 422", async () => {
+    const sql = requireRuntime();
+    const admin = await sessionActor(
+      sql,
+      await createUser(sql, { admin: true }),
+    );
+    const csrf = await issueCsrf(admin.cookie);
+
+    const first = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: {
+        botId: "aib-profile-bot",
+        secret: TEST_ROBOT_SECRET,
+        botProfileUrl: TEST_ROBOT_PROFILE_URL,
+      },
+    });
+    expect(first.status).toBe(200);
+    expect(
+      ((await first.json()) as Record<string, unknown>)["botProfileUrl"],
+    ).toBe(TEST_ROBOT_PROFILE_URL);
+
+    // 缺省保持：只改 botId 时链接不变。
+    const rename = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-profile-bot-2" },
+    });
+    expect(rename.status).toBe(200);
+    expect(
+      ((await rename.json()) as Record<string, unknown>)["botProfileUrl"],
+    ).toBe(TEST_ROBOT_PROFILE_URL);
+
+    // null 清空。
+    const cleared = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-profile-bot-2", botProfileUrl: null },
+    });
+    expect(cleared.status).toBe(200);
+    expect(
+      ((await cleared.json()) as Record<string, unknown>)["botProfileUrl"],
+    ).toBeNull();
+
+    const invalid = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: {
+        botId: "aib-profile-bot-2",
+        botProfileUrl: "http://work.weixin.qq.com/openBotProfile/x",
+      },
+    });
+    expect(invalid.status).toBe(422);
+    const invalidBody = (await invalid.json()) as {
+      readonly code: string;
+      readonly details: Readonly<Record<string, unknown>>;
+    };
+    expect(invalidBody.code).toBe("WECOM_ROBOT_CONFIG_VALIDATION_FAILED");
+    expect(Object.keys(invalidBody.details)).toContain("botProfileUrl");
   });
 
   test("同 Key 同请求重放返回原响应且 row_version 不变；换 body → 409", async () => {
@@ -528,6 +605,68 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
     } finally {
       process.env["WECOM_ROBOT_ENCRYPTION_KEY_FILE"] = original;
     }
+  });
+
+  test("botProfileUrl 列约束：非 https / 超长被 CHECK 拒绝，合法 https 可写", async () => {
+    const sql = requireRuntime();
+    const userId = await createUser(sql, { admin: true });
+    await sql`
+      INSERT INTO app.wecom_robot_config (
+        id,
+        bot_id,
+        secret_ciphertext,
+        secret_key_version,
+        secret_hint,
+        updated_by,
+        row_version,
+        bot_profile_url
+      ) VALUES (
+        1,
+        'aib-constraint-bot',
+        ${Buffer.alloc(32)},
+        1,
+        'test',
+        ${userId},
+        1,
+        NULL
+      )
+      ON CONFLICT (id) DO UPDATE SET bot_profile_url = NULL
+    `;
+
+    const expectCheckViolation = async (value: string): Promise<void> => {
+      try {
+        await sql`
+          UPDATE app.wecom_robot_config
+             SET bot_profile_url = ${value}
+           WHERE id = 1
+        `;
+        throw new Error("check unexpectedly allowed: " + value);
+      } catch (error) {
+        expect((error as { readonly code?: string }).code).toBe("23514");
+      }
+    };
+    await expectCheckViolation("http://work.weixin.qq.com/x");
+    await expectCheckViolation("https://" + "a".repeat(520));
+
+    // 合法 https 可写。
+    await sql`
+      UPDATE app.wecom_robot_config
+         SET bot_profile_url = 'https://work.weixin.qq.com/wework_admin/common/openBotProfile/test'
+       WHERE id = 1
+    `;
+    const rows = (await sql`
+      SELECT bot_profile_url AS "profileUrl"
+        FROM app.wecom_robot_config
+       WHERE id = 1
+    `) as unknown as readonly { profileUrl: string | null }[];
+    expect(rows[0]?.profileUrl).toBe(
+      "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test",
+    );
+    await sql`
+      UPDATE app.wecom_robot_config
+         SET bot_profile_url = NULL
+       WHERE id = 1
+    `;
   });
 
   test("权限探针：app_runtime 无 DELETE、app_backup 只读", async () => {

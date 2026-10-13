@@ -14,12 +14,14 @@ const unbound: WecomBindingStatus = {
   state: "UNBOUND",
   boundAt: null,
   codeExpiresAt: null,
+  botProfileUrl: null,
 };
 
 const bound: WecomBindingStatus = {
   state: "BOUND",
   boundAt: "2026-10-13T02:00:00.000Z",
   codeExpiresAt: null,
+  botProfileUrl: null,
 };
 
 const issuedCode = {
@@ -113,13 +115,15 @@ describe("WecomBindingModal（ADR-069）", () => {
     expect(await screen.findByText("已解除绑定。")).toBeInTheDocument();
   });
 
-  it("待用码存在但明文不在客户端时，提示有效期并引导重新生成", async () => {
+  it("待用码存在但明文不在客户端时，提示有效期、引导重新生成并展示机器人链接", async () => {
     mount({
       statuses: [
         {
           state: "PENDING",
           boundAt: null,
           codeExpiresAt: "2099-01-01T00:00:00.000Z",
+          botProfileUrl:
+            "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
         },
       ],
     });
@@ -127,6 +131,9 @@ describe("WecomBindingModal（ADR-069）", () => {
     expect(
       screen.getByRole("button", { name: "重新生成绑定码" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("机器人链接")).toHaveTextContent(
+      "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+    );
   });
 
   it("复制绑定码写入剪贴板", async () => {
@@ -146,6 +153,47 @@ describe("WecomBindingModal（ADR-069）", () => {
       await screen.findByText("已复制，去企业微信发给机器人"),
     ).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledWith("ABCD-EFGH-JKMN-PQRS");
+  });
+
+  it("服务端下发机器人链接时展示并可复制", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    mount({
+      statuses: [
+        {
+          ...unbound,
+          botProfileUrl:
+            "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+        },
+      ],
+    });
+    await screen.findByText(/绑定后即可在手机上收到提醒/);
+    expect(screen.getByLabelText("机器人链接")).toHaveTextContent(
+      "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+    );
+    expect(
+      screen.getByText("用上面的链接在企业微信中打开机器人；"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "复制机器人链接" }));
+    expect(
+      await screen.findByText("已复制；发到企业微信任意会话中点击打开"),
+    ).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(
+      "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+    );
+  });
+
+  it("未配置机器人链接时展示原有引导文案", async () => {
+    mount({ statuses: [unbound] });
+    await screen.findByText(/绑定后即可在手机上收到提醒/);
+    expect(screen.queryByLabelText("机器人链接")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("在企业微信中找到 InPulse 机器人；"),
+    ).toBeInTheDocument();
   });
 
   it("读取失败展示错误提示且不展示生成按钮可用态", async () => {

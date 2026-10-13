@@ -7025,6 +7025,47 @@ td.due-overdue {
   font-size: 11.5px;
 }
 
+/* 机器人链接提示块：管理页配置的 botProfileUrl，指引成员在企业微信中打开机器人。 */
+.wecom-binding-robot-link {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #dfe7ef;
+  border-radius: 10px;
+  background: #f7fafd;
+  color: #5b7892;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.wecom-binding-robot-link-head {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-weight: 600;
+  color: #2e6794;
+}
+
+.wecom-binding-robot-link-head svg {
+  flex: 0 0 auto;
+  color: #3b88c6;
+}
+
+.wecom-binding-robot-link code {
+  display: block;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #eef4fa;
+  color: #314b65;
+  font-size: 11.5px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.wecom-binding-robot-link .wecom-binding-code-actions {
+  margin-top: 8px;
+}
+
 .wecom-binding-meta {
   margin: 12px 0 0;
   color: #7b8fa2;

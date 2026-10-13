@@ -581,6 +581,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "b7fa3ffc504e606d5e230965043779182896719ff30153f61bb1c19a74a93e5a"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "21876dcc905d82acc425c919275bc9a5864a119250c7369a9cd8f4643d0c83ef"
     }
   ],
   "voidChangeRecord": [

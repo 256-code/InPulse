@@ -49,6 +49,9 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
+  const [robotCopyState, setRobotCopyState] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
   const [now, setNow] = useState(() => Date.now());
 
   // 绑定码有效期倒计时：只在弹层打开时走秒。
@@ -67,11 +70,13 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
   useEffect(() => {
     if (open) return;
     setCopyState("idle");
+    setRobotCopyState("idle");
     resetIssueCode();
     resetUnbind();
   }, [open, resetIssueCode, resetUnbind]);
 
   const status = query.data;
+  const robotUrl = status?.botProfileUrl ?? null;
   const code = issueCode.data?.code ?? null;
   const codeExpiresAt =
     issueCode.data?.expiresAt ?? status?.codeExpiresAt ?? null;
@@ -98,10 +103,47 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
     }
   }
 
+  async function handleCopyRobotUrl(): Promise<void> {
+    if (robotUrl === null) return;
+    if (navigator.clipboard === undefined) {
+      setRobotCopyState("failed");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(robotUrl);
+      setRobotCopyState("copied");
+    } catch {
+      setRobotCopyState("failed");
+    }
+  }
+
   const generate = (): void => {
     setCopyState("idle");
     issueCode.mutate();
   };
+
+  const robotLinkNote =
+    robotUrl === null ? null : (
+      <div className="wecom-binding-robot-link">
+        <div className="wecom-binding-robot-link-head">
+          <InpulseIcon name="externalLink" size={15} />
+          <span>先在「企业微信」中打开机器人</span>
+        </div>
+        <code aria-label="机器人链接">{robotUrl}</code>
+        <div className="wecom-binding-code-actions">
+          <Button size="small" onClick={() => void handleCopyRobotUrl()}>
+            复制机器人链接
+          </Button>
+          {robotCopyState === "copied" ? (
+            <span role="status">已复制；发到企业微信任意会话中点击打开</span>
+          ) : robotCopyState === "failed" ? (
+            <span role="alert">复制失败，请手动选中链接复制</span>
+          ) : (
+            <span>可先发到企业微信任意会话，再点击打开</span>
+          )}
+        </div>
+      </div>
+    );
 
   return (
     <AppModal
@@ -212,16 +254,20 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
                   </div>
                 </div>
               </div>
+              {robotLinkNote}
             </>
           ) : pendingWithoutCode ? (
-            <div className="wecom-binding-note" role="status">
-              <InpulseIcon name="clock" size={17} />
-              <span>
-                <strong>已有一个待用绑定码</strong>
-                有效期至 {formatTimestamp(codeExpiresAt)}
-                ；如果它已经丢失，请点右下角「重新生成绑定码」。
-              </span>
-            </div>
+            <>
+              <div className="wecom-binding-note" role="status">
+                <InpulseIcon name="clock" size={17} />
+                <span>
+                  <strong>已有一个待用绑定码</strong>
+                  有效期至 {formatTimestamp(codeExpiresAt)}
+                  ；如果它已经丢失，请点右下角「重新生成绑定码」。
+                </span>
+              </div>
+              {robotLinkNote}
+            </>
           ) : (
             <>
               <div className="wecom-binding-note">
@@ -231,9 +277,15 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
                   指派给你的任务会由企业微信机器人提醒你。
                 </span>
               </div>
+              {robotLinkNote}
               <ol className="wecom-binding-steps">
+                <li>
+                  {robotUrl !== null
+                    ? "用上面的链接在企业微信中打开机器人；"
+                    : "在企业微信中找到 InPulse 机器人；"}
+                </li>
                 <li>点右下角「生成绑定码」；</li>
-                <li>把绑定码发送给企业微信里的 InPulse 机器人；</li>
+                <li>把绑定码发送给机器人；</li>
                 <li>弹窗自动刷新，显示「已绑定」后即完成。</li>
               </ol>
               <div className="wecom-binding-placeholder">

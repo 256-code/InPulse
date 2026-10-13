@@ -297,7 +297,60 @@ describe("企微机器人绑定（真实 PostgreSQL + 真实 HTTP）", () => {
       state: "UNBOUND",
       boundAt: null,
       codeExpiresAt: null,
+      botProfileUrl: null,
     });
+  });
+
+  test("管理员配置机器人链接后，绑定状态返回 botProfileUrl", async () => {
+    const sql = requireRuntime();
+    const actor = await sessionActor(sql, await createUser(sql));
+
+    // 单行配置表在此前用例中为空，botProfileUrl 应为 null。
+    const before = await getBinding(actor.cookie);
+    expect(
+      ((await before.json()) as Record<string, unknown>)["botProfileUrl"],
+    ).toBeNull();
+
+    // 直接写入配置行（密文任意 29 字节以上即可；绑定状态不做解密）。
+    await sql`
+      INSERT INTO app.wecom_robot_config (
+        id,
+        bot_id,
+        secret_ciphertext,
+        secret_key_version,
+        secret_hint,
+        updated_by,
+        row_version,
+        bot_profile_url
+      ) VALUES (
+        1,
+        'aib-binding-profile-bot',
+        ${randomBytes(32)},
+        1,
+        'test',
+        ${actor.userId},
+        1,
+        'https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only'
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        bot_profile_url = EXCLUDED.bot_profile_url
+    `;
+    try {
+      const after = await getBinding(actor.cookie);
+      expect(after.status).toBe(200);
+      expect(
+        ((await after.json()) as Record<string, unknown>)["botProfileUrl"],
+      ).toBe(
+        "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
+      );
+    } finally {
+      // app_runtime 无 DELETE 授权：只清链接，行留给 robot 用例自行清理。
+      await sql`
+        UPDATE app.wecom_robot_config
+           SET bot_profile_url = NULL
+         WHERE id = 1
+      `;
+    }
   });
 
   test("POST codes：201 明文码只返回一次，库内只存 Hash，状态转 PENDING", async () => {

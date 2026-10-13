@@ -9,6 +9,7 @@ export interface WecomRobotConfigRecord {
   readonly secretCiphertext: Buffer;
   readonly secretKeyVersion: number;
   readonly secretHint: string;
+  readonly botProfileUrl: string | null;
   readonly updatedByName: string;
   readonly updatedAt: string;
   readonly rowVersion: number;
@@ -19,6 +20,7 @@ export interface UpsertWecomRobotConfigInput {
   readonly secretCiphertext: Buffer;
   readonly secretKeyVersion: number;
   readonly secretHint: string;
+  readonly botProfileUrl: string | null;
   readonly updatedBy: number;
 }
 
@@ -28,6 +30,7 @@ interface ConfigRow {
   readonly secretCiphertext: Buffer;
   readonly secretKeyVersion: number;
   readonly secretHint: string;
+  readonly botProfileUrl: string | null;
   readonly updatedByName: string | null;
   readonly updatedAt: string | Date;
   readonly rowVersion: number;
@@ -39,6 +42,7 @@ const toRecord = (row: ConfigRow): WecomRobotConfigRecord => ({
   secretCiphertext: row.secretCiphertext,
   secretKeyVersion: row.secretKeyVersion,
   secretHint: row.secretHint,
+  botProfileUrl: row.botProfileUrl,
   updatedByName: row.updatedByName ?? "未知",
   updatedAt: new Date(row.updatedAt).toISOString(),
   rowVersion: row.rowVersion,
@@ -60,6 +64,7 @@ export class WecomRobotConfigRepository {
              c.secret_ciphertext AS "secretCiphertext",
              c.secret_key_version AS "secretKeyVersion",
              c.secret_hint AS "secretHint",
+             c.bot_profile_url AS "botProfileUrl",
              u.name AS "updatedByName",
              c.updated_at AS "updatedAt",
              c.row_version AS "rowVersion"
@@ -82,6 +87,7 @@ export class WecomRobotConfigRepository {
         secret_ciphertext,
         secret_key_version,
         secret_hint,
+        bot_profile_url,
         updated_by,
         updated_at,
         row_version
@@ -91,6 +97,7 @@ export class WecomRobotConfigRepository {
         ${input.secretCiphertext},
         ${input.secretKeyVersion},
         ${input.secretHint},
+        ${input.botProfileUrl},
         ${input.updatedBy},
         now(),
         1
@@ -100,6 +107,7 @@ export class WecomRobotConfigRepository {
         secret_ciphertext = EXCLUDED.secret_ciphertext,
         secret_key_version = EXCLUDED.secret_key_version,
         secret_hint = EXCLUDED.secret_hint,
+        bot_profile_url = EXCLUDED.bot_profile_url,
         updated_by = EXCLUDED.updated_by,
         updated_at = now(),
         row_version = app.wecom_robot_config.row_version + 1
