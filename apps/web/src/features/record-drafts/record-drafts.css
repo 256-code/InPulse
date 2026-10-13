@@ -8,24 +8,6 @@
   margin: 0 auto;
 }
 
-.draft-project-selector {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 20px 0;
-}
-
-.draft-project-selector select {
-  min-height: 38px;
-  width: min(100%, 360px);
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  color: inherit;
-  font: inherit;
-}
-
 .draft-source-head {
   margin: 0 0 16px;
   padding: 16px 18px;
@@ -115,11 +97,6 @@
 }
 
 @media (max-width: 640px) {
-  .draft-project-selector {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .draft-detail {
     padding: 18px;
   }

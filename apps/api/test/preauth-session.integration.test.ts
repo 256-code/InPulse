@@ -111,6 +111,36 @@ describe("PostgresPreauthSessionRepository (真实 PostgreSQL)", () => {
     expect(consumed).toBe(false);
   });
 
+  test("消费时间戳取自数据库时钟，不受应用进程时钟偏差影响", async () => {
+    const material = service.issuePreauthMaterial();
+    const expiresAt = futureExpiry();
+    const created = await unitOfWork.run((tx) =>
+      repository.create(tx, {
+        tokenHash: material.sessionTokenHash,
+        tokenHashKeyVersion: material.tokenHashKeyVersion,
+        csrfTokenHash: material.csrfTokenHash,
+        expiresAt,
+      }),
+    );
+
+    // 生产环境中 API 进程与 PostgreSQL 是不同主机，只能靠 NTP 对齐时钟。
+    // 若 consumed_at 来自应用时钟，落后于数据库时钟时会写入早于 created_at
+    // 的值，触发 preauth_sessions_consumed_at_check 并让登录接口 500。
+    const skewedNow = new Date(Date.now() - 5_000);
+    const consumed = await unitOfWork.run((tx) =>
+      repository.consumeOnce(tx, created.id, skewedNow),
+    );
+    expect(consumed).toBe(true);
+
+    const found = await unitOfWork.run((tx) =>
+      repository.findByTokenHash(tx, material.sessionTokenHash),
+    );
+    expect(found?.consumedAt).toBeInstanceOf(Date);
+    expect(found!.consumedAt!.getTime()).toBeGreaterThanOrEqual(
+      found!.createdAt.getTime(),
+    );
+  });
+
   test("数据库唯一约束拒绝重复 CSRF 哈希，防跨会话复用", async () => {
     const material = service.issuePreauthMaterial();
     const expiresAt = futureExpiry();

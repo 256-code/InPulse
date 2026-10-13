@@ -198,6 +198,8 @@ pnpm check:docs
 - `db:migrations:check`：校验迁移文件的顺序、命名与内容哈希一致性；
 - `db:migrate`：以 `MIGRATION_DATABASE_URL`（`app_migrator` 角色）对空库执行 `0000-0005` 显式迁移，需要已安装 PGroonga 的 PostgreSQL 18；
 - `test:integration`：以 `TEST_DATABASE_URL`（`cluster_bootstrap` 角色）对真实 PostgreSQL 验证约束、事务、锁、100 并发审计链、PGroonga bootstrap 与索引、以及数据库角色/权限探针，需要已安装 PGroonga 的 PostgreSQL 18，不得用 mock 替代；
+- `test:integration:local`：本地一键封装（不参与 CI）。默认把 `TEST_DATABASE_URL` / `MIGRATION_DATABASE_URL` 指向本地 docker `inpulse-pg`（55432）的 `app_ci`，先执行 `pnpm db:migrate` 补齐迁移，再按 `POSTGRES_BIN` 注入 `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE` 后运行 `pnpm test:integration`；`--skip-migrate` 跳过迁移，`--env-file` 换配置文件（默认 `deploy/.env.dev.local`）；
+- `test:e2e:local`：本地一键封装（不参与 CI）。默认把 `E2E_DATABASE_URL` 指向本地 docker `inpulse-pg`（55432）上的测试库 `app_ci`，跑测试前先执行 `pnpm db:migrate` 补齐迁移，并在解析出演示库 `app` 时直接拒绝运行（E2E 夹具会直接写进数据库，写进演示库会污染演示数据）；`--skip-migrate` 跳过迁移，`--env-file` 换配置文件（默认 `deploy/.env.dev.local`），其余参数原样转发给 Playwright；
 - `test:search:db`：运行 `apps/api` 的搜索服务层与真实 HTTP API 集成测试，需要已初始化 PGroonga 且 `max_connections >= 150` 的 PostgreSQL 18 实例，按既定决定未纳入 CI；
 - `contract:generate`：由 Schema Registry/Zod 与 Route Registry 生成 OpenAPI 3.1、契约指纹与 TypeScript 客户端，生成物禁止手工修改；
 - `contract:drift`：逐字节比对已提交生成物与 Registry 的生成结果，并拒绝生成目录内出现非生成器产出的文件；
@@ -213,7 +215,7 @@ pnpm check:docs
 - `check:docs`：使用 Node.js 内置模块，检查 HEAD、暂存区、工作区与未忽略的新文件，并校验仓库内 Markdown 相对链接、引用式链接和标题锚点；
 - `check`：按上述顺序一次跑完全部非数据库门禁，不含 `db:migrate`、`test:integration` 与 `test:search:db`。
 
-本机运行数据库门禁：Windows 设置 `POSTGRES_BIN` 指向**已安装 PGroonga** 的 PostgreSQL 18 `bin` 目录后运行 `pnpm db:test:local`，它会创建 loopback 临时实例，依次执行 `000_roles.sql`、`020_pgroonga.sql`、空库迁移与 database 包全部测试后销毁实例；脚本检测不到 PGroonga 时直接失败，因此不含 PGroonga 的官方 PostgreSQL 18.6 安装无法满足该门禁。CI 改为用 `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的 `postgres:18.6` 构建探针镜像，并在容器内执行同一组步骤。
+本机运行数据库门禁：Windows 设置 `POSTGRES_BIN` 指向**已安装 PGroonga** 的 PostgreSQL 18 `bin` 目录后运行 `pnpm db:test:local`，它会创建 loopback 临时实例，依次执行 `000_roles.sql`、`020_pgroonga.sql`、空库迁移与 database 包全部测试后销毁实例；脚本检测不到 PGroonga 时直接失败，因此不含 PGroonga 的官方 PostgreSQL 18.6 安装无法满足该门禁。同一个 `POSTGRES_BIN` 也覆盖 `apps/ops` 的备份/恢复集成测试：未注入 `INPULSE_BACKUP_PG_DUMP` / `INPULSE_BACKUP_PG_RESTORE` 时，测试按 `POSTGRES_BIN` 解析 `pg_dump` / `pg_restore`，两者都没有才回落到 PATH 上的 `pg_dump`。CI 改为用 `database/poc/search-pgroonga/Dockerfile.pgroonga-pg18.6` 基于 digest 固定的 `postgres:18.6` 构建探针镜像，并在容器内执行同一组步骤。
 
 `CI / workspace` 尚未被配置为 required check。按验收标准，先让门禁在真实 PR 上稳定通过，再由管理员把 §12.4 门禁设为 required checks；在此之前合并者必须人工确认该 job 成功。设计、README、AGENTS 和贡献规则的语义一致性仍需人工审查。
 

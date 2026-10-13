@@ -8,6 +8,14 @@ import {
 } from "@features/projects/project-query";
 import type { InpulseApiClient } from "@generated/api";
 import type { TaskLocation } from "@features/tasks/task-links";
+import {
+  loadActiveProjectMembers,
+  loadIssuesPageView,
+  loadProjectMembersPageView,
+  loadRecordsWorkspace,
+  loadTaskDetailOverlay,
+  type ProjectWorkspaceModalKind,
+} from "./project-workspace-chunks";
 
 /**
  * 项目主页的三个就地弹窗：成员与设置、迭代记录、遗留问题。
@@ -18,28 +26,14 @@ import type { TaskLocation } from "@features/tasks/task-links";
  * 弹窗内用 `MemoryRouter` 给它们一份独立的初始地址，交互不污染浏览器地址栏；
  * 关闭弹窗即丢弃这份局部地址，重新打开回到该项目的默认视图。
  */
-// 成员/记录视图只有命名导出：lazy 需要 default，用 then 映射一次。
-const ProjectMembersPageView = lazy(() =>
-  import("@features/projects/ProjectMembersPageView").then((m) => ({
-    default: m.ProjectMembersPageView,
-  })),
-);
-const ActiveProjectMembers = lazy(() =>
-  import("@features/projects/ActiveProjectMembers").then((m) => ({
-    default: m.ActiveProjectMembers,
-  })),
-);
-const RecordsWorkspace = lazy(() =>
-  import("@features/records/RecordsWorkspace").then((m) => ({
-    default: m.RecordsWorkspace,
-  })),
-);
-const IssuesPageView = lazy(() => import("@features/issues/IssuesPageView"));
-const TaskDetailOverlay = lazy(
-  () => import("@features/tasks/TaskDetailOverlay"),
-);
+// 成员/记录视图只有命名导出：lazy 需要 default，装载函数见 project-workspace-chunks。
+const ProjectMembersPageView = lazy(loadProjectMembersPageView);
+const ActiveProjectMembers = lazy(loadActiveProjectMembers);
+const RecordsWorkspace = lazy(loadRecordsWorkspace);
+const IssuesPageView = lazy(loadIssuesPageView);
+const TaskDetailOverlay = lazy(loadTaskDetailOverlay);
 
-export type ProjectWorkspaceModalKind = "members" | "records" | "issues";
+export type { ProjectWorkspaceModalKind };
 
 export interface ProjectWorkspaceModalsProps {
   readonly projectId: number;
@@ -91,18 +85,23 @@ export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
   const projectName = detail.data?.project?.name ?? null;
   return (
     <>
-      <Modal
-        open
-        size="xl"
-        label={meta.label}
-        eyebrow={projectName === null ? "项目" : projectName}
-        title={meta.label}
-        closeLabel={"关闭" + meta.label}
-        onCancel={onClose}
-        className="project-workspace-modal"
-      >
-        <div className="project-workspace-modal-body">
-          <Suspense fallback={null}>
+      {/* Suspense 提到弹层外面（2026-10-12）：内容 chunk 没到位时整个弹层都不渲染。
+          以前边界在弹层内部、fallback 为 null，弹层会先以「只有标题、正文空白」的空壳
+          出现（本机实测 129px、约 330ms）再跳成内容——用户看到的是「闪出一个没有记录的
+          迭代记录弹窗」。代价是首次打开会晚一点点出现，因此入口按钮做了 chunk 预热
+          （见 project-workspace-chunks 的 projectWorkspacePreloadHandlers）。 */}
+      <Suspense fallback={null}>
+        <Modal
+          open
+          size="xl"
+          label={meta.label}
+          eyebrow={projectName === null ? "项目" : projectName}
+          title={meta.label}
+          closeLabel={"关闭" + meta.label}
+          onCancel={onClose}
+          className="project-workspace-modal"
+        >
+          <div className="project-workspace-modal-body">
             <SearchParamsScope initial={meta.initialSearch(projectId)}>
               {open === "members" ? (
                 canManage ? (
@@ -130,9 +129,9 @@ export const ProjectWorkspaceModals: React.FC<ProjectWorkspaceModalsProps> = ({
                 />
               )}
             </SearchParamsScope>
-          </Suspense>
-        </div>
-      </Modal>
+          </div>
+        </Modal>
+      </Suspense>
       <Suspense fallback={null}>
         {taskTarget === null ? null : (
           <TaskDetailOverlay

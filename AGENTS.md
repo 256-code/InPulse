@@ -113,7 +113,7 @@
 - 必须覆盖真实数据库约束、事务回滚、权限矩阵、幂等、乐观锁、并发竞态、请求/响应契约和关键 E2E 路径。
 - 不得使用 `skip`、降低断言或删除用例来掩盖失败；确需隔离不稳定测试时必须说明原因、影响和恢复计划，并获得人工同意。
 - `apps/web` 单测的等待预算是按 CI 实测定过的：`maxWorkers` 取「核数 - 1」与 8 的较小值（本机 20 核 = 8，CI 4 vCPU = 3；写死 8 会在 CI 上超额订阅，反而更慢、更容易超时）、`testTimeout` 20s、`@testing-library` 的 `asyncUtilTimeout` 4s（懒加载 chunk 冷启动与弹层过渡帧）。放宽等待预算不算弱化断言，但不得用来掩盖真实失败：同一个用例若继续红灯，必须回到实现或测试本身找原因。
-- 本地跑真实 PostgreSQL 集成测试与 Playwright E2E 必须指向独立测试库（推荐 `app_ci`），不得指向本地演示库 `app`：夹具会直接写进演示页面，而演示库里的历史夹具只能人工清理。一次性准备：`CREATE DATABASE app_ci OWNER cluster_bootstrap` → 在 `app_ci` 上执行 `database/bootstrap/000_roles.sql` 与 `database/bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate`；跑测试时把 `TEST_DATABASE_URL` / `E2E_DATABASE_URL` 指向 `app_ci`。演示库若已被污染，用 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app node apps/e2e/helpers/fixture-cleanup.ts` 清理（按夹具前缀删除并回退 SYSTEM 审计链头；`cleanupFixtures` 有事务级完整性断言）。
+- 本地跑真实 PostgreSQL 集成测试与 Playwright E2E 必须指向独立测试库（推荐 `app_ci`），不得指向本地演示库 `app`：夹具会直接写进演示页面，而演示库里的历史夹具只能人工清理。一次性准备：`CREATE DATABASE app_ci OWNER cluster_bootstrap` → 在 `app_ci` 上执行 `database/bootstrap/000_roles.sql` 与 `database/bootstrap/020_pgroonga.sql` → `MIGRATION_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app_ci pnpm db:migrate`；跑测试时把 `TEST_DATABASE_URL` / `E2E_DATABASE_URL` 指向 `app_ci`；本地也可直接用 `pnpm test:integration:local` 与 `pnpm test:e2e:local` 省掉手工设变量——两者默认指向 `app_ci`，后者还会在解析出演示库 `app` 时直接拒绝运行。演示库若已被污染，用 `E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app node apps/e2e/helpers/fixture-cleanup.ts` 清理（按夹具前缀删除并回退 SYSTEM 审计链头；`cleanupFixtures` 有事务级完整性断言）。
 - 审计哈希链必须使用真实 PostgreSQL 验证同一 scope 至少 100 个并发业务事务；不得把测试拆成较低阈值后声称满足该门禁。若 CI 连接池无法支撑，必须提供容量依据并通过 ADR 调整，不得同时保留多个验收数字。
 - 完整 CI 顺序以技术设计第 12 章为准。新增根脚本后，`README.md`、本文件和 CI 必须同时更新为同一组实际命令。
 
@@ -1028,6 +1028,45 @@
 - `FeaturesPageView.tsx` 标签字段由 `Input.TextArea` 换为 `FeatureTagsInput`，label 改为「标签（最多 50 个）」，RHF 的 ≤50 校验保留为兜底；`design-system.css` 新增 `.feature-tags` / `.feature-tag-row` / `.feature-tag-pill` / `.feature-tag-remove` / `.feature-tag-add` / `.feature-tag-entry` / `.feature-tag-limit`。
 - 回归防线：`FeatureTagsInput.test.tsx` 5 例（回车提交与去重、失焦提交与 Esc 取消、× 移除、50 上限拒绝、禁用）；`FeaturesPageView.test.tsx` 新增 1 例锁定数组提交；`apps/e2e/tests/features.spec.ts` 改走新控件（添加两枚胶囊 → 保存 → 编辑弹窗预填断言）。弹窗内 jsdom 断言用 `toBeInTheDocument`：antd 弹窗停在 `ant-zoom-appear-prepare` 的 `opacity: 0` 首帧，`toBeVisible` 在弹窗内不可用。
 - 本地验证（2026-10-12）：`pnpm test:web` **99 文件 724 例全绿**；`pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check` 通过；`features.spec.ts` **2 例全绿**（真实 PostgreSQL + 生产构建）；抓帧人工检查空态与填充态样式。「未运行」：整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、其余 Playwright 用例（清单仍 74 例 / 29 文件）、镜像构建与 Trivy；GitHub Actions 在 `test` 分支不触发。未提交、未推送。
+
+## 2026-10-12 本地测试环境补齐：ops 备份集成认 POSTGRES_BIN + 一键 test:integration:local
+
+用户要求「解决环境问题」。本批消除两处**本地**环境缺口，并修复一处被本地环境暴露出来的**生产路径缺陷**；不改 CI 行为，不改契约 / 迁移 / 权限：
+
+- `apps/ops/test/backup.integration.test.ts`：`pgDumpPath()` 在显式 `INPULSE_BACKUP_PG_DUMP` 之外增加 `POSTGRES_BIN` 兜底（`join(bin, 平台对应的 pg_dump)`），`pgRestorePath()` 继续由同一目录派生 `pg_restore`。此前只有 `db:test:local` 认 `POSTGRES_BIN`，备份集成测试必须手工注入两个环境变量，否则 2 例以 `pg_dump exited with code null` 失败（旧条目已把它记为「既有环境缺口」）；现在按 CONTRIBUTING 的同一个开关即可通过，CI 仍显式注入、行为不变。实测：只设 `POSTGRES_BIN=D:\PostgreSQL\18\pgsql\bin` 与 `TEST_DATABASE_URL` → ops **2 文件 7 例通过**。
+- 新增 `scripts/test-integration-local.mjs` 与根脚本 `test:integration:local`（本地专用，不加入 `pnpm check` 与 CI 链路）：默认把 `TEST_DATABASE_URL` / `MIGRATION_DATABASE_URL` 指向 docker `inpulse-pg`（55432）的 `app_ci`，TCP 探测可连后先跑 `pnpm db:migrate` 补齐迁移，再按 `POSTGRES_BIN` 注入 pg_dump/pg_restore 后执行 `pnpm test:integration`；取值优先级「进程环境变量 > `deploy/.env.dev.local` > 内置默认」，支持 `--skip-migrate` / `--env-file` / `-h`。这样拉取到新迁移后不必再手工迁移 `app_ci`——database 集成的「迁移幂等」用例要求测试库已迁到当前 HEAD，滞后时首跑会把待应用迁移写进库并因此报红。
+- 新增 `scripts/test-e2e-local.mjs` 与根脚本 `test:e2e:local`（本地专用，不加入 `pnpm check` 与 CI）：E2E 夹具会直接写进数据库（§8 因此禁止指向演示库 `app`），脚本按同一优先级解析 `E2E_DATABASE_URL`（回落 `TEST_DATABASE_URL`）后显式注入，解析出演示库时**拒绝运行**，跑前补齐 `app_ci` 迁移，缺 `apps/api/dist/main.js` 时提示先 `pnpm build`；其余参数原样转发给 Playwright。自检：`pnpm test:e2e:local tests/search.spec.ts` 6 例通过（17.0 s），`E2E_DATABASE_URL` 指向 `app` 时拒绝运行。
+- 顺带修复 **1 例偶发红灯**（全量集成里 `apps/api/test/preauth-session.integration.test.ts`「同一预认证 Session 只能原子消费一次」报 `preauth_sessions_consumed_at_check`，约束 `consumed_at IS NULL OR consumed_at >= created_at`，见 `database/migrations/0000_initial.sql:275`）。它表面像本地 Docker VM 时钟漂移，实为**跨时钟域比较的生产缺陷**：`PostgresPreauthSessionRepository.consumeOnce` 用 API 进程时钟 `new Date()` 写 `consumed_at`，而 `created_at` 取数据库 `now()`（事务起点）——生产环境 API 与 PostgreSQL 也是不同主机，只要 DB 时钟领先 API 进程几毫秒，写库就报 `23514` 并让登录接口 500。修法对齐既有先例 `apps/api/src/auth/sso/sso-login-attempt.repository.ts`：`consumed_at` 一律取数据库 `now()`，第三个参数由 `consumedAt: Date = new Date()` 改名 `now?: Date` 且只覆盖过期判定时刻、不落库（生产调用方 `login.service.ts` 仍只传两个参数）。新增确定性回归用例「消费时间戳取自数据库时钟，不受应用进程时钟偏差影响」：传入落后 5 秒的「当前时刻」，改前必报同一条 `23514`、改后通过。
+- 本地验证（2026-10-12）：`pnpm test:integration:local` 全量跑通 database 2 文件 27 例 + ops 2 文件 7 例 + api 56 文件 539 例（含新增回归用例，全绿）；`pnpm check`（非数据库全量门禁）exit 0；`pnpm test:e2e`（`E2E_DATABASE_URL` → `app_ci`）73 passed（6.3 分钟）；新增脚本自检 `pnpm test:e2e:local tests/search.spec.ts` 6 例通过（17.0 s）。
+
+## 2026-10-12 弹窗内容 chunk 未就绪不再先闪空壳（项目主页 / 任务中心）
+
+用户反馈（原话）：「我发现这种点击查看全部会先闪到无记录界面再呈现内容，不要这样如果加载略慢就慢一点跳转不要闪出不该存在的界面」。`ProjectWorkspaceModals` 与 `TasksPage` 的遗留问题弹窗此前把 `<Suspense fallback={null}>` 放在 `<Modal>` **内部**，而内容视图是 `React.lazy`；弹层同步上屏、内容后到，于是先出现「只有标题、正文空白」的空壳（本机实测 129px、约 330ms）再跳成骨架与内容。
+
+- `apps/web/src/features/project-overview/project-workspace-chunks.ts`（新增）：5 个装载函数（成员视图 / 活跃成员 / 迭代记录 / 遗留问题 / 任务详情）+ `preloadProjectWorkspaceChunk(kind)` + `projectWorkspacePreloadHandlers(kind)`（悬停 / 按下 / 键盘聚焦预热，失败只吞异常）；`lazy()` 与预热共用同一份 `import()`，与 `route-preload.ts` 同口径。
+- `ProjectWorkspaceModals.tsx` / `pages/tasks/TasksPage.tsx`：`Suspense` 提到 `<Modal>` 外层——chunk 没到位时整个弹层不渲染；`ProjectOverviewPageView.tsx` 的 4 个入口按钮挂上 `projectWorkspacePreloadHandlers`。
+- 回归防线：`ProjectWorkspaceModals.test.tsx` 用 `vi.hoisted` 的 promise 闸门卡住 chunk，断言未就绪时 `queryByRole("dialog")` 为 `null`、释放后才出现；把 Suspense 放回弹层内部该用例变红。
+- 本地验证（2026-10-12）：逐帧抓帧改后为 `null → 骨架 → 内容`、空壳帧 0 帧（改前 129px 空壳约 330ms）；悬停「查看全部」后 44ms 内发起 chunk 请求、2s 内 15 个模块请求完成；`pnpm --filter @inpulse/web typecheck` exit 0；`pnpm test:web` **99 文件 721 例全绿**；`pnpm test:e2e:local tests/aggregate-views.spec.ts tests/tasks.spec.ts tests/issues.spec.ts` **4 passed (43.0s)**。「未运行」：整链 `pnpm check`、`test:integration`、全量 Browser E2E、`pnpm build`、契约 / 权限 / 依赖审计；GitHub Actions（`test` 分支不触发）。
+
+## 2026-10-12 死代码清理：antd 适配层 4 段永不生效 + 零引用组件
+
+用户指示（原话）：「检查一下代码有没有无用的可以删除的」→「可以」。清理范围只到 `apps/web`，不改任何运行时行为：
+
+- `apps/web/src/styles/antd-adapter.css`：删掉 message / Tabs / Dropdown / Tooltip 四段永不生效的适配（255 行，419 → 161 行）。web 端从 antd 只导入 Alert / Badge / Button / Card / Checkbox / ConfigProvider / Divider / Empty / Form / Input / Modal / Popover / Result / Select / Space / Switch / Tag / Typography；真实 DOM 里 `.ant-tabs*` / `.ant-dropdown*` / `.ant-tooltip*` / `.ant-message*` 从未出现。保留仍生效的 Modal 段与 Popover 段（`.ant-popover` 由 `CalmDateTimeInput` 实测渲染）。
+- 同批删除：`design-system.css` 的 `.toast` 与 `.surface-modal.task-side-modal`（后者也没有调用方给 `AppModal` 传 `className="task-side-modal"`）、`record-drafts.css` 的 `.draft-project-selector`、`inpulse-design.css` 的 `.placeholder-note`、`features/common/components/WorkspacePlaceholder.tsx`（40 行，全仓零引用）、`app/theme/theme.ts` 里 Segmented / DatePicker / Tabs / Tooltip / Dropdown 五组 token。
+- 同批收口：`project-workspace-chunks.ts` 的 `preloadProjectWorkspaceChunk` 去掉多余 `export`（仅同文件使用）；`pages/tasks/TasksPage.tsx` 的任务详情弹窗复用 `loadTaskDetailOverlay`，不再第二次写 import 路径。
+- 本地验证（2026-10-12）：删除前拍 9 张基准图、删除后逐像素比对（`features-page` / `modal-records` 字节完全一致，其余 17–123 像素差异与「同版本连拍两次」的 17–60 像素噪声同区域）；删除前后逐页 DOM 类名一致（`records` 97 / `tasks` 76 / `issues` 62 / `project-modules` 89 / `modal-records` 148）；`pnpm test:web` 99 文件 721 例、`pnpm lint` / `pnpm format:check` / `pnpm check:docs`（113 个 Markdown）/ `pnpm check:frontend:boundaries`（0 违规）/ `pnpm --filter @inpulse/web typecheck` 全通过；`pnpm test:e2e:local`（8 个 spec）16 passed (1.8m)。「未运行」：整链 `pnpm check`、`test:integration`、全量 Browser E2E、`pnpm build`、契约 / 权限 / 依赖审计；GitHub Actions（`test` 分支不触发）。
+- `apps/api` 与 `packages` 的同类扫描因 NestJS 装饰器/模块图与 barrel 导出误报过多，未纳入结论；另开一轮时建议引入 knip。
+
+## 2026-10-12 全局测试：非数据库整链门禁 + 真实数据库集成 + 全量浏览器 E2E 补跑
+
+用户指示（原话）：「全局测试一下」。在第一百三十二条、第一百三十三条的改动之上补跑其标注为「未运行」的门禁，本轮无代码改动：
+
+- `pnpm check` exit 0：lint / format:check / typecheck（8 workspace）/ test:unit / db:migrations:check（38 个）/ db:seed:check / contract:drift / contract:validate（106 条）/ build（含 `apps/web`）/ check:deploy:test（5 个 image ref）/ check:deps（788 源文件）/ check:frontend:boundaries（326 modules / 1645 dependencies，0 违规）/ permissions:check（106 / 106）/ deps:audit（No known vulnerabilities found）/ check:secrets（1199 文件）/ check:docs（113 个 Markdown）。
+- `POSTGRES_BIN=D:/PostgreSQL/18/pgsql/bin pnpm test:integration:local`（`app_ci`，迁移 0 applied / 38 already present）exit 0：database 27 例 + `apps/ops` 7 例 + `apps/api` 56 文件 539 例全绿。
+- `pnpm test:e2e:local`（生产构建 + vite preview，`E2E_DATABASE_URL` → `app_ci`）**73 passed (6.2m)** exit 0；夹具清理删除用户 825、项目 474、业务行 16054、审计行 1110（SYSTEM 审计链在夹具之后已有真实写入，按既有行为留下断点）。
+- 「未运行」：GitHub Actions（`test` 分支不触发，推送后由 CI 在 `main`/`dev/*` 执行）、生产镜像构建与 Trivy 镜像扫描。
+- `docs/test-matrix.md` 同步新增《全局测试》小节的 `GLOBAL-CHECK-GATE-001` / `GLOBAL-INTEGRATION-DB-001` / `GLOBAL-E2E-BROWSER-001` 行。
 
 ## 2026-10-13 文档导入内嵌 AI 辅助转换（ADR-067）
 

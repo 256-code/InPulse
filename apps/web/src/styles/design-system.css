@@ -1764,21 +1764,6 @@ td small {
   gap: 5px;
   align-items: center;
 }
-.toast {
-  position: fixed;
-  z-index: 50;
-  right: 28px;
-  bottom: 28px;
-  color: white;
-  background: #163653;
-  border: 1px solid #386887;
-  border-radius: 5px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 8px 25px #16365333;
-}
 .project-detail-head {
   display: flex;
   flex-direction: column;
@@ -3752,16 +3737,6 @@ a:focus-visible {
   }
 }
 
-.surface-modal.task-side-modal {
-  width: min(620px, 100vw);
-  height: 100dvh;
-  max-height: 100dvh;
-  margin: 0 0 0 auto;
-  border-radius: 0;
-  padding: 28px;
-  border: 0;
-  overflow-y: auto;
-}
 .feature-view-controls {
   display: flex;
   gap: 14px;
