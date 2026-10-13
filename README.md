@@ -85,7 +85,19 @@ pnpm db:seed:demo      # 把仓库内的演示种子数据载入本地库（已�
 pnpm db:seed:check     # 校验 database/seed/demo-data.sql 与导出规则一致
 pnpm check:deploy:test # Compose 渲染 + exact-tag@sha256 + 结构不变量正例
 pnpm check:deploy      # 真实发布 ref 检查，需要 deploy/.env.deploy
+pnpm test:integration:local # 本地一键跑集成测试：先补齐 app_ci 迁移，再执行 test:integration
+pnpm test:e2e:local    # 本地一键跑浏览器 E2E：默认指向 app_ci，解析出演示库 app 时拒绝运行
 ```
+
+`test:integration:local` 只服务本地开发（不参与 CI 门禁）：把 `TEST_DATABASE_URL` /
+`MIGRATION_DATABASE_URL` 默认指向本地 docker 容器 `inpulse-pg`（55432）上的测试库 `app_ci`，
+按仓库既有的 `POSTGRES_BIN` 注入备份集成测试需要的 `pg_dump` / `pg_restore`，并在跑测试前先对
+测试库执行一次 `pnpm db:migrate` 补齐迁移（拉取到新迁移后不必再手工迁移）。取值优先级为
+「进程环境变量 > `deploy/.env.dev.local` > 内置默认」，`--skip-migrate` 可跳过迁移步骤。
+
+`test:e2e:local` 同样只服务本地：它把 `E2E_DATABASE_URL` 默认指向 `app_ci`（取值优先级相同），跑测试前
+先补齐测试库迁移，并在解析出演示库 `app` 时直接拒绝运行——E2E 夹具会直接写进数据库，写进演示库会
+污染演示数据。其余参数原样转发给 Playwright，例如 `pnpm test:e2e:local tests/search.spec.ts` 只跑单个 spec。
 
 以下命令已落库，但需要已初始化 PostgreSQL 18 + PGroonga 的实例
 （`max_connections >= 150`），当前未纳入 CI：

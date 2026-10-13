@@ -430,7 +430,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | SEC-002 | 浏览器 E2E + 部署集成 | nonce CSP | 强制模式下核心页面可用，script/style 均无 `unsafe-inline`；生产镜像逐响应签发 nonce，CSP 头与入口 meta/script 标签一致且不复用 | 已自动化（`apps/e2e/tests/csp.spec.ts` 2/2；`scripts/check-web-image-csp.sh` 在真实镜像与 Nginx 上验证 200/308/502/静态资源 7 项断言，2026-09-10；CI 已执行：Browser E2E 50 passed 与 Web 镜像 CSP 校验步骤） |
 | SEC-003 | API/浏览器 E2E | CSRF 生命周期 | 首登、轮换、刷新、多标签、过期和“仅未消费状态可最多重签一次”均符合 ADR-015；普通幂等路由保留 Key/If-Match，securityFlow 不发送业务幂等键 | 已自动化（`apps/api/test/csrf-lifecycle.integration.test.ts` 4 例：CSRF 失败不消费、重签后重试一次、单次消费、4 个上限淘汰最旧、Session 与预认证过期恢复、securityFlow 幂等例外；`apps/e2e/tests/csrf.spec.ts` 4 例：首登轮换、刷新、多标签、If-Match/CSRF/幂等键请求头；2026-09-11；CI 已执行） |
 | SEC-004 | API 集成 | ExternalLinks | 只接受规范化的 `https://github.com/...`；拒绝 HTTP、用户信息、非默认端口、`api.github.com` 与混淆域名；不配置 Token、不发远程请求；跨项目关联失败且并发不重复 | 已自动化（规范化器 `apps/api/test/github-url.test.ts` 16 例 + 数据库防线 `database/test/integration/external-links.test.ts` 13 例（2026-09-11 补齐项目/功能/记录关联的复合外键用例），2026-09-10；F-22 已交付 HTTP 关联接口并在服务端复用同一规范化器（证据见本文件「F-22 当前 GitHub 关联」章节）；CI 已执行） |
-| SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 登录签发路径显式赋 `AUTHENTICATED` 状态，不得依赖默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；预认证消费、CSRF 轮换与停用/强退的 `auth_version` 失效只在对应条件更新成功时生效；重复 CSRF 签发允许，无效 Session 重复登出为 204；三个 securityFlow operationId（`issueCsrfToken`/`login`/`logout`）的响应丢失均按 ADR-023 路径恢复（enrollment / rotation / TOTP time-step / 恢复码相关单次消费语义已随 ADR-031 删除） | Required（2026-09-15 ADR-031 修订：登录单次消费已有用例（`login.service.test.ts`、`login.integration.test.ts`），其余单次消费语义分散在 SEC-003 与登录/会话用例；ADR-023 现行三个 operationId 逐项真库并发验证与每条响应丢失后的客户端 E2E 恢复路径仍未见完整证据，保持待补） |
+| SEC-005 | API + PostgreSQL 并发/E2E | 一次性认证安全流程 | 登录签发路径显式赋 `AUTHENTICATED` 状态，不得依赖默认值成为完整态；同一 preauth+CSRF 只能成功登录一次；预认证消费、CSRF 轮换与停用/强退的 `auth_version` 失效只在对应条件更新成功时生效；重复 CSRF 签发允许，无效 Session 重复登出为 204；三个 securityFlow operationId（`issueCsrfToken`/`login`/`logout`）的响应丢失均按 ADR-023 路径恢复（enrollment / rotation / TOTP time-step / 恢复码相关单次消费语义已随 ADR-031 删除） | Required（2026-09-15 ADR-031 修订：登录单次消费已有用例（`login.service.test.ts`、`login.integration.test.ts`），其余单次消费语义分散在 SEC-003 与登录/会话用例；ADR-023 现行三个 operationId 逐项真库并发验证与每条响应丢失后的客户端 E2E 恢复路径仍未见完整证据，保持待补。2026-10-12：`PostgresPreauthSessionRepository.consumeOnce` 的 `consumed_at` 由 API 进程 `new Date()` 改为数据库 `now()`（原写法是跨时钟域比较，会触发 `preauth_sessions_consumed_at_check`），回归用例见 `preauth-session.integration.test.ts`） |
 | SEC-006 | API 集成 | 未匹配路由的错误契约净化 | 任意未匹配路径返回 `application/json` 的统一 404 `{ code, message, details, requestId }`，message 为固定文案且不回显 method、path 或框架内部文本，响应带 `X-Request-Id` 并保留应用 CSP，不返回框架或 Express 默认 HTML；已匹配路由不受影响；见 [ADR-026](adr/ADR-026.md) | 已自动化（`apps/api/test/http-error-contract.integration.test.ts` 3 例，2026-09-10；修正点在全局异常过滤器本身，未新增 adapter 包装；API 响应的 nosniff/CSP 由生产 Nginx `location /api/v1/` 下发，另见 F09-CSP-*；CI 已执行） |
 | SEC-007 | 部署集成 | 数据库 Secret 文件缺失 | 生产模式 fail closed，不得回退到环境变量；缺失路径、越界路径、空值和权限不合规均拒绝连接串构造 | 已自动化（`database/test/unit/config.test.ts` 15 例，2026-09-10；真实 POSIX 权限位需 Linux 环境，Windows 本机不可复现，权限判定在函数级覆盖；compose secret 声明由 `check:deploy` 校验；CI 已执行） |
 | SEC-008 | API + PostgreSQL 集成 | 登录爆破限流 | 登录失败按账号 + IP + 全局三层计数，任一桶达到候选阈值返回 429 并在 Argon2 前阻断；同一进程 Argon2 并发不超过候选上限；登录成功清除账号失败计数；桶维度只保存 HMAC-SHA-256 摘要 | 已自动化（单元与真实 PostgreSQL 用例已落库；CI 已执行） |
@@ -1276,7 +1276,11 @@ B-3 第二片（独立契约纵切片）：新增两条只读契约路由 `listR
 其余门禁：`pnpm --filter @inpulse/web typecheck`、`pnpm --filter @inpulse/e2e typecheck`、`pnpm --filter @inpulse/ops typecheck`、`pnpm check:frontend:boundaries`（235 模块 / 1107 依赖，0 违规）、`pnpm --filter @inpulse/web exec vitest run src/features/task-groups src/pages/task-groups`（4 文件 22 例）、`src/features/tasks`（4 文件 31 例）、`apps/api/test/idempotency-runner.integration.test.ts`（4/4，含负向对照）通过。
 
 未运行 / 已知偏差：① 本节为前端交互大改的中间记录，`pnpm lint`、`pnpm check` 与 GitHub Actions 结果以随后条目为准；② 真因 2 的修复依赖 `inpulse-design.css` 补充层选择器，属仓库扩展（设计师稿没有审计页）；③ 真因 3 的修复影响全部任务详情弹层，需非作者人工评审；④ 后端 `idempotency/store.ts` 修复超出「前端大改」标题范围，但由 500 偶发族直接驱动，产品已授权「如果有问题你可以修改」；⑤ 视觉差异未归零，主因是内容量与页面高度不同（如 tasks 1099 vs 1337、records 2799 vs 1030），不属本次已修复缺陷范围；⑥ `pnpm check` 与 `pnpm test:web` 出现 `apps/web/src/features/auth/MfaForms.test.tsx` 的 `registers TOTP, shows recovery codes once and completes login` 超时（5159–5164 ms，vitest 默认 `testTimeout` 5000 ms），**属既有计时敏感偶发失败、本批未修复**，判定依据：该文件在本分支零改动（`git log` 最后修改为 `d2c5bbc`，PR #63）；其导入闭包（`LoginForm.tsx` 传递闭包 10 个文件）经脚本枚举**不含任何本分支改动文件**；该文件单独复跑 4/4 通过（4.92 s），全量 `pnpm test:web` 第二次运行 69 文件 360 例全通过，仅在并行负载下越过 5000 ms。同族先例见本文档 L833 第 ⑥ 条与本条 ⑤。**建议处置**（需非作者人工确认，本批未执行）：为该用例加显式 `timeout`，或为 `apps/web/vitest.config.ts` 设定 `testTimeout`；不得用 `skip`、降低断言或删用例规避。
+
+**2026-10-12 更新：该处置已落地。** `apps/web/vitest.config.ts` 现在设置 `testTimeout: 20_000`，并把 `maxWorkers` 收敛为 `Math.max(2, Math.min(8, availableParallelism() - 1))`（提交 `9ddc14e`，2026-09-24「修复 PR #145 CI 单测红灯（并发超额订阅 + 等待预算偏紧）」，AGENTS.md §8 已把这组预算记为 CI 实测值）。因此本条记录的 5159–5164 ms 超时在该预算下不再可能触发；后续若再出现同类等待超时，应按真实失败追查实现或测试，而不是继续放宽预算。
 ⑦ 同类时钟偏差代码点 `apps/api/src/auth/preauth-session.repository.ts` 的 `consumedAt: Date = new Date()`（约束 `preauth_sessions_consumed_at_check`: `consumed_at IS NULL OR consumed_at >= created_at`）与已修复的幂等保留期为同一族零余量比较，但**本次未改**：容器日志 3 次出现集中在 `2026-09-10 07:31:54` / `2026-09-11 03:01:57` / `2026-09-11 03:04:37`，本批多次全量集成与全量 E2E 零复现；该处属鉴权路径，改动需人工评审，故仅登记为风险，不建议在无复现证据时修改。
+
+**2026-10-12 更新：该处已修复。** 本轮先用**确定性回归用例**拿到复现证据：改前把「当前时刻」传进 `consumeOnce`（落后数据库 5 秒）即稳定报同一条 `preauth_sessions_consumed_at_check`，说明这是**跨时钟域比较**而不是随机抖动——`consumed_at` 来自 API 进程的 `new Date()`、`created_at` 来自数据库 `now()`（事务起点），本地 Postgres 跑在 Docker Desktop 的 Linux VM 里、其时钟相对 Windows 宿主有毫秒级漂移，而生产环境 API 与 DB 本就是不同主机，只要 DB 时钟领先就会写库失败并让登录接口 500。修法对齐既有先例 `apps/api/src/auth/sso/sso-login-attempt.repository.ts`：`consumed_at` 一律取数据库 `now()`；第三个参数由 `consumedAt: Date = new Date()` 改名 `now?: Date`，只覆盖过期判定时刻、不再落库（生产调用方 `login.service.ts` 仍只传两个参数，`consumed_at IS NULL` 且未过期的语义不变）。`apps/api/test/preauth-session.integration.test.ts` 新增用例「消费时间戳取自数据库时钟，不受应用进程时钟偏差影响」（传入落后 5 秒的「当前时刻」，改前必红、改后通过）。改后该文件 5/5 通过、全量 api 集成 56 文件 539 例全绿；该路径仍属鉴权关键路径，需非作者人工评审。
 
 ### 任务中心工作状态分段控件：列表标题、计数、内容与空态未跟随（2026-09-13）
 
@@ -5960,7 +5964,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | ROUTE-PARAM-SWITCH-KEEP-DATA-GATE-001 | 静态门禁 | 类型 / 边界 / 格式 | 全 workspace `pnpm typecheck` 通过（8 个带脚本的工程）；`tsc --noEmit` 无输出；`check:boundaries` 0 违规（322 modules / 1620 dependencies）；改动文件 `eslint` 与 `prettier --check` 通过 | 本地通过（2026-10-10） |
 | ROUTE-PARAM-SWITCH-KEEP-DATA-E2E-001 | 浏览器 E2E | 全量回归 | `E2E_DATABASE_URL=…/app_ci pnpm --filter @inpulse/e2e exec playwright test` → **70 passed / 1 failed (5.9m)**；唯一失败为既有 `tests/project-delete.spec.ts:59`（本地 `app_ci` SYSTEM 审计链断点） | 本地通过（本批相关用例） |
 
-未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `build`（web 的生产构建已随 E2E 的 `vite build` 跑过）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59` 本地失败：确认弹窗停留，弹窗内红条为「项目删除暂时失败，请稍后重试。」；上一批已用 `git stash` 在干净 HEAD（`0214487`）复现同样失败，本次夹具清理日志再次提示「SYSTEM 链留下一个断点」，判定与本批无关，未修改删除链路与服务端。③ 占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要求的缓冲）；接口变慢时窗口等比变长，本批未做「悬停预取项目数据」。④ 页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数不再重置；弹窗状态不受影响。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`（本机 npm 镜像无 audit endpoint）、全 workspace `build`（web 的生产构建已随 E2E 的 `vite build` 跑过）、`test:unit` / `test:integration`（未改服务端）、`contract:*`（未动契约）、镜像构建与 Trivy；GitHub Actions 不在 `test` 分支触发。② `tests/project-delete.spec.ts:59` 本地失败：确认弹窗停留，弹窗内红条为「项目删除暂时失败，请稍后重试。」；上一批已用 `git stash` 在干净 HEAD（`0214487`）复现同样失败，本次夹具清理日志再次提示「SYSTEM 链留下一个断点」，判定与本批无关，未修改删除链路与服务端。**2026-10-12 更新**：全量 `pnpm test:e2e`（`E2E_DATABASE_URL` → `app_ci`）本轮 73/73 通过、6.3 分钟，`tests/project-delete.spec.ts:59`（组长删除项目 + 审计留痕）通过、未复现；同一次运行的夹具清理日志**同样**提示「SYSTEM 链留下一个断点」，因此「链断点导致删除事务审计追加失败」与原失败之间至少不是充分关系，该因果仍待进一步复现定位。③ 占位窗口内页面显示上一份数据（本地约 55–110ms，即用户要求的缓冲）；接口变慢时窗口等比变长，本批未做「悬停预取项目数据」。④ 页面组件内部状态（功能目录搜索词与展示方式、模块级任务筛选）换参数不再重置；弹窗状态不受影响。⑤ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
 
 ### 审计日志时间范围筛选改版：方案 B + 操作人文案简化（2026-10-10）
 
@@ -6042,3 +6046,60 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | DOC-IMPORT-FILE-GATE-001 | 门禁 | 本轮回归 | `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通过；前端全量 98 文件 718 例 | 本地通过（2026-10-10） |
 
 未运行 / 已知偏差：① GitHub Actions 未在本批执行（工作流只在 `main` 与 `dev/*` 触发，当前 `test` 分支不触发）；② 依赖审计本轮 `pnpm deps:audit` 直接通过（No known vulnerabilities found），公共 registry 复核同样无已知漏洞；③ `.md` 文件上传、模板版本迁移工具与多文档批量导入属于 ADR-064 非目标，未实现；④ 本批含 API / 契约 / 迁移 / 前端产品代码与新增用例，按 §8 需非作者人工评审；⑤ 夹具清理器对历史孤儿批次行的删除是测试库专用修复（生产删除路径 `app.purge_project` 已自带清空），不改变生产语义。
+
+## 弹窗内容 chunk 未就绪不再先闪空壳（用户指示，2026-10-12 本地落库）
+
+用户指示（原话）：「我发现这种点击查看全部会先闪到无记录界面再呈现内容，不要这样如果加载略慢就慢一点跳转不要闪出不该存在的界面」。承接 2026-10-10《切换过渡：所有跳转与弹窗统一「缓冲后呈现」》那一批——上一批解决的是「跳转 / 浮层的出现过渡」，本批解决的是**弹层骨架已经上屏、懒加载内容还没到**这一段窗口。纯前端（React Suspense 边界位置 + chunk 预热）、浏览器逐帧实测与文档改动；不改契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等，未新增依赖。
+
+涉及场景：`/projects/8/modules` 项目主页右上「查看全部」（迭代记录）与「进入遗留问题」，以及任务中心（`/tasks`）的「遗留问题」弹窗。根因：`ProjectWorkspaceModals` 与 `TasksPage` 把 `<Suspense fallback={null}>` 放在 `<Modal>` **内部**，而内容视图（`RecordsWorkspace` / `IssuesPageView`）是 `React.lazy`——弹层同步上屏、内容后到，于是先出现「只有标题、正文空白」的空壳。
+
+改法：① 新增 `apps/web/src/features/project-overview/project-workspace-chunks.ts`，集中 5 个装载函数（成员视图 / 活跃成员 / 迭代记录 / 遗留问题 / 任务详情）与预热 `projectWorkspacePreloadHandlers(kind)`（`onPointerEnter` / `onPointerDown` / `onFocus`，失败只吞异常），`lazy()` 与预热共用同一份 `import()`（与既有 `route-preload.ts` 同口径）；② 两处弹层把 `Suspense` 提到 `<Modal>` 外层，chunk 未就绪时整个弹层不渲染；③ 4 个入口按钮（成员与设置、查看全部、进入遗留问题 ×2）挂上预热。
+
+改前 / 改后实测（dev Vite 5173、Chromium 1440×900、`requestAnimationFrame` 逐帧记录 `.project-workspace-modal-body` 的存在性 / 骨架 / 时间线）：
+
+| 场景 | 改前 | 改后 |
+| --- | --- | --- |
+| 点「查看全部」（冷 chunk） | `null` → 空壳（129px，约 330ms）→ 骨架（402px）→ 内容（521px） | `null` → 骨架 → 内容，**空壳帧 0 帧**（本次复测骨架帧约 88ms 后进内容） |
+| 悬停「查看全部」后点击 | — | 悬停后 44ms 即发起第一个 chunk 请求，2s 内 15 个模块请求完成，点击时无等待 |
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MODAL-CHUNK-GATE-BROWSER-001 | 浏览器实测（逐帧） | 弹层不再闪空壳 | 点「查看全部」抓帧序列 `null → 骨架 → 内容`、空壳帧 0 帧（改前为 129px 空壳持续约 330ms） | 本地通过（2026-10-12） |
+| MODAL-CHUNK-GATE-BROWSER-002 | 浏览器实测 | 悬停预热生效 | 悬停「查看全部」后 44ms 内发起 `features/records/RecordsWorkspace.tsx` 等请求，2s 内 15 个模块请求完成 | 本地通过（2026-10-12） |
+| MODAL-CHUNK-GATE-UNIT-001 | Web 单元 | 回归防线 | `ProjectWorkspaceModals.test.tsx` **1 例通过**：chunk 未就绪时不渲染弹层、就绪后才出现；把 Suspense 放回弹层内部该用例变红 | 本地通过（2026-10-12） |
+| MODAL-CHUNK-GATE-UNIT-002 | Web 全量 | 前端回归 | `pnpm test:web` → **99 文件 721 例全绿**（本批 +1 例） | 本地通过（2026-10-12） |
+| MODAL-CHUNK-GATE-GATE-001 | 静态门禁 | 类型 / lint / 格式 | `pnpm --filter @inpulse/web typecheck` exit 0；改动目录与 `TasksPage.tsx` 的 `eslint` exit 0、`prettier --check` 通过 | 本地通过（2026-10-12） |
+| MODAL-CHUNK-GATE-E2E-001 | 浏览器 E2E | 定向回归 | `pnpm test:e2e:local tests/aggregate-views.spec.ts tests/tasks.spec.ts tests/issues.spec.ts` → **4 passed (43.0s)**（含 F-29 项目主页入口导航、F-32 任务中心） | 本地通过（2026-10-12） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`、`test:integration`（未改服务端）、全量 Browser E2E、`pnpm build`、`contract:*`（未动契约）、`permissions:check` 与依赖审计；GitHub Actions 不在 `test` 分支触发。② 取舍：chunk 冷且没有任何悬停 / 聚焦预热时（程序化打开、直接点击），弹层会晚一点出现——这是用户要求的方向（「宁可慢一点，也不要闪出不该存在的界面」）。③ 只改了项目主页与任务中心这两处弹层；其它 `lazy` 视图（任务详情、搜索等）未动。④ 本批含前端产品代码与文档，按 §8 需非作者人工评审；未提交、未推送。
+
+## 死代码清理：antd 适配层 4 段永不生效 + 零引用组件（用户指示，2026-10-12 本地落库）
+
+用户指示（原话）：「检查一下代码有没有无用的可以删除的」→「可以」。纯前端删减与文档；不改行为、不改契约 / Route Registry / 权限矩阵 / 数据库 / 迁移 / 鉴权 / 幂等，未新增依赖。
+
+审计方法：① Node 静态扫描 `apps/web/src` 的 296 个源文件，找没有任何 import 引用的文件（入口 `main.tsx`、由 `import.meta.glob` 动态加载的 `route.ts`、`@generated/api`、`test/setup` 是已知误报）；② 把 CSS 注释剥掉后逐个类名比对源码；③ Playwright 打开 10 个真实页面 + 3 类交互（项目主页弹层、任务弹窗的日期 Popover、Select 下拉）抓全量 DOM 类名，与适配层选择器求差集；④ 汇总 web 端从 antd 实际导入的组件集合（Alert / Badge / Button / Card / Checkbox / ConfigProvider / Divider / Empty / Form / Input / Modal / Popover / Result / Select / Space / Switch / Tag / Typography）。
+
+删除清单：`antd-adapter.css` 的 message / Tabs / Dropdown / Tooltip 四段共 255 行（419 → 161 行）与 `:has(.surface-modal.task-side-modal)` 规则；`design-system.css` 的 `.toast`（15 行）与 `.surface-modal.task-side-modal`（11 行）；`record-drafts.css` 的 `.draft-project-selector` 3 条规则；`WorkspacePlaceholder.tsx`（40 行，全仓零引用）与 `inpulse-design.css` 的 `.placeholder-note`；`theme.ts` 的 Segmented / DatePicker / Tabs / Tooltip / Dropdown 组件 token（18 行）。累计净减 371 行（其中 1 行是适配层注释改写）。同批收口：`preloadProjectWorkspaceChunk` 去掉多余 `export`，`TasksPage` 的任务详情弹窗复用 `loadTaskDetailOverlay`。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DEADCODE-CLEANUP-BROWSER-001 | 浏览器实测（逐像素） | 删除前后视觉不变 | 删除前 9 张基准图与删除后同路径重拍逐像素比对：`features-page` / `modal-records` 字节完全一致，其余 7 张差异 17–123 像素、落在左侧栏竖条与底部文字带 | 本地通过（2026-10-12） |
+| DEADCODE-CLEANUP-BROWSER-002 | 浏览器实测（噪声对照） | 差异属动态噪声 | 同一版本连拍两次，在同样区域产生 17–60 像素差异（`issues` 17 像素、盒 `[24,159,39,368]`，与删除前后的盒完全相同） | 本地通过（2026-10-12） |
+| DEADCODE-CLEANUP-BROWSER-003 | 浏览器实测（DOM） | 类名集合不漂移 | 删除前后逐页类名一致：`records` 97 / `tasks` 76 / `issues` 62 / `project-modules` 89 / `modal-records` 148；`features-page` 80 / `module-tasks` 86 / 日期弹层 143 中 `ant-tabs|tooltip|message|dropdown` 命中 0 | 本地通过（2026-10-12） |
+| DEADCODE-CLEANUP-UNIT-001 | Web 全量 | 前端回归 | `pnpm test:web` → **99 文件 721 例全绿** | 本地通过（2026-10-12） |
+| DEADCODE-CLEANUP-GATE-001 | 静态门禁 | 类型 / lint / 格式 / 文档 / 依赖边界 | `pnpm --filter @inpulse/web typecheck` exit 0；`pnpm lint`、`pnpm format:check`、`pnpm check:docs`（113 个 Markdown）、`pnpm check:frontend:boundaries`（326 modules / 1645 dependencies，0 违规）全部 exit 0 | 本地通过（2026-10-12） |
+| DEADCODE-CLEANUP-E2E-001 | 浏览器 E2E | 定向回归 | `pnpm test:e2e:local tests/visual-migration.spec.ts tests/features.spec.ts tests/module-tasks.spec.ts tests/record-drafts.spec.ts tests/aggregate-views.spec.ts tests/tasks.spec.ts tests/issues.spec.ts tests/audit.spec.ts` → **16 passed (1.8m)** | 本地通过（2026-10-12） |
+
+未运行 / 已知偏差：① **未跑** 整链 `pnpm check`、`test:integration`（未改服务端）、全量 Browser E2E、`pnpm build`、`contract:*`（未动契约）、`permissions:check` 与依赖审计；GitHub Actions 不在 `test` 分支触发。② 只清理了 `apps/web`；`apps/api` 与 `packages` 的同类扫描因 NestJS 装饰器/模块图与 barrel 导出误报过多未纳入，建议另开一轮并引入 knip。③ 适配层删掉的 message / Tabs / Dropdown / Tooltip 四段，若将来真要用对应 antd 组件，需要按「比 antd 多一层选择器」的约定补回。④ 本批含前端产品代码删减与文档，按 §8 需非作者人工评审；未提交、未推送。
+
+## 全局测试：非数据库整链门禁 + 真实数据库集成 + 全量浏览器 E2E 补跑（用户指示，2026-10-12 本地执行）
+
+用户指示（原话）：「全局测试一下」。在第一百三十条、第一百三十一条改动之上补跑其标注为「未运行」的门禁，本轮无代码改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| GLOBAL-CHECK-GATE-001 | 静态门禁（整链） | 非数据库全量门禁 | `pnpm check` exit 0：lint / format:check / typecheck（8 workspace）/ test:unit / db:migrations:check（38 个）/ db:seed:check / contract:drift / contract:validate（106 条）/ build（含 `apps/web`）/ check:deploy:test（5 个 image ref）/ check:deps（788 源文件）/ check:frontend:boundaries（326 modules / 1645 dependencies，0 违规）/ permissions:check（106 / 106）/ deps:audit（No known vulnerabilities found）/ check:secrets（1199 文件）/ check:docs（113 个 Markdown） | 本地通过（2026-10-12） |
+| GLOBAL-INTEGRATION-DB-001 | 真实 PostgreSQL 集成 | 数据库 + ops + api 全量 | `POSTGRES_BIN=D:/PostgreSQL/18/pgsql/bin pnpm test:integration:local`（`app_ci`，迁移 0 applied / 38 already present）exit 0：database 2 文件 27 例 + `apps/ops` 2 文件 7 例 + `apps/api` 56 文件 539 例全绿 | 本地通过（2026-10-12） |
+| GLOBAL-E2E-BROWSER-001 | 浏览器 E2E（全量） | 全部关键路径 | `pnpm test:e2e:local`（生产构建 + vite preview，`E2E_DATABASE_URL` → `app_ci`）**73 passed (6.2m)** exit 0；teardown 夹具清理删除用户 825、项目 474、业务行 16054、审计行 1110 | 本地通过（2026-10-12） |
+
+未运行 / 已知偏差：① GitHub Actions 未触发（`test` 分支不触发），推送后由 CI 在 `main`/`dev/*` 重跑同一组命令。② 生产镜像构建与 Trivy 镜像扫描未在本机执行。③ `app_ci` 的 SYSTEM 审计链在被删夹具之后已有真实写入，teardown 留下已知断点（既有行为）。④ 本轮无代码改动，风险与后续沿用前两条。
