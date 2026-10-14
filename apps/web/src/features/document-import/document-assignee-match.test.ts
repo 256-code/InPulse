@@ -47,7 +47,7 @@ const DOCUMENT = [
   "- 负责人：张三",
 ].join("\n");
 
-describe("ADR-069 草稿成员名字与账号的确定性匹配", () => {
+describe("ADR-071 草稿成员名字与账号的确定性匹配", () => {
   it("按姓名精确且唯一命中，不做模糊接管", () => {
     const result = matchDocumentAssignees(
       namesOf(DOCUMENT),
@@ -143,7 +143,7 @@ describe("ADR-069 草稿成员名字与账号的确定性匹配", () => {
   });
 });
 
-describe("ADR-070 初始成员名单校验（ADR-071 起创建者默认算成员）", () => {
+describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员）", () => {
   const creator: DocumentMemberCoverageContext["creator"] = {
     id: 9,
     name: "特哥",
@@ -199,7 +199,7 @@ describe("ADR-070 初始成员名单校验（ADR-071 起创建者默认算成员
     expect(result.missingAssignees).toEqual(["陈昊"]);
   });
 
-  it("名单里没写创建者本人也不算缺口（ADR-071：创建者默认就在初始成员里）", () => {
+  it("名单里没写创建者本人也不算缺口（ADR-073：创建者默认就在初始成员里）", () => {
     const result = coverage(
       [
         "# 项目：商城结算系统",

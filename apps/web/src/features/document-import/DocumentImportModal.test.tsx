@@ -33,7 +33,7 @@ import {
 /**
  * ADR-064 文档导入弹窗：固定模板粘贴 → 只读预览 → 单事务执行。
  * ADR-067 追加 AI 辅助转换（本地抽取 → 生成草稿 → 直接落回左栏草稿）。
- * ADR-069 输入态改成左右分栏工作台：左栏结构化草稿（点哪改哪 + 内容梳理 /
+ * ADR-071 输入态改成左右分栏工作台：左栏结构化草稿（点哪改哪 + 内容梳理 /
  * 预览文档页签），右栏 AI 助手追问与待确认成员。
  */
 vi.mock("./document-text-extraction", async (importOriginal) => {
@@ -487,7 +487,7 @@ describe("ADR-064 文档导入弹窗（项目内导入）", () => {
     expect(onImported).not.toHaveBeenCalled();
   });
 
-  it("没有内容时预览按钮置灰，不发请求（ADR-069 空态）", async () => {
+  it("没有内容时预览按钮置灰，不发请求（ADR-071 空态）", async () => {
     const { client } = mount();
     expect(previewButton().disabled).toBe(true);
     expect(client.previewProjectDocumentImport).not.toHaveBeenCalled();
@@ -559,7 +559,7 @@ describe("ADR-064 文档导入弹窗（项目内导入）", () => {
     expect(importTextarea().value).toBe("");
   });
 
-  it("超过 20 MB 的文件本地拒绝（ADR-069 与 ADR-067 统一上限）", async () => {
+  it("超过 20 MB 的文件本地拒绝（ADR-071 与 ADR-067 统一上限）", async () => {
     const { client } = mount();
     extractDocumentTextMock.mockRejectedValue(
       new DocumentExtractionError("FILE_TOO_LARGE"),
@@ -576,7 +576,7 @@ describe("ADR-064 文档导入弹窗（项目内导入）", () => {
   });
 });
 
-describe("ADR-069 左右分栏工作台", () => {
+describe("ADR-071 左右分栏工作台", () => {
   it("空态：左栏拖入区、右栏空对话、输入与预览都不可用", () => {
     mount();
     expect(screen.getByRole("button", { name: "直接粘贴文本" })).toBeTruthy();
@@ -673,7 +673,7 @@ describe("ADR-069 左右分栏工作台", () => {
       screen.getByRole("button", { name: "项目：添加项目编码（必填）" })
         .className,
     ).toContain("is-required");
-    // ADR-070：整项目导入的初始成员必填。
+    // ADR-072：整项目导入的初始成员必填。
     const member = screen.getByRole("button", {
       name: "项目：添加初始成员（必填）",
     });
@@ -1426,7 +1426,7 @@ describe("文档导入：拖放与进行中反馈", () => {
   });
 });
 
-describe("初始成员名单校验（整项目导入；ADR-071 起创建者默认算成员）", () => {
+describe("初始成员名单校验（整项目导入；ADR-073 起创建者默认算成员）", () => {
   const creatorUser: CurrentUserResponse = {
     id: 9,
     loginName: "tege",
@@ -1574,7 +1574,7 @@ describe("初始成员名单校验（整项目导入；ADR-071 起创建者默�
   });
 });
 
-describe("创建者是固定成员（ADR-071，2026-10-14）", () => {
+describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
   const CREATOR: CurrentUserResponse = {
     id: 9,
     loginName: "linyuyan",

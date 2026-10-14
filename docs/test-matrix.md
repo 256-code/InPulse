@@ -6139,7 +6139,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 未运行 / 已知偏差：① GitHub Actions 未在本批执行（`test` 分支不触发工作流）；② E2E 的 AI 上游为本机回环 stub，未连真实中转站；③ `mammoth` 与 `pdfjs-dist` 为新增生产依赖，按仓库规则仍须独立依赖 PR 人工确认（本批已锁定精确版本、懒加载、PDF Worker 与 CSP 实测）；④ `pnpm deps:audit` 在本机 npm 镜像缺 audit endpoint，改用公共 registry 执行（结果见开发日志）。
 
-## 文档导入工作台（ADR-069，用户指示，2026-10-13 本地落库）
+## 文档导入工作台（ADR-071，用户指示，2026-10-13 本地落库）
 
 用户指示（原话要点）：「现在这个状态下这个文档导入界面不好，我们早上讨论出来那个还不错，我们优化一下实现」，并在模拟稿上确认左右分栏工作台与成员名字追问。本批为纯前端（工作台）+ E2E 对齐，无服务端、契约、数据库与依赖改动，路由仍 110 条。
 
@@ -6212,7 +6212,7 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-AI-REPLY-001 | Web 单元 | 用户发言后助手必须回一句 | `DocumentImportModal.test.tsx` **35 例通过**（新增 1 例：文件入口让 AI 草稿成为「已应用」草稿 → 发「要补充什么」→ 出现「我核对了一下，还有 5 处要补：缺负责人 ×1、模块说明 ×1、功能说明 ×1、截止时间 ×1、任务描述 ×1」，且回复气泡排在用户气泡之后）；`document-import` 目录 **4 文件 67 例通过** | 本地通过（2026-10-13） |
-| DOC-IMPORT-AI-REPLY-002 | 浏览器 E2E | 真实 UI 上的问答往返（2026-10-14 按第一百七十一条改成回执只报必填） | `apps/e2e/tests/document-import-ai.spec.ts` 的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」：docx 夹具 → AI 草稿落进左栏 → 发「要补充什么」→ 右栏回执含「必填都齐了」且**不含**「建议补齐」/「截止时间」，建议清单只出现在顶部常驻结论（另有 2 处建议补齐：截止时间 ×1（AI 导入任务）、任务描述 ×1（AI 导入任务））；再发第二句（必填缺口没变）只多一条落地汇报、「我重新核对了一遍」仍只有 1 条；与 `document-import.spec.ts` 合跑 **12 例通过（34.6 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-REPLY-002 | 浏览器 E2E | 真实 UI 上的问答往返（2026-10-14 按第一百七十一条改成回执只报必填） | `apps/e2e/tests/document-import-ai.spec.ts` 的「ADR-071 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」：docx 夹具 → AI 草稿落进左栏 → 发「要补充什么」→ 右栏回执含「必填都齐了」且**不含**「建议补齐」/「截止时间」，建议清单只出现在顶部常驻结论（另有 2 处建议补齐：截止时间 ×1（AI 导入任务）、任务描述 ×1（AI 导入任务））；再发第二句（必填缺口没变）只多一条落地汇报、「我重新核对了一遍」仍只有 1 条；与 `document-import.spec.ts` 合跑 **12 例通过（34.6 秒）** | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-REPLY-003 | 门禁 | 本轮整链回归 | `pnpm check` **exit 0**：`pnpm contract:validate` 110 条路由、`pnpm permissions:check` 110 条操作 / 110 条路由、`pnpm check:deps`（821 文件）、`pnpm check:frontend:boundaries`（344 模块）、`pnpm check:secrets`（1242 文件）、`pnpm check:docs`（116 个 Markdown）、`pnpm build` 全部通过；`pnpm deps:audit` 仅 1 个 moderate，不阻断 | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批只改文档导入弹窗的右栏回应，其余 spec 不引用该弹窗；文档导入两个 spec 已定向跑通）；② E2E 的 AI 上游仍是本机回环 stub，未连真实中转站；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 助手回复是确定性的缺口复述，不是内容问答（见开发日志第一百五十四条「风险与后续」）。
@@ -6347,13 +6347,13 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 整项目导入的初始成员名单必填且必须含创建者与全部负责人（用户「初始成员必须包含创建者以及所有出现在任务负责人中的人」「初始成员必须名字能和目前系统中有的账号相对应」，2026-10-14 本地落库）
 
-定案见 [ADR-070](adr/ADR-070.md) 与开发日志第一百六十六条：整项目（模式 B）导入的 `- 初始成员：` 必填，且必须包含**创建者本人**与**全部任务负责人**，否则预览 422 拒绝（空名单 `MEMBER_REQUIRED`、缺创建者 `MEMBER_CREATOR_MISSING`、缺负责人 `ASSIGNEE_NOT_INITIAL_MEMBER`）；判据是解析后的账号而不是字面令牌，名字对不上账号仍是 `MEMBER_UNRESOLVED`。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见 [ADR-072](adr/ADR-072.md) 与开发日志第一百六十六条：整项目（模式 B）导入的 `- 初始成员：` 必填，且必须包含**创建者本人**与**全部任务负责人**，否则预览 422 拒绝（空名单 `MEMBER_REQUIRED`、缺创建者 `MEMBER_CREATOR_MISSING`、缺负责人 `ASSIGNEE_NOT_INITIAL_MEMBER`）；判据是解析后的账号而不是字面令牌，名字对不上账号仍是 `MEMBER_UNRESOLVED`。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-MEMBER-COVERAGE-001 | 真实 PostgreSQL API 集成 | 三条名单校验与「按账号判」 | `document-import.integration.test.ts` **6 例通过**：新增大用例三次预览——名单缺创建者 → 422 `MEMBER_CREATOR_MISSING`（且不报 `ASSIGNEE_NOT_INITIAL_MEMBER`）；名单只写创建者 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`（且不报缺创建者）；名单写登录名 + 负责人写姓名 → 200 且 `members == [assigneeId]`；既有「负责人未解析」用例新增 `MEMBER_REQUIRED` 断言（空名单一次说清） | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-002 | API 单元 + 真实 PostgreSQL | 整项目提示词带上导入人姓名、不知道时不编造 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 12 例通过**（整项目 system 提示词含「「- 初始成员：」必填」「所有任务的「负责人」都要写进去」「必须包含创建者本人（本次导入人，姓名：特哥）」；新增「不知道导入人姓名时不编造姓名」）；`document-import-assist.integration.test.ts` **9 例通过**（WHOLE_PROJECT 用例断言提示词含本次导入人的真实 `name`） | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-COVERAGE-003 | Web 单元 | 工作台本地预检与服务端同口径、且不误报 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 88 例通过**：新增 `describe("ADR-070 初始成员名单校验")` 6 例（缺初始成员、缺创建者 + 缺负责人去重、写登录名算包含创建者、读不懂的登录名整体不报缺口、同名多人不报缺口、项目内 / 未登录不校验）与弹窗 5 例（缺初始成员、缺创建者 + 缺负责人、名单完整、登录名不误报、项目内不校验）；`pnpm test:unit` 的 Web 部分 **105 文件 815 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-003 | Web 单元 | 工作台本地预检与服务端同口径、且不误报 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 88 例通过**：新增 `describe("ADR-072 初始成员名单校验")` 6 例（缺初始成员、缺创建者 + 缺负责人去重、写登录名算包含创建者、读不懂的登录名整体不报缺口、同名多人不报缺口、项目内 / 未登录不校验）与弹窗 5 例（缺初始成员、缺创建者 + 缺负责人、名单完整、登录名不误报、项目内不校验）；`pnpm test:unit` 的 Web 部分 **105 文件 815 例通过** | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-004 | 浏览器 E2E | 整项目 AI 导入的草稿与预览 | `document-import-ai.spec.ts` 新增「整项目 AI 导入：初始成员带上创建者与任务负责人，预览不再报缺」（stub 从 system 提示词里读出创建者姓名并写进草稿；断言草稿含创建者姓名、verdict 不含「初始成员缺」、预览 issues 为 0、apply 后进入 `/projects/{id}/modules`）；`document-import.spec.ts` + `document-import-ai.spec.ts` **11 例通过（30.0 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 170 / 审计行 19 | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-005 | 门禁 | 本轮单测与集成整链 | `pnpm test:unit` exit 0（web 105 文件 815 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例）；`node scripts/test-integration-local.mjs --skip-migrate` exit 0（database 2 文件 27 例、`apps/ops` 2 文件 7 例、`apps/api` 58 文件 560 例） | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-006 | 门禁 | 迁移不可变清单缺 `0040` 的旧漂移（与本 ADR 无关） | `database/test/integration/database.test.ts` 的「migrations are immutable and idempotent」期望清单补齐 `0040_ai_assist_settings.sql`（ADR-068 落库时漏补，本批跑集成时暴露）；database 集成 **2 文件 27 例通过** | 本地通过（2026-10-14） |
@@ -6367,8 +6367,8 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-GAP-REPLY-DEDUP-001 | Web 单元 | 缺口没变时不重复念同一句 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 89 例通过**：新增「缺口没变时不再重复念同一句核对结论」（模型两轮都原样返回同一份草稿、缺口一直是「1 处建议补齐」，两次补充后「我重新核对了一遍」只出现 1 次，同时仍有「草稿没有变化」的落地汇报）；既有「用户发问后助手立刻回一句，点名还缺哪些字段」用例继续通过（第一次照常立刻回）；`pnpm --filter @inpulse/web test:unit` **105 文件 816 例通过** | 本地通过（2026-10-14） |
-| DOC-IMPORT-GAP-REPLY-DEDUP-002 | 浏览器 E2E | 真实弹窗里「发问后立刻回一句」没被去重误伤、也不再复读建议 | `document-import-ai.spec.ts` 的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」（`.import-msg` 含「我重新核对了一遍」+「必填都齐了」，并断言不含「建议补齐」/「截止时间」；第二次发言后该气泡仍只有 1 条）与整项目 AI 导入用例均通过；`document-import.spec.ts` + `document-import-ai.spec.ts` **12 例通过（34.6 秒）**（按第一百七十一条口径复跑） | 本地通过（2026-10-14） |
-| DOC-IMPORT-GAP-REPLY-DEDUP-003 | 文档纠错 | 上一批例数写错 | `docs/adr/ADR-070.md` / `技术设计v1.2.2.md` / 本文件里 ADR-070 小节的「`document-import` 4 文件 82 例」修正为 **88 例**（ADR-069 的 77 + ADR-070 的 11：成员名单 6 例 + 弹窗 5 例；上一批漏算了成员名单那 6 例） | 已更正（2026-10-14） |
+| DOC-IMPORT-GAP-REPLY-DEDUP-002 | 浏览器 E2E | 真实弹窗里「发问后立刻回一句」没被去重误伤、也不再复读建议 | `document-import-ai.spec.ts` 的「ADR-071 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」（`.import-msg` 含「我重新核对了一遍」+「必填都齐了」，并断言不含「建议补齐」/「截止时间」；第二次发言后该气泡仍只有 1 条）与整项目 AI 导入用例均通过；`document-import.spec.ts` + `document-import-ai.spec.ts` **12 例通过（34.6 秒）**（按第一百七十一条口径复跑） | 本地通过（2026-10-14） |
+| DOC-IMPORT-GAP-REPLY-DEDUP-003 | 文档纠错 | 上一批例数写错 | `docs/adr/ADR-072.md` / `技术设计v1.2.2.md` / 本文件里 ADR-072 小节的「`document-import` 4 文件 82 例」修正为 **88 例**（ADR-071 的 77 + ADR-072 的 11：成员名单 6 例 + 弹窗 5 例；上一批漏算了成员名单那 6 例） | 已更正（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑这两个 spec）；② 缺口没变时那一轮不再有「立刻回一句」，用户要等模型返回才看到落地汇报（有意取舍）；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 整链 `pnpm check` 除 `deps:audit` 外一次跑通，`deps:audit` 因 npm registry 连接被重置失败、单独重试通过（1 个 moderate、无 high，不阻断），`check:secrets` 与 `check:docs`（117 个 Markdown）随后单独跑通过（详见开发日志第一百六十七条）。
 
@@ -6400,44 +6400,44 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 整项目导入：创建者默认算初始成员 + 草稿里的锁定标签（用户「创建者名字不能直接写入固定吗？」，2026-10-14 本地落库）
 
-定案见 [ADR-071](adr/ADR-071.md) 与开发日志第一百七十条：整项目（模式 B）导入不再要求文档写出创建者——创建者由服务端默认算成员并排在第一位，工作台在「初始成员」行上挂一枚带锁图标、没有删除按钮的标签给用户看。本小节**取代**上一小节 `DOC-IMPORT-MEMBER-COVERAGE-001` 里 `MEMBER_CREATOR_MISSING`（缺创建者 → 422）的那部分断言：该报错已整条删除，`MEMBER_REQUIRED`（空名单）与 `ASSIGNEE_NOT_INITIAL_MEMBER`（缺负责人）保留。标签**不改文档正文**，所以「预览文档」仍是一字不改的原版。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见 [ADR-073](adr/ADR-073.md) 与开发日志第一百七十条：整项目（模式 B）导入不再要求文档写出创建者——创建者由服务端默认算成员并排在第一位，工作台在「初始成员」行上挂一枚带锁图标、没有删除按钮的标签给用户看。本小节**取代**上一小节 `DOC-IMPORT-MEMBER-COVERAGE-001` 里 `MEMBER_CREATOR_MISSING`（缺创建者 → 422）的那部分断言：该报错已整条删除，`MEMBER_REQUIRED`（空名单）与 `ASSIGNEE_NOT_INITIAL_MEMBER`（缺负责人）保留。标签**不改文档正文**，所以「预览文档」仍是一字不改的原版。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-CREATOR-MEMBER-001 | 真实 PostgreSQL API 集成 | 创建者默认算成员、缺创建者不再拦 | `document-import.integration.test.ts` **6 例通过**：整项目大用例重写为「文档不写创建者 → 200 且成员含创建者（排第一位）」+「缺任务负责人 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`」；`addedMembers` 2 → 3、`memberAddCount` 1 → 2、`members` 断言补 `actor.userId`；`document-import-assist.integration.test.ts` **9 例通过**（提示词不再带 `creatorName`） | 本地通过（2026-10-14） |
 | DOC-IMPORT-CREATOR-MEMBER-002 | Web 单元 | 锁定标签：看得见、删不掉、不改正文 | `DocumentImportModal.test.tsx` 新增 3 例：① `document-import-creator-lock` 存在、文本是创建者姓名、带 `is-locked`、内部没有 button，且 `导入文档内容` 文本区的值与粘贴的原文**完全相等**（创建者不写进正文）；② 点开「项目：初始成员」编辑后标签行只有名单里原有的名字（无「移除 林雨妍」按钮），锁定标签仍在；③ 模式 A（项目内导入）不渲染锁定标签 | 本地通过（2026-10-14） |
-| DOC-IMPORT-CREATOR-MEMBER-003 | Web 单元 + 浏览器 E2E | 文案同口径与真实弹窗 | 契约模板说明行、工作台「必填要素」、右栏追问都改成「须包含全部任务负责人；创建者默认就是成员，不用写」（`contract:drift` 无漂移，模板版本仍 1）；`document-import-ai.spec.ts` 改写为「ADR-071 整项目 AI 导入：初始成员只写负责人，创建者默认算成员」并加断言预览名单含创建者，两个 spec **12 例通过**；浏览器实测：`- 初始成员：小潘` 那行渲染成「初始成员 [🔒 林雨妍] 小潘」，切到「预览文档」原文仍是 `- 初始成员：小潘` | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-003 | Web 单元 + 浏览器 E2E | 文案同口径与真实弹窗 | 契约模板说明行、工作台「必填要素」、右栏追问都改成「须包含全部任务负责人；创建者默认就是成员，不用写」（`contract:drift` 无漂移，模板版本仍 1）；`document-import-ai.spec.ts` 改写为「ADR-073 整项目 AI 导入：初始成员只写负责人，创建者默认算成员」并加断言预览名单含创建者，两个 spec **12 例通过**；浏览器实测：`- 初始成员：小潘` 那行渲染成「初始成员 [🔒 林雨妍] 小潘」，切到「预览文档」原文仍是 `- 初始成员：小潘` | 本地通过（2026-10-14） |
 | DOC-IMPORT-CHIP-COLOR-001 | Web 单元（class 断言）+ 浏览器实测 | 必填 / 可选入口不再同色 | `is-required`（必填）与普通（可选）仍是两个 class，单测只断言 class 不断言颜色；线上必填 = 淡红实线加粗（`#e8a9a3` / `#fdecea` / `#b03a2e`）、可选 = 暖黄虚线（`#e3c98a` / `#fffaf0` / `#8a6512`），浏览器实测两枚按钮的计算样式确为两套色 | **配色未定案**（用户看过 4 套对照页 `required-chip-colors.html` 后尚未选，当前保持淡红 / 暖黄） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 锁定标签只在项目段**已有**「初始成员」字段时渲染，文档整段没写成员时的显示与按负责人汇聚留待下一轮；③ 必填 / 可选配色未定案；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 编辑态按 Esc 会连整个导入弹窗一起关掉并清空草稿（既有问题，与本批无关，未修）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
 ## 助手回执只报必填 + 创建者不重复显示（用户「这个可选择性的补充重复次数太多了，不要每一次我和 ai 讲话就提醒我一下那些可以选择增加」，2026-10-14 本地落库）
 
-定案见开发日志第一百七十一条与 [ADR-069](adr/ADR-069.md) §4：每轮回执（`buildAssistReply`）只点名必填缺口，建议补齐清单交给顶部常驻结论与下方标签；去重指纹换成只看 ERROR 的 `requiredGapSignature`。另修一起显示重复：名单里已经写了创建者（姓名或登录名）时不再挂锁定标签。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见开发日志第一百七十一条与 [ADR-071](adr/ADR-071.md) §4：每轮回执（`buildAssistReply`）只点名必填缺口，建议补齐清单交给顶部常驻结论与下方标签；去重指纹换成只看 ERROR 的 `requiredGapSignature`。另修一起显示重复：名单里已经写了创建者（姓名或登录名）时不再挂锁定标签。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-ASSIST-REPLY-001 | Web 单元 | 回执只报必填、建议不复读 | `DocumentImportModal.test.tsx`：必填缺负责人 + 4 项建议时，回执含「必填还差 1 处：缺负责人 ×1（修复重复回调）」且**不含**「建议补齐」；只剩建议项（必填齐全）时回执逐字等于「我重新核对了一遍：必填都齐了。」，连发两轮后对话气泡里只出现 1 次「我重新核对了一遍」、0 次「建议补齐」（顶部常驻结论不计） | 本地通过（2026-10-14） |
 | DOC-IMPORT-CREATOR-MEMBER-004 | Web 单元 | 名单已写创建者时不重复显示 | 同上：`- 初始成员：林雨妍、林雨`（按姓名）与 `- 初始成员：linyuyan`（按登录名）两例都不渲染 `document-import-creator-lock`；名单没写创建者时仍渲染（DOC-IMPORT-CREATOR-MEMBER-002） | 本地通过（2026-10-14） |
 | DOC-IMPORT-ASSIST-REPLY-002 | 门禁 + 浏览器实测 | 整链回归与真实对话 | 整链 `pnpm check` exit 0（web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、118 个 Markdown、1243 文件 Secret 扫描）；浏览器实测：必填齐全只剩「模块说明 ×1」时连发两句补充说明，回执只有「我重新核对了一遍：必填都齐了。」与两条落地汇报，不再复读建议清单 | 本地通过（2026-10-14） |
-| DOC-IMPORT-ASSIST-REPLY-003 | 浏览器 E2E | 真实弹窗：建议不复查、回执不复读 | `node scripts/test-e2e-local.mjs --skip-migrate tests/document-import.spec.ts tests/document-import-ai.spec.ts` **12 例通过（34.6 秒）**（`pnpm build` 之后跑生产构建 + `vite preview`，API 用的是重建后的 `dist`）：改写后的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」把旧断言（回执含「截止时间 ×1 / 任务描述 ×1」）换成「含『必填都齐了』、不含『建议补齐』/『截止时间』」，并追加第二句去重断言（「我重新核对了一遍」只 1 条、落地汇报 2 条） | 本地通过（2026-10-14） |
+| DOC-IMPORT-ASSIST-REPLY-003 | 浏览器 E2E | 真实弹窗：建议不复查、回执不复读 | `node scripts/test-e2e-local.mjs --skip-migrate tests/document-import.spec.ts tests/document-import-ai.spec.ts` **12 例通过（34.6 秒）**（`pnpm build` 之后跑生产构建 + `vite preview`，API 用的是重建后的 `dist`）：改写后的「ADR-071 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」把旧断言（回执含「截止时间 ×1 / 任务描述 ×1」）换成「含『必填都齐了』、不含『建议补齐』/『截止时间』」，并追加第二句去重断言（「我重新核对了一遍」只 1 条、落地汇报 2 条） | 本地通过（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② `pnpm build` 已重建 `dist`，但**本地 dev 里正在运行的 API 进程**仍是启动时那份代码（提示词要重启进程后才与前端同口径），UI 侧已对创建者去重；③ 必填无缺口时回执只念一次（指纹相同即静默），复查以顶部常驻结论为准；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
 ## 整项目 AI 草稿必须写出创建者（用户「可以初始成员里模型把创建者（林雨妍）也写了…提示词可以说得更准：『创建者不是任何任务负责人』时也要写」，2026-10-14 本地落库）
 
-定案见开发日志第一百七十二条与 [ADR-071](adr/ADR-071.md) §6（**取代** ADR-071 §2.2「创建者由系统默认算成员、不要写进名单」）：整项目导入的 AI 草稿必须把创建者写进 `- 初始成员：`，**与 TA 是不是任务负责人无关**；姓名由服务端从当前 Session 读出后注入 system 提示词，服务端兜底行为（文档写不写创建者都放行、都会落库）不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见开发日志第一百七十二条与 [ADR-073](adr/ADR-073.md) §6（**取代** ADR-073 §2.2「创建者由系统默认算成员、不要写进名单」）：整项目导入的 AI 草稿必须把创建者写进 `- 初始成员：`，**与 TA 是不是任务负责人无关**；姓名由服务端从当前 Session 读出后注入 system 提示词，服务端兜底行为（文档写不写创建者都放行、都会落库）不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-AI-CREATOR-001 | API 单元 | 提示词点名创建者；拿不到姓名时不编造 | `ai-assist.client.test.ts` 12 例通过：传 `creatorName: "特哥"` 时 system 含「创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。」；不传姓名时含「本次导入人的姓名未知，不要编造姓名。」且不含「本次导入人的姓名是」 | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-002 | API 集成（真实 PostgreSQL + stub 上游） | 姓名取自当前 Session，且只进 system message | `document-import-assist.integration.test.ts` 9 例通过：system 含「本次导入人的姓名是「Test 〈loginName〉」」，user message 不含该姓名（顺带修夹具：`sessionActor` 的 SQL 漏了 `login_name AS "loginName"` 别名，`actor.loginName` 原为 `undefined`） | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-003 | API 集成（真实 PostgreSQL） | 服务端兜底不变：文档不写创建者也放行 | `document-import.integration.test.ts`「整项目导入：初始成员必填且必须含全部负责人；创建者由系统默认补进成员」：名单只写负责人 → `canApply=true`、`project.members` 为 `[创建者, 负责人]`、`summary.memberAddCount=2`；名单只写创建者但负责人不在名单 → 仍是 422 + `ASSIGNEE_NOT_INITIAL_MEMBER` | 本地通过（2026-10-14） |
-| DOC-IMPORT-AI-CREATOR-004 | 浏览器 E2E | 真实弹窗里草稿写出创建者与任务负责人 | `document-import-ai.spec.ts` 的「ADR-071 整项目 AI 导入：草稿写出创建者与任务负责人」（stub 从 system 里取注入的姓名，与文档里的任务负责人一起写名单）：草稿含创建者姓名与负责人登录名、助手结论不含「初始成员缺」、预览 `import-issues` 为 0、导入后跳到模块页；两个 spec **12 例通过（34.9 秒）**（`pnpm build` 之后跑生产构建） | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-004 | 浏览器 E2E | 真实弹窗里草稿写出创建者与任务负责人 | `document-import-ai.spec.ts` 的「ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人」（stub 从 system 里取注入的姓名，与文档里的任务负责人一起写名单）：草稿含创建者姓名与负责人登录名、助手结论不含「初始成员缺」、预览 `import-issues` 为 0、导入后跳到模块页；两个 spec **12 例通过（34.9 秒）**（`pnpm build` 之后跑生产构建） | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-005 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / `db:migrations:check` 39 个 / `db:seed:check` / `contract:drift` / `contract:validate` 110 条 / `build` / `check:deploy:test` 5 个 image ref / `check:deps` 821 个源文件 / `permissions:check` 110 条操作 110 条路由 / `deps:audit` / `check:secrets` 1243 文件 / `check:docs` 118 个 Markdown）；真实 PostgreSQL 集成 `node scripts/test-integration-local.mjs --skip-migrate`：apps/api 58 文件 560 例、database 2 文件 27 例、apps/ops 2 文件 7 例通过 | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-006 | 浏览器实测（真实上游 + 演示库，只读） | 创建者不是任何任务负责人、文档也没提到她时，草稿仍写出创建者 | 需求稿删掉「林雨妍」的一切出现（参与人员与全部任务负责人）后粘进「从文档导入整项目」→「交给 AI 整理」（约 40 秒出稿）：草稿「- 初始成员：」第一位是「林雨妍」，共 5 模块 / 8 功能 / 9 任务，助手结论只报 2 条建议（截止时间 ×2）且不提成员缺口；点「预览」（只读）得「AIDEMO2 · 编码可用 · 成员：林雨妍、小邵、小潘、小吴、邵晨宇」、`document-import-issues` 为 0、锁定标签不重复挂；「关闭预览」+「取消」未落库（项目列表仍 7 个、无 AIDEMO2） | 本地通过（2026-10-14） |
 
-未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② E2E 仍是本机回环 stub，但「真实模型也会把创建者写出来」已由 DOC-IMPORT-AI-CREATOR-006 的真实上游实机复测证实（只读核对、未导入）；③ 历史记录里的旧口径（ADR-071 §2.2、`技术设计v1.2.2.md` 相应记述、第一百七十条条目）按事实保留，由本小节与 ADR-071 §6 标注取代；④ ADR-071 §5 四项仍为已拍板未实现；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② E2E 仍是本机回环 stub，但「真实模型也会把创建者写出来」已由 DOC-IMPORT-AI-CREATOR-006 的真实上游实机复测证实（只读核对、未导入）；③ 历史记录里的旧口径（ADR-073 §2.2、`技术设计v1.2.2.md` 相应记述、第一百七十条条目）按事实保留，由本小节与 ADR-073 §6 标注取代；④ ADR-073 §5 四项仍为已拍板未实现；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
 ## 「必填 / 可选」入口配色定案：保持现状（用户「现在这个状态挺好的」，2026-10-14）
 

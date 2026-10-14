@@ -22,7 +22,7 @@ function extractMarker(text) {
   return marker ? marker[0] : "AIE2E-FALLBACK";
 }
 
-/** ADR-071 修订：草稿要写出创建者，姓名由服务端注进 system 提示词（本次导入人）。 */
+/** ADR-073 修订：草稿要写出创建者，姓名由服务端注进 system 提示词（本次导入人）。 */
 function extractCreatorName(systemText) {
   const named = /本次导入人的姓名是「([^」]+)」/.exec(systemText);
   return named ? named[1] : "";
@@ -35,7 +35,7 @@ function buildContent(mode, text, creatorName) {
   if (mode === "WHOLE_PROJECT") {
     lines.push("# 项目：AI 导入项目 " + marker);
     lines.push("- 项目编码：AIP" + marker.slice(6, 14));
-    // ADR-071 修订：先写创建者（取自提示词），再写文档里的全部任务负责人。
+    // ADR-073 修订：先写创建者（取自提示词），再写文档里的全部任务负责人。
     lines.push(
       "- 初始成员：" +
         [creatorName, owner].filter((item) => item.length > 0).join(", "),

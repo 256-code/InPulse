@@ -161,7 +161,7 @@ export class DocumentImportWorkflow {
     private readonly access: ProjectAccessQueryPort,
     @Inject(ActiveUsersQueryPort)
     private readonly activeUsers: ActiveUsersQueryPort,
-    // ADR-071：整项目导入要把创建者默认算进初始成员，需要取创建者姓名做展示引用。
+    // ADR-073：整项目导入要把创建者默认算进初始成员，需要取创建者姓名做展示引用。
     @Inject(UserReadPort) private readonly users: UserReadPort,
     @Inject(ProjectMembersQueryPort)
     private readonly members: ProjectMembersQueryPort,
@@ -321,7 +321,7 @@ export class DocumentImportWorkflow {
         memberIds.push(ref.userId);
         members.push(ref);
       };
-      // ADR-071：创建者默认就算初始成员（文档写不写都加入），名单第一位固定是创建者；
+      // ADR-073：创建者默认就算初始成员（文档写不写都加入），名单第一位固定是创建者；
       // 因此 memberIds / members / summary.memberAddCount 现在都含创建者（与落库的成员行一致）。
       // 这里读姓名只为预览展示（UserReadPort 是展示用只读端口，返回停用用户；创建者来自
       // 当前有效会话，不参与成员资格判据）。

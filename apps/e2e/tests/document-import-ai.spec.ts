@@ -82,11 +82,11 @@ test("ADR-067 .docx 本地抽取 → 自动分析 → 草稿预览与导入", as
   await context.close();
 });
 /**
- * ADR-071：整项目导入的初始成员必填、必须含全部任务负责人；创建者（本次导入人）
+ * ADR-073：整项目导入的初始成员必填、必须含全部任务负责人；创建者（本次导入人）
  * 也要写进名单——stub 从 system 提示词里取服务端注入的创建者姓名，与任务负责人一起写；
  * 前端对创建者去重，不会重复显示。
  */
-test("ADR-071 整项目 AI 导入：草稿写出创建者与任务负责人", async ({
+test("ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人", async ({
   browser,
 }) => {
   const runtime = await loadRuntime();
@@ -124,7 +124,7 @@ test("ADR-071 整项目 AI 导入：草稿写出创建者与任务负责人", as
   await dialog.getByTestId("document-import-preview").click();
   await expect(dialog.getByTestId("document-import-summary")).toBeVisible();
   await expect(dialog.getByTestId("document-import-issues")).toHaveCount(0);
-  // ADR-071：服务端把创建者本人默认算进初始成员，预览名单里就有 TA。
+  // ADR-073：服务端把创建者本人默认算进初始成员，预览名单里就有 TA。
   await expect(dialog.locator(".import-preview-meta")).toContainText(
     runtime.user.name,
   );
@@ -146,7 +146,7 @@ test("ADR-071 整项目 AI 导入：草稿写出创建者与任务负责人", as
  * 对话里复读（2026-10-14 用户反馈「这个可选择性的补充重复次数太多了，不要每一次我和
  * ai 讲话就提醒我一下那些可以选择增加」）；必填缺口没变时也不再开口。
  */
-test("ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读", async ({
+test("ADR-071 用户发问后助手回一句：必填齐了只说一句，建议清单不复读", async ({
   browser,
 }) => {
   const runtime = await loadRuntime();

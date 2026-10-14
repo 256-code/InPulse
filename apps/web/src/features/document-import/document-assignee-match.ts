@@ -1,5 +1,5 @@
 /**
- * ADR-069 文档导入工作台：把草稿里的负责人 / 初始成员名字与站内账号做确定性匹配。
+ * ADR-071 文档导入工作台：把草稿里的负责人 / 初始成员名字与站内账号做确定性匹配。
  *
  * 唯一数据源是登录用户目录（GET /api/v1/users，只有 id / 姓名 / 头像 / 管理员标记）：
  * 姓名精确命中才算匹配；同名多人、只能找到相近姓名、完全找不到时都算「未匹配」，
@@ -159,7 +159,7 @@ function similarCandidates(
 
 /**
  * 确定性匹配：姓名精确且唯一 → 命中；同名多人 / 相近姓名 / 无候选 → 未匹配。
- * 不做模糊自动接管（ADR-069：成员归属不能由模型或相似度决定）。
+ * 不做模糊自动接管（ADR-071：成员归属不能由模型或相似度决定）。
  */
 export function matchDocumentAssignees(
   uses: readonly DocumentAssigneeNameUse[],
@@ -235,7 +235,7 @@ export function describeDocumentAssigneeMatched(
   return "负责人已对应到站内账号：" + names.join("、") + "。";
 }
 
-/** 成员名单校验的判定入参（ADR-070，创建者口径见 ADR-071）。 */
+/** 成员名单校验的判定入参（ADR-072，创建者口径见 ADR-073）。 */
 export interface DocumentMemberCoverageContext {
   /** 本次导入人（创建者）：姓名与登录名都能在文档里代表 TA，且默认就算项目成员；未登录信息时传 null。 */
   readonly creator: {
@@ -278,8 +278,8 @@ function fieldText(
 }
 
 /**
- * ADR-070 成员名单校验（整项目导入）：初始成员必填，且必须包含全部任务负责人；
- * ADR-071：创建者默认就算成员，名单里写不写都行（写了也不重复），而任务负责人是指派给
+ * ADR-072 成员名单校验（整项目导入）：初始成员必填，且必须包含全部任务负责人；
+ * ADR-073：创建者默认就算成员，名单里写不写都行（写了也不重复），而任务负责人是指派给
  * 创建者本人的时候自然也不再报缺。服务端在预览时按「解析后的账号」判同一件事并把 ERROR
  * 落到行级问题；这里做同一口径的本地预检，让用户在点「预览」之前就看到缺口。本地只认三类
  * 确定事实（姓名 / 登录名 / 目录里唯一的同名账号），判不了的人（多半是登录名）一律不报，
@@ -349,7 +349,7 @@ export function checkDocumentMemberCoverage(
           continue;
         }
         if (memberIds.includes(id)) continue;
-        // ADR-071：创建者默认就是成员，负责人写不写都不算缺口。
+        // ADR-073：创建者默认就是成员，负责人写不写都不算缺口。
         if (creatorId !== null && id === creatorId) continue;
         if (missingAssignees.includes(token)) continue;
         missingAssignees.push(token);

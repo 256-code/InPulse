@@ -151,7 +151,7 @@ function collectDraftTasks(
  * 建议项只是提醒。模型不参与，「还差几处」任何时候都能算出来。
  */
 /**
- * 成员名单两项校验：缺初始成员 / 初始成员缺任务负责人（ADR-070；ADR-071 起创建者
+ * 成员名单两项校验：缺初始成员 / 初始成员缺任务负责人（ADR-072；ADR-073 起创建者
  * 默认就算成员，不再单列一条缺口）。与服务端 preparePlan 的 NEW_PROJECT 分支同一口径
  * （那边是最终裁决）。
  */
@@ -484,7 +484,7 @@ export interface DocumentImportModalProps {
 
 /**
  * ADR-064 固定模板导入（粘贴 / 本地文本文件 → 只读预览 → 单事务执行），
- * ADR-067 追加 AI 辅助转换，ADR-069 把输入态改造成左右分栏工作台：
+ * ADR-067 追加 AI 辅助转换，ADR-071 把输入态改造成左右分栏工作台：
  * 左栏是「点哪改哪」的结构化草稿（内容梳理 / 预览文档两个页签），右栏是 AI 助手
  * 的追问对话与待确认成员。补充说明不新增接口：原始文档与逐轮补充拼成一段，
  * 再调用同一条 assistDocumentImport 路由；AI 草稿永不直接写库。
@@ -500,7 +500,7 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const canConfigureAiAssist = user?.isAdmin === true;
-  /** ADR-071：创建者（= 本次导入人）默认就是成员，草稿里挂一枚锁定标签给用户看。 */
+  /** ADR-073：创建者（= 本次导入人）默认就是成员，草稿里挂一枚锁定标签给用户看。 */
   const creatorMemberName = user?.name?.trim() ?? "";
   const creatorMemberLogin = user?.loginName?.trim() ?? "";
   const [stage, setStage] = useState<Stage>("INPUT");
@@ -1328,7 +1328,7 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   ): React.ReactElement => {
     const placeholder =
       field.name === ASSIGNEE_FIELD ? "（缺负责人）" : "（待补）";
-    // ADR-071：创建者（= 本次导入人）默认就是成员。它挂在「初始成员」行上，用户看得见、
+    // ADR-073：创建者（= 本次导入人）默认就是成员。它挂在「初始成员」行上，用户看得见、
     // 也删不掉；不改文档原文（「预览文档」仍是一字不改的原版），落库时由服务端写入成员行。
     const creatorLock =
       mode === "NEW_PROJECT" &&

@@ -344,7 +344,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       tasks: 1,
       reusedModules: 0,
       reusedFeatures: 0,
-      // ADR-071：创建者默认算初始成员，成员行数=创建者+初始成员+任务负责人。
+      // ADR-073：创建者默认算初始成员，成员行数=创建者+初始成员+任务负责人。
       addedMembers: 3,
     });
     expect(result.modules).toHaveLength(1);
@@ -488,7 +488,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       code: projectCode,
       codeAvailable: true,
     });
-    // ADR-071：创建者默认就在名单里，预览也把 TA 排在第一位。
+    // ADR-073：创建者默认就在名单里，预览也把 TA 排在第一位。
     expect(plan.project?.members.map((item) => item.userId)).toEqual([
       actor.userId,
       memberId,
@@ -598,7 +598,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     expect(issues.some((issue) => issue.code === "ASSIGNEE_UNRESOLVED")).toBe(
       true,
     );
-    // ADR-070：这份文档根本没写初始成员，必填缺失在同一个 422 里一次说清。
+    // ADR-072：这份文档根本没写初始成员，必填缺失在同一个 422 里一次说清。
     expect(issues.some((issue) => issue.code === "MEMBER_REQUIRED")).toBe(true);
     const projects = (await sql`
       SELECT count(*)::int AS "count"
@@ -680,7 +680,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
         csrf: false,
       });
 
-    // ADR-071：名单只写负责人、不写创建者本人（服务端兜底：写不写都放行）；
+    // ADR-073：名单只写负责人、不写创建者本人（服务端兜底：写不写都放行）；
     // AI 生成口径见 ai-assist.prompt.ts：草稿必须写出创建者。
     const noCreator = await previewOf(documentWith(assigneeLogin));
     expect(noCreator.status).toBe(200);
@@ -717,7 +717,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       "DOCUMENT_IMPORT_INVALID",
     );
     expect(issueCodes(noAssignee)).toContain("ASSIGNEE_NOT_INITIAL_MEMBER");
-    // ADR-071：删掉了「名单必须含创建者」这条，错误码不再出现。
+    // ADR-073：删掉了「名单必须含创建者」这条，错误码不再出现。
     expect(issueCodes(noAssignee)).not.toContain("MEMBER_CREATOR_MISSING");
 
     // 全是纯预览：项目不落库。
