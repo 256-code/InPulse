@@ -17,7 +17,7 @@
 
 ## 认证安全流程矩阵
 
-下表的 operationId 集合必须与 [ADR-023](adr/ADR-023.md) allowlist 精确相等（经 [ADR-032](adr/ADR-032.md) 扩展为 `issueCsrfToken`、`login`、`logout`、`startSsoLogin`、`completeSsoLogin` 五条），并逐项镜像到 Route Registry 和可执行权限测试。“管理员完整 Session”指管理员密码登录成功后的完整认证态；ADR-031 起登录不再经过 MFA challenge，也不存在管理员受限 Session。即使某一身份列为允许，Origin、Fetch Metadata、CSRF、速率限制及指定前置状态仍可产生拒绝用例，确保每个 operationId 至少有一条允许和一条拒绝测试。
+下表的 operationId 集合必须与 [ADR-023](adr/ADR-023.md) allowlist 精确相等（经 [ADR-032](adr/ADR-032.md) 扩展为 `issueCsrfToken`、`login`、`logout`、`startSsoLogin`、`completeSsoLogin` 五条，经 [ADR-069](adr/ADR-069.md) 扩展 `createWecomBindingCode` 为六条），并逐项镜像到 Route Registry 和可执行权限测试。“管理员完整 Session”指管理员密码登录成功后的完整认证态；ADR-031 起登录不再经过 MFA challenge，也不存在管理员受限 Session。即使某一身份列为允许，Origin、Fetch Metadata、CSRF、速率限制及指定前置状态仍可产生拒绝用例，确保每个 operationId 至少有一条允许和一条拒绝测试。
 
 | operationId | 匿名/预认证 Session | 已认证普通用户 | 管理员完整 Session | 停用目标用户 | 前置状态与结果 |
 |---|---:|---:|---:|---:|---|
@@ -26,6 +26,7 @@
 | `logout` | 204 | 204 | 204 | 204 | 有效 Session 时要求其 CSRF 并条件撤销；Session 无效、已撤销或首次响应丢失后的重试仅在同源 Origin/Referer 与 Fetch Metadata 通过时清 Cookie 并返回 204，不执行状态写 |
 | `startSsoLogin` | 允许（302 到授权端点） | 允许（302） | 允许（302） | 允许（按匿名；302） | 每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash，同时下发短期 `__Host-sso-state` Cookie 绑定发起浏览器；`returnTo` 必须是站内相对路径，非法值回落默认路径；SSO 未配置时 302 回 `/login?local=1&sso=disabled`；302 只用于认证导航，本接口不签发本地会话（[ADR-032](adr/ADR-032.md)） |
 | `completeSsoLogin` | 允许（302 回应用页；成功即签发本地会话） | 允许（302，按重新登录处理） | 允许（302） | 拒绝（302 回登录页携带错误码，不恢复身份） | 必须同时匹配 URL 的 state 与 `__Host-sso-state` Cookie，并在同一事务内一次性消费；缺失、过期、重放或并发消费失败、token 交换失败、id_token 验签或 iss/aud/exp/nonce 校验失败、账号同名但邮箱不一致、账号已停用一律 302 回登录页并审计；成功时签发与口令登录同构的本地会话与 CSRF；Casdoor 的 `isAdmin` 等其余 claims 不得用于 InPulse 权限判定（[ADR-032](adr/ADR-032.md)） |
+| `createWecomBindingCode` | 401 | 允许 | 允许 | 401（按无效 Session） | 要求有效认证 Session、同源与当前 CSRF；每次调用覆盖签发新码并立即作废旧码，明文码只返回一次、服务端只存 SHA-256 Hash，10 分钟有效、一次性消费；同码重复兑换一律拒绝（[ADR-069](adr/ADR-069.md)） |
 
 用户修改、管理员用户管理及其他不签发或消费一次性安全材料的写操作不在本表，仍按普通业务命令使用 `idempotencyRequired`；管理员高风险操作只要求当前有效的完整管理员 Session（[ADR-031](adr/ADR-031.md)）。
 
@@ -261,17 +262,6 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 
 本接口只服务「用户自己的文档 → 固定模板草稿」的转换，AI 永远只产出草稿文本：不写任何业务表、不写审计 / 活动 / 通知 / 搜索投影；草稿必须经用户确认后走既有 ADR-064 预览 → 执行链路，必填、负责人解析、防重复与默认值规则与手工粘贴完全一致。文件始终只在浏览器本地抽取（ADR-066 边界不变），发给上游的只有抽取后的文本；密钥只从 `/run/secrets/*` 读取并 fail closed，单路由双模式不接触项目数据。
 
-## ADR-071 文档导入工作台（2026-10-13）
-
-本 ADR 不新增、不修改任何路由与权限规则：`assistDocumentImport`、预览与执行路由的策略与上一节完全一致，路由总数仍为 110 条（`permissions:check` 110 条操作 / 110 条路由通过）。
-
-| 变化 | 说明 |
-|---|---|
-| 路由 / operationId | 无新增、无删除、无策略变更 |
-| 新增数据读取 | 前端复用既有 `GET /api/v1/users`（登录用户目录）做姓名匹配，不扩大服务端权限面 |
-| 新增管理入口 | 右栏管理员可见「配置」链接，整页跳转到 [ADR-068](adr/ADR-068.md) 已有的管理页（不新增接口） |
-| 未匹配名字的处理 | 候选与成员目录只在已登录用户自己的会话内展示；点候选只生成补充说明，最终仍由服务端解析器定案 |
-
 ## ADR-068 管理员 AI 配置接口（2026-10-13）
 
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
@@ -280,4 +270,32 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | `updateAiAssistSettings` | 401 | 403 | 403 | 403 | 401 | 允许 | 同源 / CSRF、数据库级幂等（`Idempotency-Key` 必填，契约版本 1.0.0）；单行整体替换，`apiKey` 缺省表示保持已存密钥；密钥经 AES-256-GCM 加密落库；`SELECT ... FOR UPDATE` 行锁 + `row_version`；写审计 `admin.aiAssistSettings.update`（不含密钥） |
 | `testAiAssistSettings` | 401 | 403 | 403 | 403 | 401 | 允许 | 纯校验（不写任何持久化状态、不写审计、不发送用户数据）：用当前生效配置发一条最小探测请求；加入 [ADR-019](adr/ADR-019.md) 纯校验 allowlist |
 
-三条路由只服务「管理员维护 AI 辅助转换配置」，不接触任何项目数据，也不改变任何业务权限；管理员高风险门禁按 [ADR-031](adr/ADR-031.md) 只要求当前生效的完整管理员会话（不再要求 TOTP 重认证）。路由总数 107 → 110，`permissions:check` 110 条操作 / 110 条路由通过（2026-10-13 补记实测）。三条路由的真实 PostgreSQL 集成用例（`apps/api/test/admin-ai-assist-api.integration.test.ts` 11 例）与设置页 E2E（`apps/e2e/tests/settings-ai-assist.spec.ts` 2 例）已于同日补齐（见开发日志第一百四十条）；权限与鉴权行为不变，仍按上表。
+三条路由只服务「管理员维护 AI 辅助转换配置」，不接触任何项目数据，也不改变任何业务权限；管理员高风险门禁按 [ADR-031](adr/ADR-031.md) 只要求当前生效的完整管理员会话（不再要求 TOTP 重认证）。路由总数 107 → 110，`permissions:check` 110 条操作 / 110 条路由通过（2026-10-13 补记实测）。三条路由的真实 PostgreSQL 集成用例（`apps/api/test/admin-ai-assist-api.integration.test.ts` 11 例）与设置页 E2E（`apps/e2e/tests/settings-ai-assist.spec.ts` 2 例）已于同日补齐（见开发日志第一百四十五条）；权限与鉴权行为不变，仍按上表。
+## ADR-069 企业微信机器人绑定接口（2026-10-13）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `getWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 只读当前登录用户自己的绑定状态（含管理员配置的机器人链接 `botProfileUrl`）；服务端从 Session 解析身份，不接受客户端指定用户；响应 `no-store` |
+| `createWecomBindingCode` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 签发一次性绑定码（ADR-023 allowlist securityFlow，见认证安全流程矩阵）：同源 + 当前 CSRF 必填；每次调用覆盖旧码；明文码只返回一次、服务端只存 SHA-256 Hash；10 分钟有效、一次性消费；不写通用幂等记录 |
+| `deleteWecomBinding` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 解除绑定（数据库级幂等，actorOnly 重放授权）：作废待用码并撤销 ACTIVE 绑定（REVOKED，不物理删除）；重复执行自然幂等 |
+
+三条路由都只操作当前登录用户自己的资源，与项目成员关系无关。绑定码兑换发生在长连接桥接侧调用 `app.redeem_wecom_binding_code`（按 Hash 行锁 + 条件消费 + 部分唯一索引兜底，错误码 WBC01～WBC06）；桥接侧不接触明文码存储，绑定成功前不产生任何机器人的通知投递。
+
+## ADR-070 企业微信机器人配置接口（2026-10-13）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `getWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读机器人配置与可用状态（`configured` / `ready` / `disabledReason` / botId / 密钥尾号 / `botProfileUrl`）；响应 `no-store`、永不回显密钥；主密钥缺失 / 密文不可解按 `ENCRYPTION_KEY_UNAVAILABLE` / `CONFIG_INVALID` fail closed |
+| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret / botProfileUrl（secret 缺省或 null 保持原值，首次必填；botProfileUrl 缺省保持、null 清空；AES-256-GCM 加密落库、明文不落库）；CSRF + 数据库级幂等（1.1.0）；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
+
+两条路由都只服务完整管理员 Session（ADR-031 起不要求 TOTP 重认证），只访问单行配置 `app.wecom_robot_config`；写审计 `admin.wecomRobot.update`（不含密钥材料）。凭据进入数据库是本 ADR 对 ADR-069 §2.4 的修订；桥接侧读取解密后的凭据为下一批改造。
+## ADR-071 文档导入工作台（2026-10-13）
+
+本 ADR 不新增、不修改任何路由与权限规则：`assistDocumentImport`、预览与执行路由的策略与上一节完全一致。本节落库时仓库为 110 条路由；合并远端企业微信两批（[ADR-069](adr/ADR-069.md) / [ADR-070](adr/ADR-070.md)，110 → 113 → 115）后当前为 115 条（`permissions:check` 115 条操作 / 115 条路由通过，2026-10-14 合并后复跑）。
+
+| 变化 | 说明 |
+|---|---|
+| 路由 / operationId | 无新增、无删除、无策略变更 |
+| 新增数据读取 | 前端复用既有 `GET /api/v1/users`（登录用户目录）做姓名匹配，不扩大服务端权限面 |
+| 新增管理入口 | 右栏管理员可见「配置」链接，整页跳转到 [ADR-068](adr/ADR-068.md) 已有的管理页（不新增接口） |
+| 未匹配名字的处理 | 候选与成员目录只在已登录用户自己的会话内展示；点候选只生成补充说明，最终仍由服务端解析器定案 |

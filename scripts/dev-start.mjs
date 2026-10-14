@@ -157,6 +157,7 @@ function ensureKeyrings() {
     "idempotency.keyring",
     "audit.keyring",
     "ai-assist-encryption.keyring",
+    "wecom-robot-encryption.keyring",
   ]) {
     const target = path.join(KEYRING_DIR, name);
     if (existsSync(target)) {
@@ -548,6 +549,12 @@ function buildApiEnvironment(fileValues, sso, runtime) {
     ),
     AI_ASSIST_ENCRYPTION_KEY_TEST_PATH: "1",
     AI_ASSIST_ENCRYPTION_KEY_VERSION: "1",
+    WECOM_ROBOT_ENCRYPTION_KEY_FILE: path.join(
+      KEYRING_DIR,
+      "wecom-robot-encryption.keyring",
+    ),
+    WECOM_ROBOT_ENCRYPTION_KEY_TEST_PATH: "1",
+    WECOM_ROBOT_ENCRYPTION_KEY_VERSION: "1",
   };
   if (runtime.apiHost !== undefined) {
     env["INPULSE_API_HOST"] = runtime.apiHost;

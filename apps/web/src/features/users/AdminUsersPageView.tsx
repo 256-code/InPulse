@@ -14,6 +14,7 @@ import {
 } from "@features/common/components/Calm";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { AiAssistSettingsPanel } from "@features/settings/AiAssistSettingsPanel";
+import { WecomRobotSettingsPanel } from "@features/settings/WecomRobotSettingsPanel";
 import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
 import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
 import { adminUserErrorMessage, useAdminUsers } from "./admin-user-query";
@@ -23,7 +24,7 @@ type LifecycleAction = "disable" | "enable" | "forceLogout";
 
 /** 设计师稿 latest-version/views/settings.tsx L9-11：左栏区块导航。 */
 export type SettingsTab =
-  "members" | "permissions" | "notifications" | "aiAssist";
+  "members" | "permissions" | "notifications" | "aiAssist" | "wecomRobot";
 
 type EditorValues = {
   readonly name: string;
@@ -206,9 +207,11 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
     false;
 
-  // 非管理员不展示 AI 辅助转换页签；深链命中该页签时回退到成员页。
+  // 非管理员不展示管理员专属页签；深链命中时回退到成员页。
   const effectiveTab: SettingsTab =
-    activeTab === "aiAssist" && !selfIsAdmin ? "members" : activeTab;
+    (activeTab === "aiAssist" || activeTab === "wecomRobot") && !selfIsAdmin
+      ? "members"
+      : activeTab;
 
   // 当前登录账号置顶（便于先确认自身身份与权限），其后是其他系统管理员，最后是普通成员；同组内保持服务端顺序。
   const members = useMemo(() => {
@@ -279,12 +282,26 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
               AI 辅助转换
             </button>
           ) : null}
+          {selfIsAdmin ? (
+            <button
+              type="button"
+              className={effectiveTab === "wecomRobot" ? "selected" : undefined}
+              aria-current={effectiveTab === "wecomRobot" ? "page" : undefined}
+              onClick={() => setActiveTab("wecomRobot")}
+            >
+              <InpulseIcon name="settings" size={15} />
+              企业微信机器人
+            </button>
+          ) : null}
         </nav>
 
         {effectiveTab === "permissions" ? <PermissionMatrixPanel /> : null}
         {effectiveTab === "notifications" ? <NotificationPolicyPanel /> : null}
         {effectiveTab === "aiAssist" ? (
           <AiAssistSettingsPanel {...(client ? { client } : {})} />
+        ) : null}
+        {effectiveTab === "wecomRobot" ? (
+          <WecomRobotSettingsPanel {...(client ? { client } : {})} />
         ) : null}
 
         {effectiveTab === "members" ? (

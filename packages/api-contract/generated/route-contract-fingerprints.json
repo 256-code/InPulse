@@ -267,6 +267,12 @@
       "fingerprint": "bd4d18286ad83b2cc0c5bc6133d2c559b7eb8d2e5e8707c0777533badefa26e3"
     }
   ],
+  "deleteWecomBinding": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "0b8a0dad01a9e09143d8b0ce3c3b548daa1edaeb67844d4b78bd118041d7b19f"
+    }
+  ],
   "disableUser": [
     {
       "version": "1.0.0",
@@ -569,6 +575,16 @@
     {
       "version": "1.0.0",
       "fingerprint": "2009dfbfe32276348c93d22cf698ffc83445a8b939d977db14746a9a8e9ee545"
+    }
+  ],
+  "updateWecomRobotConfig": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "b7fa3ffc504e606d5e230965043779182896719ff30153f61bb1c19a74a93e5a"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "21876dcc905d82acc425c919275bc9a5864a119250c7369a9cd8f4643d0c83ef"
     }
   ],
   "voidChangeRecord": [

@@ -37,6 +37,8 @@ import { ProjectManagementModule } from "./modules/projects/project-management.m
 import { AggregateReadModule } from "./modules/aggregate-read/aggregate-read.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
 import { AdminUsersModule } from "./admin-users/admin-users.module.js";
+import { WecomBindingModule } from "./modules/wecom-binding/wecom-binding.module.js";
+import { WecomRobotModule } from "./modules/wecom-robot/wecom-robot.module.js";
 
 /** Secret 未配置时保持健康探针可启动；配置后挂载鉴权模块并 fail closed。 */
 const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
@@ -53,6 +55,8 @@ const authModules = process.env["SESSION_HASH_KEYRING_FILE"]?.trim()
       ModulesManagementModule,
       FeaturesManagementModule,
       AdminUsersModule,
+      WecomBindingModule,
+      WecomRobotModule,
       TasksManagementModule,
       RecordDraftsModule,
       PublishedRecordsModule,

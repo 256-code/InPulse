@@ -17,6 +17,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "project.member.add": "添加项目成员",
   "project.member.remove": "移除项目成员",
   "project.member.role.set": "调整成员角色",
+  "project.documentImport": "导入文档",
   "module.create": "创建模块",
   "module.update": "更新模块",
   // ADR-059：删除模块与删除功能（软删除，无还原入口）。
@@ -53,6 +54,8 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "admin.user.disable": "停用用户",
   "admin.user.enable": "启用用户",
   "admin.user.force_logout": "强制退出登录",
+  "admin.wecomRobot.update": "更新机器人配置",
+  "admin.aiAssistSettings.update": "更新 AI 辅助设置",
   "auth.sso_login": "统一身份认证登录",
   "auth.sso_login_failed": "统一身份认证登录失败",
   "auth.sso_account_provisioned": "统一身份认证首次开通账号",
@@ -98,6 +101,8 @@ const TARGET_TYPE_LABELS: Readonly<Record<string, string>> = {
   CHANGE_RECORD: "迭代记录",
   LEFTOVER_ITEM: "遗留问题",
   EXTERNAL_LINK: "GitHub 链接",
+  WECOM_ROBOT_CONFIG: "企业微信机器人配置",
+  AI_ASSIST_SETTINGS: "AI 辅助设置",
 };
 
 export function auditTargetTypeLabel(targetType: string): string {

@@ -92,6 +92,45 @@ const purgeItem: AuditLogItem = {
   eventPayload: { code: "T1", name: "旧版交付平台" },
 };
 
+// 管理配置类动作（机器人 / AI / 文档导入）：2026-10-13 补中文标签，
+// 目标类型此前也未收录，行内会回退成原始机器码。
+const wecomRobotItem: AuditLogItem = {
+  ...systemItem,
+  sequenceNo: 17,
+  action: "admin.wecomRobot.update",
+  targetType: "WECOM_ROBOT_CONFIG",
+  targetId: "1",
+  eventPayload: {
+    before: { configured: false },
+    after: { botId: "aib-demo-bot", rowVersion: 1, botProfileUrl: null },
+    secretChanged: true,
+  },
+};
+
+const aiAssistItem: AuditLogItem = {
+  ...systemItem,
+  sequenceNo: 18,
+  action: "admin.aiAssistSettings.update",
+  targetType: "AI_ASSIST_SETTINGS",
+  targetId: "1",
+  eventPayload: {
+    before: { configured: false },
+    after: { enabled: true, model: "gpt-demo", rowVersion: 1 },
+    keyChanged: true,
+  },
+};
+
+const documentImportItem: AuditLogItem = {
+  ...systemItem,
+  chainId: "PROJECT:7",
+  sequenceNo: 19,
+  projectId: 7,
+  action: "project.documentImport",
+  targetType: "PROJECT",
+  targetId: "7",
+  eventPayload: { digest: "d".repeat(16), addedMemberCount: 3 },
+};
+
 const project = {
   id: 7,
   code: "AGV",
@@ -229,6 +268,33 @@ describe("F-08 audit page", () => {
     expect(codes).toContain("project.create");
     expect(codes).toContain("task.create");
     expect(codes).toContain("project.delete");
+  });
+
+  it("管理配置动作显示中文标签与目标类型（机器人 / AI / 文档导入）", async () => {
+    const getAuditLogs = vi
+      .fn()
+      .mockResolvedValue(
+        page([wecomRobotItem, aiAssistItem, documentImportItem]),
+      );
+    const listProjects = vi.fn().mockResolvedValue({ items: [project] });
+    mount({ getAuditLogs, listProjects } as unknown as InpulseApiClient);
+
+    expect(await screen.findByText("更新机器人配置")).toBeInTheDocument();
+    expect(screen.getByText("更新 AI 辅助设置")).toBeInTheDocument();
+    expect(screen.getByText("导入文档")).toBeInTheDocument();
+    expect(screen.getByText("对象：企业微信机器人配置 #1")).toBeInTheDocument();
+    expect(screen.getByText("对象：AI 辅助设置 #1")).toBeInTheDocument();
+    expect(screen.getByText("对象：项目 AGV 智能搬运平台")).toBeInTheDocument();
+
+    // 三个动作码同时进入筛选候选（option 以原始码为 value）。
+    const codes = Array.from(
+      document.querySelectorAll<HTMLOptionElement>(
+        "#audit-action-options option",
+      ),
+    ).map((option) => option.value);
+    expect(codes).toContain("admin.wecomRobot.update");
+    expect(codes).toContain("admin.aiAssistSettings.update");
+    expect(codes).toContain("project.documentImport");
   });
 
   it("labels entity targets with the code and name carried by the payload", async () => {

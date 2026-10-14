@@ -23,8 +23,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
   const initialTab =
-    searchParams.get("tab") === "aiAssist" ? "aiAssist" : undefined;
+    tabParam === "aiAssist" || tabParam === "wecomRobot" ? tabParam : undefined;
   const [selectProject, setSelectProject] = useState(false);
   const projects = useProjects({ client, enabled: selectProject });
   return (

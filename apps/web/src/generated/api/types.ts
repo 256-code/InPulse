@@ -2131,3 +2131,51 @@ export type VoidedRecord = {
   readonly voidedAt: string;
   readonly voidReason: string;
 };
+
+export type WecomBindingCode = {
+  readonly code: string;
+  readonly expiresAt: string;
+};
+
+export type WecomBindingMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type WecomBindingReplayContext = {
+  readonly actorUserId: number;
+};
+
+export type WecomBindingStatus = {
+  readonly state: ("UNBOUND" | "PENDING" | "BOUND");
+  readonly boundAt: (string | null);
+  readonly codeExpiresAt: (string | null);
+  readonly botProfileUrl: (string | null);
+};
+
+export type WecomRobotConfig = {
+  readonly configured: boolean;
+  readonly ready: boolean;
+  readonly disabledReason: (("NOT_CONFIGURED" | "ENCRYPTION_KEY_UNAVAILABLE" | "CONFIG_INVALID") | null);
+  readonly botId: (string | null);
+  readonly secretHint: (string | null);
+  readonly secretKeyVersion: (number | null);
+  readonly rowVersion: (number | null);
+  readonly botProfileUrl: (string | null);
+  readonly updatedAt: (string | null);
+  readonly updatedByName: (string | null);
+};
+
+export type WecomRobotConfigUpdateRequest = {
+  readonly botId: string;
+  readonly secret?: (string | null);
+  readonly botProfileUrl?: (string | null);
+};
+
+export type WecomRobotMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type WecomRobotReplayContext = {
+  readonly actorUserId: number;
+  readonly robotConfigRowId: number;
+};

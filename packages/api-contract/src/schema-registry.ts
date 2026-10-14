@@ -1,6 +1,8 @@
 import { taskCenterQuerySchema } from "./contracts/aggregate-read.zod.js";
 import { taskCreateSchemas } from "./contracts/task-create.zod.js";
+import { wecomBindingSchemas } from "./contracts/wecom-binding.zod.js";
 import { adminAiAssistSchemas } from "./contracts/admin-ai-assist.zod.js";
+import { wecomRobotSchemas } from "./contracts/wecom-robot.zod.js";
 import { documentImportSchemas } from "./contracts/document-import.zod.js";
 import {
   auditLogItemSchema,
@@ -172,7 +174,9 @@ export const schemaRegistry = {
   ...moduleDeletionSchemas,
   ...taskCreateSchemas,
   ...documentImportSchemas,
+  ...wecomBindingSchemas,
   ...adminAiAssistSchemas,
+  ...wecomRobotSchemas,
   TaskCenterQuery: {
     schema: taskCenterQuerySchema,
     summary: "授权范围内任务中心筛选",
