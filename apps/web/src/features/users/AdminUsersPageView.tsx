@@ -23,10 +23,7 @@ type LifecycleAction = "disable" | "enable" | "forceLogout";
 
 /** 设计师稿 latest-version/views/settings.tsx L9-11：左栏区块导航。 */
 export type SettingsTab =
-  | "members"
-  | "permissions"
-  | "notifications"
-  | "aiAssist";
+  "members" | "permissions" | "notifications" | "aiAssist";
 
 type EditorValues = {
   readonly name: string;
@@ -67,7 +64,9 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "members");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    initialTab ?? "members",
+  );
   const submitting = useRef(false);
   const {
     control,
@@ -260,7 +259,9 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           </button>
           <button
             type="button"
-            className={effectiveTab === "notifications" ? "selected" : undefined}
+            className={
+              effectiveTab === "notifications" ? "selected" : undefined
+            }
             aria-current={effectiveTab === "notifications" ? "page" : undefined}
             onClick={() => setActiveTab("notifications")}
           >

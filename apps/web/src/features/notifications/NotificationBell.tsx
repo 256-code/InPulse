@@ -9,6 +9,7 @@ import {
 } from "./notification-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { routePreloadHandlers } from "@shared/routing/route-preload";
 
 export interface NotificationBellProps {
   readonly client?: InpulseApiClient | undefined;
@@ -136,6 +137,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
             <button
               type="button"
               aria-label={`打开通知：${item.title}`}
+              {...(item.targetPath === null
+                ? {}
+                : routePreloadHandlers(item.targetPath))}
               onClick={() => handleOpenItem(item)}
             >
               <span>{item.title}</span>

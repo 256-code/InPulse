@@ -11,6 +11,7 @@ import {
   useSearchInfiniteQuery,
 } from "@features/search/search-query";
 import { searchResultPath } from "@features/search/search-destination";
+import { preloadRoutePath } from "@shared/routing/route-preload";
 
 interface QuickAction {
   readonly key: string;
@@ -18,6 +19,8 @@ interface QuickAction {
   readonly icon: InpulseIconName;
   readonly title: string;
   readonly hint: string;
+  /** 该命令的落地地址：光标移到这一行时预热对应页面 chunk。 */
+  readonly path: string;
   readonly run: () => void;
 }
 
@@ -27,6 +30,7 @@ interface SearchResult {
   readonly icon: InpulseIconName;
   readonly title: string;
   readonly hint: string;
+  readonly path: string;
   readonly run: () => void;
 }
 
@@ -105,6 +109,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: "folder",
             title: "打开项目与功能",
             hint: "新建项目或查看刚创建的项目动态",
+            path: "/projects",
             run: () => onNavigate("/projects"),
           },
           {
@@ -113,6 +118,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: "clipboard",
             title: "打开任务中心",
             hint: "跨项目任务列表入口",
+            path: "/tasks",
             run: () => onNavigate("/tasks"),
           },
           {
@@ -121,6 +127,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: "gitBranch",
             title: "打开迭代记录",
             hint: "已发生变化的业务历史入口",
+            path: "/records",
             run: () => onNavigate("/records"),
           },
           {
@@ -129,6 +136,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: "bell",
             title: "打开通知中心",
             hint: "查看全部站内通知",
+            path: "/notifications",
             run: () => onNavigate("/notifications"),
           },
           {
@@ -137,6 +145,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: "settings",
             title: "打开成员与设置",
             hint: "成员、角色与权限入口",
+            path: "/settings",
             run: () => onNavigate("/settings"),
           },
         ] satisfies readonly QuickAction[]
@@ -164,6 +173,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           icon: meta.icon,
           title: item.title,
           hint: `${meta.label} · ${item.summary || "可访问对象"}`,
+          path,
           run: () => onNavigate(path),
         },
       ];
@@ -178,6 +188,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           icon: "search",
           title: `搜索“${normalizedQuery}”`,
           hint: "在全局搜索页查看完整权限过滤结果",
+          path: "/search",
           run: () => onOpenSearch(normalizedQuery),
         },
       ]
@@ -206,6 +217,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   useEffect(() => {
     setCursorTouched(false);
   }, [normalizedQuery]);
+
+  // 光标（含鼠标悬停、方向键移动、查询变化后的默认选中）落到哪一行，就预热哪一行的落地页
+  // chunk——与侧栏导航、项目树同一套「导航意图即预取」口径（2026-10-14）。
+  const selectedResultForPreload =
+    flatResults[canSearch && !cursorTouched ? -1 : cursor];
+  useEffect(() => {
+    if (selectedResultForPreload !== undefined) {
+      preloadRoutePath(selectedResultForPreload.path);
+    }
+  }, [selectedResultForPreload]);
 
   useEffect(() => {
     if (!open) {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  AI_ASSIST_ENCRYPTION_KEYRING_FILE,
   AUDIT_KEYRING_FILE,
   E2E_KEYRING_DIR,
   E2E_ROOT,
@@ -52,6 +53,12 @@ writeFileSync(
   "utf8",
 );
 writeFileSync(AI_ASSIST_API_KEY_FILE, randomBytes(24).toString("hex"), "utf8");
+// ADR-068：管理员在线配置用主密钥 keyring（加密落库密钥）。
+writeFileSync(
+  AI_ASSIST_ENCRYPTION_KEYRING_FILE,
+  `1:${randomBytes(32).toString("hex")}\n`,
+  "utf8",
+);
 
 export default defineConfig({
   testDir: "./tests",
@@ -116,6 +123,10 @@ export default defineConfig({
         AI_ASSIST_MODEL: "e2e-stub-model",
         AI_ASSIST_API_KEY_FILE: AI_ASSIST_API_KEY_FILE,
         AI_ASSIST_API_KEY_TEST_PATH: "1",
+        // ADR-068：管理员在线配置的主密钥（保存密钥 / 解密已存密钥都要用）。
+        AI_ASSIST_ENCRYPTION_KEY_FILE: AI_ASSIST_ENCRYPTION_KEYRING_FILE,
+        AI_ASSIST_ENCRYPTION_KEY_TEST_PATH: "1",
+        AI_ASSIST_ENCRYPTION_KEY_VERSION: "1",
       },
     },
     {

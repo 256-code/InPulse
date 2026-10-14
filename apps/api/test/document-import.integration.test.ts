@@ -147,6 +147,17 @@ async function loginOf(sql: Sql, userId: number): Promise<string> {
   return row.login_name;
 }
 
+async function nameOf(sql: Sql, userId: number): Promise<string> {
+  const rows = (await sql`
+    SELECT name FROM app.users WHERE id = ${userId}
+  `) as unknown as readonly { name: string }[];
+  const row = rows[0];
+  if (row === undefined) {
+    throw new Error(`user fixture ${userId} does not exist`);
+  }
+  return row.name;
+}
+
 async function sessionActor(sql: Sql, userId: number): Promise<SessionActor> {
   const users = (await sql`
     SELECT login_name, auth_version AS "authVersion"
@@ -302,7 +313,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       `# 项目：${projectName}`,
       `- 项目编码：${projectCode}`,
       "- 项目说明：来自固定模板",
-      `- 初始成员：${initialMemberLogin}`,
+      `- 初始成员：${creator.loginName}, ${initialMemberLogin}, ${assigneeLogin}`,
       "",
       "## 模块：支付",
       "- 说明：支付能力",
@@ -333,7 +344,8 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       tasks: 1,
       reusedModules: 0,
       reusedFeatures: 0,
-      addedMembers: 2,
+      // ADR-071：创建者默认算初始成员，成员行数=创建者+初始成员+任务负责人。
+      addedMembers: 3,
     });
     expect(result.modules).toHaveLength(1);
     expect(result.features).toHaveLength(1);
@@ -452,7 +464,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     const document = [
       `# 项目：${projectName}`,
       `- 项目编码：${projectCode}`,
-      `- 初始成员：${memberLogin}`,
+      `- 初始成员：${actor.loginName}, ${memberLogin}`,
       "",
       "## 模块：账户",
       "### 功能：登录",
@@ -476,14 +488,16 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       code: projectCode,
       codeAvailable: true,
     });
+    // ADR-071：创建者默认就在名单里，预览也把 TA 排在第一位。
     expect(plan.project?.members.map((item) => item.userId)).toEqual([
+      actor.userId,
       memberId,
     ]);
     expect(plan.summary).toMatchObject({
       moduleCount: 1,
       featureCount: 1,
       taskCount: 0,
-      memberAddCount: 1,
+      memberAddCount: 2,
     });
     expect(plan.issues).toEqual([]);
 
@@ -584,6 +598,8 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     expect(issues.some((issue) => issue.code === "ASSIGNEE_UNRESOLVED")).toBe(
       true,
     );
+    // ADR-070：这份文档根本没写初始成员，必填缺失在同一个 422 里一次说清。
+    expect(issues.some((issue) => issue.code === "MEMBER_REQUIRED")).toBe(true);
     const projects = (await sql`
       SELECT count(*)::int AS "count"
         FROM app.projects
@@ -633,6 +649,84 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       401,
       "DOCUMENT_IMPORT_SESSION_REQUIRED",
     );
+  });
+  test("整项目导入：初始成员必填且必须含全部负责人；创建者由系统默认补进成员", async () => {
+    const sql = runtime!;
+    const actor = await sessionActor(sql, await createUser(sql));
+    const assigneeId = await createUser(sql);
+    const assigneeLogin = await loginOf(sql, assigneeId);
+    const assigneeName = await nameOf(sql, assigneeId);
+    const projectCode = codeFixture();
+    const projectName = `成员校验 ${randomUUID()}`;
+    const documentWith = (members: string): string =>
+      [
+        `# 项目：${projectName}`,
+        `- 项目编码：${projectCode}`,
+        `- 初始成员：${members}`,
+        "",
+        "## 模块：结算",
+        "### 任务：对账",
+        `- 负责人：${assigneeLogin}`,
+      ].join("\n");
+    const issueCodes = (error: ErrorDto): readonly string[] =>
+      (error.details["issues"] as readonly { readonly code: string }[]).map(
+        (issue) => issue.code,
+      );
+    const previewOf = (document: string): Promise<Response> =>
+      post({
+        path: PROJECT_IMPORTS_PREVIEW_PATH,
+        actor,
+        body: { document },
+        csrf: false,
+      });
+
+    // ADR-071：名单只写负责人、不写创建者本人（服务端兜底：写不写都放行）；
+    // AI 生成口径见 ai-assist.prompt.ts：草稿必须写出创建者。
+    const noCreator = await previewOf(documentWith(assigneeLogin));
+    expect(noCreator.status).toBe(200);
+    const noCreatorPlan = projectDocumentImportPreviewResponseSchema.parse(
+      await noCreator.json(),
+    );
+    expect(noCreatorPlan.issues).toEqual([]);
+    expect(noCreatorPlan.canApply).toBe(true);
+    expect(noCreatorPlan.project?.members.map((item) => item.userId)).toEqual([
+      actor.userId,
+      assigneeId,
+    ]);
+    expect(noCreatorPlan.summary.memberAddCount).toBe(2);
+
+    // 名单写登录名、负责人写姓名：同一个人按解析后的账号判，不按字面判，也不会重复计入。
+    const mixed = await previewOf(
+      documentWith(`${actor.loginName}, ${assigneeName}`),
+    );
+    expect(mixed.status).toBe(200);
+    const plan = projectDocumentImportPreviewResponseSchema.parse(
+      await mixed.json(),
+    );
+    expect(plan.issues).toEqual([]);
+    expect(plan.canApply).toBe(true);
+    expect(plan.project?.members.map((item) => item.userId)).toEqual([
+      actor.userId,
+      assigneeId,
+    ]);
+
+    // 名单里只有创建者本人：任务负责人没写进名单 → 仍然是 422。
+    const noAssignee = await expectError(
+      await previewOf(documentWith(actor.loginName)),
+      422,
+      "DOCUMENT_IMPORT_INVALID",
+    );
+    expect(issueCodes(noAssignee)).toContain("ASSIGNEE_NOT_INITIAL_MEMBER");
+    // ADR-071：删掉了「名单必须含创建者」这条，错误码不再出现。
+    expect(issueCodes(noAssignee)).not.toContain("MEMBER_CREATOR_MISSING");
+
+    // 全是纯预览：项目不落库。
+    const projects = (await sql`
+      SELECT count(*)::int AS "count"
+        FROM app.projects
+       WHERE code = ${projectCode}
+    `) as unknown as readonly { count: number }[];
+    expect(projects[0]!.count).toBe(0);
   });
   test("项目内导入：同名模块与功能复用且不覆盖，警告不阻断，模块级任务引用既有功能", async () => {
     const sql = runtime!;

@@ -260,3 +260,24 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | `assistDocumentImport` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 只读校验（不写任何持久化状态）：会话认证、无 CSRF、无幂等；`mode` 取 `IN_PROJECT` / `WHOLE_PROJECT`，`text` 1～200000 字符；调用管理员配置的 OpenAI 兼容端点生成模板草稿，未启用或配置非法 503 `AI_ASSIST_DISABLED`，上游鉴权 / 限流 / 超时 / 网络 / 上下文超限 / 响应非法 503 `AI_ASSIST_UPSTREAM_FAILED`（`details.reason` 为固定枚举）；不开启数据库事务、无 SQL 写、无审计 |
 
 本接口只服务「用户自己的文档 → 固定模板草稿」的转换，AI 永远只产出草稿文本：不写任何业务表、不写审计 / 活动 / 通知 / 搜索投影；草稿必须经用户确认后走既有 ADR-064 预览 → 执行链路，必填、负责人解析、防重复与默认值规则与手工粘贴完全一致。文件始终只在浏览器本地抽取（ADR-066 边界不变），发给上游的只有抽取后的文本；密钥只从 `/run/secrets/*` 读取并 fail closed，单路由双模式不接触项目数据。
+
+## ADR-069 文档导入工作台（2026-10-13）
+
+本 ADR 不新增、不修改任何路由与权限规则：`assistDocumentImport`、预览与执行路由的策略与上一节完全一致，路由总数仍为 110 条（`permissions:check` 110 条操作 / 110 条路由通过）。
+
+| 变化 | 说明 |
+|---|---|
+| 路由 / operationId | 无新增、无删除、无策略变更 |
+| 新增数据读取 | 前端复用既有 `GET /api/v1/users`（登录用户目录）做姓名匹配，不扩大服务端权限面 |
+| 新增管理入口 | 右栏管理员可见「配置」链接，整页跳转到 [ADR-068](adr/ADR-068.md) 已有的管理页（不新增接口） |
+| 未匹配名字的处理 | 候选与成员目录只在已登录用户自己的会话内展示；点候选只生成补充说明，最终仍由服务端解析器定案 |
+
+## ADR-068 管理员 AI 配置接口（2026-10-13）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `getAiAssistSettings` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读、不写任何状态、响应 `no-store`；只返回密钥尾 4 位与是否已配置，永不回显密钥 |
+| `updateAiAssistSettings` | 401 | 403 | 403 | 403 | 401 | 允许 | 同源 / CSRF、数据库级幂等（`Idempotency-Key` 必填，契约版本 1.0.0）；单行整体替换，`apiKey` 缺省表示保持已存密钥；密钥经 AES-256-GCM 加密落库；`SELECT ... FOR UPDATE` 行锁 + `row_version`；写审计 `admin.aiAssistSettings.update`（不含密钥） |
+| `testAiAssistSettings` | 401 | 403 | 403 | 403 | 401 | 允许 | 纯校验（不写任何持久化状态、不写审计、不发送用户数据）：用当前生效配置发一条最小探测请求；加入 [ADR-019](adr/ADR-019.md) 纯校验 allowlist |
+
+三条路由只服务「管理员维护 AI 辅助转换配置」，不接触任何项目数据，也不改变任何业务权限；管理员高风险门禁按 [ADR-031](adr/ADR-031.md) 只要求当前生效的完整管理员会话（不再要求 TOTP 重认证）。路由总数 107 → 110，`permissions:check` 110 条操作 / 110 条路由通过（2026-10-13 补记实测）。三条路由的真实 PostgreSQL 集成用例（`apps/api/test/admin-ai-assist-api.integration.test.ts` 11 例）与设置页 E2E（`apps/e2e/tests/settings-ai-assist.spec.ts` 2 例）已于同日补齐（见开发日志第一百四十条）；权限与鉴权行为不变，仍按上表。

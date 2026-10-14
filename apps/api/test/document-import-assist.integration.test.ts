@@ -142,7 +142,7 @@ async function postAssist(
 
 async function sessionActor(sql: Sql, userId: number): Promise<SessionActor> {
   const users = (await sql`
-    SELECT login_name, auth_version AS "authVersion"
+    SELECT login_name AS "loginName", auth_version AS "authVersion"
       FROM app.users
      WHERE id = ${userId}
   `) as unknown as readonly { loginName: string; authVersion: number }[];
@@ -341,6 +341,12 @@ describe("assist（已启用，stub 上游 + 真实 PostgreSQL）", () => {
       DOCUMENT_IMPORT_TEMPLATE,
     );
     expect(upstreamBody.messages[0]!.content).toContain("整项目导入");
+    // ADR-071 修订：整项目指令要点名创建者（本次导入人）写进初始成员，姓名取自当前
+    // Session 对应用户（本夹具的姓名是 "Test <loginName>"），且不写进 user message。
+    expect(upstreamBody.messages[0]!.content).toContain(
+      "本次导入人的姓名是「Test " + actor.loginName + "」",
+    );
+    expect(upstreamBody.messages[1]!.content).not.toContain("Test ");
     expect(upstreamBody.messages[1]).toEqual({
       role: "user",
       content: "我们要做一个商城系统，包含支付模块，张三负责退款回调修复。",

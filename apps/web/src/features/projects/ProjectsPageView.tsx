@@ -28,6 +28,7 @@ import {
 } from "@features/common/resource-lifecycle";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { useProjectTier } from "@features/common/project-tier-context";
+import { routePreloadHandlers } from "@shared/routing/route-preload";
 
 const hierarchyNotes = [
   { label: "项目", text: "顶层业务容器，承载范围与成员。" },
@@ -224,6 +225,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             <Button
               className="primary-button"
               data-testid="add-module-after-create"
+              {...routePreloadHandlers(
+                `/projects/${createdProject.project.id}/modules`,
+              )}
               onClick={() =>
                 (onAddModule ?? onOpenModules)?.(createdProject.project.id)
               }
@@ -233,6 +237,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             {isAdmin && onOpenMembers ? (
               <Button
                 className="text-button"
+                {...routePreloadHandlers(
+                  `/projects/${createdProject.project.id}/members`,
+                )}
                 onClick={() => onOpenMembers(createdProject.project.id)}
               >
                 管理成员
@@ -241,6 +248,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             <Button
               className="text-button"
               data-testid="open-created-project-activity"
+              {...routePreloadHandlers(
+                `/projects/${createdProject.project.id}/activity`,
+              )}
               onClick={() => onOpenActivity?.(createdProject.project.id)}
             >
               查看项目动态
@@ -248,6 +258,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             <Button
               className="text-button"
               data-testid="search-created-project"
+              {...routePreloadHandlers("/search")}
               onClick={() => onSearch?.(createdProject.project.code)}
             >
               搜索项目
@@ -342,6 +353,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                       ? "project-card is-maintenance"
                       : "project-card"
                   }
+                  {...routePreloadHandlers(`/projects/${project.id}/modules`)}
                   onClick={(event) => {
                     if (!isCardClick(event)) return;
                     onOpenModules?.(project.id);
@@ -400,6 +412,9 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                     {isAdmin && onOpenMembers ? (
                       <Button
                         className="text-button"
+                        {...routePreloadHandlers(
+                          `/projects/${project.id}/members`,
+                        )}
                         onClick={() => onOpenMembers(project.id)}
                       >
                         管理成员

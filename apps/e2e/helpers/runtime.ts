@@ -18,6 +18,11 @@ export const IDEMPOTENCY_KEYRING_FILE = path.join(
   "idempotency.keyring",
 );
 export const AUDIT_KEYRING_FILE = path.join(E2E_KEYRING_DIR, "audit.keyring");
+/** ADR-068 管理员在线配置的主密钥 keyring（一行 version:hex）；E2E 运行时生成。 */
+export const AI_ASSIST_ENCRYPTION_KEYRING_FILE = path.join(
+  E2E_KEYRING_DIR,
+  "ai-assist-encryption.keyring",
+);
 
 export interface E2ERuntime {
   readonly apiBaseUrl: string;

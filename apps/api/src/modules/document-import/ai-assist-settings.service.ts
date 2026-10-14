@@ -18,7 +18,10 @@ import { AiAssistSettingsRepository } from "./ai-assist-settings.repository.js";
 import { AiAssistRuntimeService } from "./ai-assist-runtime.service.js";
 import { DocumentImportAiAssistClient } from "./ai-assist.client.js";
 import { AiAssistUpstreamError } from "./ai-assist.client.js";
-import { aiAssistEnabled, validateAiAssistEndpoint } from "./ai-assist.config.js";
+import {
+  aiAssistEnabled,
+  validateAiAssistEndpoint,
+} from "./ai-assist.config.js";
 import {
   AiAssistEncryptionUnavailableError,
   aiAssistKeyHint,
@@ -88,7 +91,11 @@ export class AiAssistSettingsService {
     }
     let endpoint: string;
     try {
-      endpoint = validateAiAssistEndpoint(input.endpoint, process.env, "endpoint");
+      endpoint = validateAiAssistEndpoint(
+        input.endpoint,
+        process.env,
+        "endpoint",
+      );
     } catch {
       throw new AiAssistSettingsInputError({
         endpoint: "端点必须是绝对 https 地址；回环 http 只允许开发 / 测试环境",
@@ -169,7 +176,11 @@ export class AiAssistSettingsService {
       return { ok: true, reason: null, model };
     } catch (error) {
       if (error instanceof AiAssistUpstreamError) {
-        return { ok: false, reason: upstreamReasonMap[error.reason], model: null };
+        return {
+          ok: false,
+          reason: upstreamReasonMap[error.reason],
+          model: null,
+        };
       }
       throw error;
     }
@@ -181,7 +192,8 @@ export class AiAssistSettingsService {
     const resolution = this.runtime.resolveFromRow(row);
     const env = process.env;
     const envEnabled = aiAssistEnabled(env);
-    const source = row !== undefined ? "DATABASE" : envEnabled ? "ENVIRONMENT" : "NONE";
+    const source =
+      row !== undefined ? "DATABASE" : envEnabled ? "ENVIRONMENT" : "NONE";
     const endpoint =
       row !== undefined
         ? row.endpoint
@@ -209,9 +221,7 @@ export class AiAssistSettingsService {
       timeoutMs,
       maxTokens,
       keyConfigured:
-        row !== undefined
-          ? true
-          : ready && resolution.source === "ENVIRONMENT",
+        row !== undefined ? true : ready && resolution.source === "ENVIRONMENT",
       keyHint: row !== undefined ? row.apiKeyHint : null,
       rowVersion: row !== undefined ? row.rowVersion : null,
       updatedAt: row !== undefined ? row.updatedAt : null,

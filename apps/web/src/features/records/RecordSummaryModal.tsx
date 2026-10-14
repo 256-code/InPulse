@@ -212,6 +212,7 @@ export function RecordSummaryModal({
             { value: "", label: "全部项目" },
             ...projects.map(projectSelectOption),
           ]}
+          animated
         />
       </div>
       <div className="summary-filter-row">
@@ -241,6 +242,7 @@ export function RecordSummaryModal({
                 label: member.name,
               })),
             ]}
+            animated
           />
         ) : null}
       </div>

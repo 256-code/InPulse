@@ -30,6 +30,17 @@ export interface AiAssistDraft {
   readonly truncated: boolean;
 }
 
+/** 一次草稿生成的输入：模式 + 用户原文（补充说明已由前端拼进 text）。 */
+export interface AiAssistDraftRequest {
+  readonly mode: DocumentImportAssistMode;
+  readonly text: string;
+  /**
+   * 整项目导入时要点名的创建者姓名（本次导入人），由服务端从当前 Session 读出；
+   * 只进 system 提示词，不写日志、不落库；取不到时不传，由提示词要求不要编造。
+   */
+  readonly creatorName?: string | undefined;
+}
+
 const LOGGER_CONTEXT = "DocumentImportAiAssist";
 const MAX_RESPONSE_JSON_CHARS = 2_000_000;
 /** 契约输出上限 200000 字符；超出按上游响应非法处理（ADR-067 2.7）。 */
@@ -51,10 +62,7 @@ export class DocumentImportAiAssistClient {
 
   async generateDraft(
     config: AiAssistConfig,
-    input: {
-      readonly mode: DocumentImportAssistMode;
-      readonly text: string;
-    },
+    input: AiAssistDraftRequest,
   ): Promise<AiAssistDraft> {
     const startedAt = Date.now();
     const response = await this.callUpstream(
@@ -69,8 +77,24 @@ export class DocumentImportAiAssistClient {
       startedAt,
       input,
     );
-    const draft = await this.parseSuccessResponse(response, config);
-    this.logCall(input, config, "ok", startedAt, undefined);
+    let draft: AiAssistDraft;
+    try {
+      draft = await this.parseSuccessResponse(response, config);
+    } catch (error) {
+      // 2xx 但结构不对：把上游状态码记进日志，才分得清「上游报错」和「上游换了返回形状」。
+      if (error instanceof AiAssistUpstreamError) {
+        this.logCall(
+          input,
+          config,
+          "failed",
+          startedAt,
+          error.reason,
+          response.status,
+        );
+      }
+      throw error;
+    }
+    this.logCall(input, config, "ok", startedAt, undefined, response.status);
     return draft;
   }
 
@@ -92,37 +116,58 @@ export class DocumentImportAiAssistClient {
       startedAt,
       undefined,
     );
-    let raw: string;
     try {
-      raw = await response.text();
-    } catch {
-      throw new AiAssistUpstreamError("invalid-response");
+      let raw: string;
+      try {
+        raw = await response.text();
+      } catch {
+        throw new AiAssistUpstreamError("invalid-response");
+      }
+      if (raw.length > MAX_RESPONSE_JSON_CHARS) {
+        throw new AiAssistUpstreamError("invalid-response");
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        throw new AiAssistUpstreamError("invalid-response");
+      }
+      const choices = isRecord(payload) ? payload["choices"] : undefined;
+      const first = Array.isArray(choices) ? choices[0] : undefined;
+      const message =
+        isRecord(first) && isRecord(first["message"])
+          ? first["message"]
+          : undefined;
+      if (message === undefined || typeof message["content"] !== "string") {
+        throw new AiAssistUpstreamError("invalid-response");
+      }
+      const responseModel = isRecord(payload) ? payload["model"] : undefined;
+      const model =
+        typeof responseModel === "string" && responseModel.trim().length > 0
+          ? responseModel.trim().slice(0, 200)
+          : config.model;
+      this.logCall(
+        undefined,
+        config,
+        "ok",
+        startedAt,
+        undefined,
+        response.status,
+      );
+      return { model };
+    } catch (error) {
+      if (error instanceof AiAssistUpstreamError) {
+        this.logCall(
+          undefined,
+          config,
+          "failed",
+          startedAt,
+          error.reason,
+          response.status,
+        );
+      }
+      throw error;
     }
-    if (raw.length > MAX_RESPONSE_JSON_CHARS) {
-      throw new AiAssistUpstreamError("invalid-response");
-    }
-    let payload: unknown;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      throw new AiAssistUpstreamError("invalid-response");
-    }
-    const choices = isRecord(payload) ? payload["choices"] : undefined;
-    const first = Array.isArray(choices) ? choices[0] : undefined;
-    const message =
-      isRecord(first) && isRecord(first["message"])
-        ? first["message"]
-        : undefined;
-    if (message === undefined || typeof message["content"] !== "string") {
-      throw new AiAssistUpstreamError("invalid-response");
-    }
-    const responseModel = isRecord(payload) ? payload["model"] : undefined;
-    const model =
-      typeof responseModel === "string" && responseModel.trim().length > 0
-        ? responseModel.trim().slice(0, 200)
-        : config.model;
-    this.logCall(undefined, config, "ok", startedAt, undefined);
-    return { model };
   }
 
   private async callUpstream(
@@ -153,7 +198,7 @@ export class DocumentImportAiAssistClient {
     }
     if (!response.ok) {
       const reason = await this.classifyErrorResponse(response);
-      this.logCall(input, config, "failed", startedAt, reason);
+      this.logCall(input, config, "failed", startedAt, reason, response.status);
       throw new AiAssistUpstreamError(reason);
     }
     return response;
@@ -180,7 +225,13 @@ export class DocumentImportAiAssistClient {
       response.status === 413 ||
       response.status === 422
     ) {
-      if (/context|token|too long|maximum|length/i.test(bodyText)) {
+      // 「文件太大 / 载荷过大」在两个上游都表现为 400/413，提示用户精简比
+      // 「返回了无法识别的内容」有用得多。
+      if (
+        /context|token|too long|too large|maximum|length|payload|request entity/i.test(
+          bodyText,
+        )
+      ) {
         return "context-limit";
       }
     }
@@ -218,7 +269,15 @@ export class DocumentImportAiAssistClient {
       throw new AiAssistUpstreamError("invalid-response");
     }
     const markdown = content.trim();
-    if (markdown.length === 0 || markdown.length > MAX_MARKDOWN_CHARS) {
+    if (markdown.length === 0) {
+      // 推理模型（响应里带 reasoning_content）会先把输出预算花在推理上：预算耗尽时
+      // 上游照样回 200，但 content 为空且 finish_reason=length，正文永远没机会输出。
+      // 这不是「返回形状非法」，归到长度上限，让提示落到可操作的方向上。
+      throw new AiAssistUpstreamError(
+        finishReason === "length" ? "context-limit" : "invalid-response",
+      );
+    }
+    if (markdown.length > MAX_MARKDOWN_CHARS) {
       throw new AiAssistUpstreamError("invalid-response");
     }
     const responseModel = isRecord(payload) ? payload["model"] : undefined;
@@ -234,15 +293,15 @@ export class DocumentImportAiAssistClient {
   }
 
   private logCall(
-    input:
-      | { readonly mode: DocumentImportAssistMode; readonly text: string }
-      | undefined,
+    input: AiAssistDraftRequest | undefined,
     config: AiAssistConfig,
     status: "ok" | "failed",
     startedAt: number,
     reason: AiAssistFailureReason | undefined,
+    upstreamStatus: number | null = null,
   ): void {
     // 只记录调用元数据，不记录正文与密钥（ADR-067 2.5 / ADR-068 2.3）。
+    // 失败时带上上游 HTTP 状态码：不然「上游报错」和「上游换了返回形状」在日志里长得一样。
     const line = JSON.stringify({
       kind: input === undefined ? "probe" : "draft",
       mode: input?.mode ?? "PROBE",
@@ -250,6 +309,7 @@ export class DocumentImportAiAssistClient {
       inputChars: input?.text.length ?? 0,
       status,
       reason: reason ?? "none",
+      upstreamStatus,
       elapsedMs: Date.now() - startedAt,
     });
     if (status === "ok") {

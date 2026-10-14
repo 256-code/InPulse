@@ -207,7 +207,8 @@ const AI_ASSIST_REASON_MESSAGES: Readonly<Record<string, string>> = {
   "rate-limited": "AI 服务请求过于频繁（上游限流），请稍后重试。",
   timeout: "AI 服务响应超时，请稍后重试或精简文档。",
   network: "无法连接 AI 服务（网络故障），请稍后重试或先手动粘贴模板。",
-  "context-limit": "文档超出模型上下文上限，请精简或分次生成后再试。",
+  "context-limit":
+    "文档超出模型长度上限，或模型推理占满了输出预算：请精简文档或分次生成，也可让管理员调高「最大输出 tokens」。",
   "invalid-response": "AI 服务返回了无法识别的内容，请稍后重试。",
 };
 

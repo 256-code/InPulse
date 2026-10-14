@@ -26,6 +26,9 @@
 #          OFFSITE_CREDENTIALS_FILE，以及发布清单注入的 BACKUP_GIT_SHA / BACKUP_IMAGE_REF
 #        - api 的 ADR-067 AI 辅助转换读 AI_ASSIST_*（默认关闭；启用时密钥只经
 #          /run/secrets/ai_assist_api_key，禁用时该文件用空占位即可）
+#        - api 的 ADR-068 管理员在线配置另读 AI_ASSIST_ENCRYPTION_KEY_FILE /
+#          AI_ASSIST_ENCRYPTION_KEY_VERSION（加密落库密钥用主密钥）；只在需要
+#          加密或解密已存密钥时读取，未启用时可放空占位文件但文件须存在
 #      技术设计 §11.2 的泛化 `DB_PASSWORD_FILE` 与代码命名仍未统一，属于生产前
 #      人工定案项；本拓扑按当前代码落地，不静默改写设计或代码。
 #   3. /health/live 与 /health/ready 已实现，应用全局前缀为 /api/v1；
@@ -157,6 +160,10 @@ services:
       AI_ASSIST_TIMEOUT_MS: "${AI_ASSIST_TIMEOUT_MS:-60000}"
       AI_ASSIST_MAX_TOKENS: "${AI_ASSIST_MAX_TOKENS:-8192}"
       AI_ASSIST_API_KEY_FILE: /run/secrets/ai_assist_api_key
+      # ADR-068 管理员在线配置的主密钥（AES-256-GCM 信封加密）：只从 Secret
+      # 文件读取，禁止任何环境变量或明文兜底；未启用在线配置时可放空占位。
+      AI_ASSIST_ENCRYPTION_KEY_FILE: /run/secrets/ai_assist_encryption_key
+      AI_ASSIST_ENCRYPTION_KEY_VERSION: "${AI_ASSIST_ENCRYPTION_KEY_VERSION:-1}"
     depends_on:
       db:
         condition: service_healthy
@@ -195,6 +202,11 @@ services:
         mode: "0400"
       - source: ai_assist_api_key
         target: /run/secrets/ai_assist_api_key
+        uid: "10001"
+        gid: "10001"
+        mode: "0400"
+      - source: ai_assist_encryption_key
+        target: /run/secrets/ai_assist_encryption_key
         uid: "10001"
         gid: "10001"
         mode: "0400"
@@ -393,6 +405,9 @@ secrets:
   # ADR-067：AI 辅助转换密钥（OpenAI 兼容中转站）；未启用时可放空占位文件。
   ai_assist_api_key:
     file: ./secrets/ai_assist_api_key
+  # ADR-068：管理员在线配置的主密钥（一行 `version:hex`）；未启用时可放空占位文件。
+  ai_assist_encryption_key:
+    file: ./secrets/ai_assist_encryption_key
   audit_worm_credentials:
     file: ./secrets/audit_worm_credentials
   audit_archive_signing_key:

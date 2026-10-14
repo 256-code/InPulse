@@ -2546,7 +2546,7 @@ a:focus-visible {
   align-items: center;
   gap: 8px;
 }
-/* ADR-067 AI 辅助转换区块：与格式速查同为浅底说明卡，实线边框表示这是可选的 AI 入口。 */
+/* ADR-067 AI 辅助转换区块：与必填要素说明同为浅底说明卡，实线边框表示这是可选的 AI 入口。 */
 .import-assist-panel {
   display: flex;
   flex-direction: column;
@@ -2572,7 +2572,7 @@ a:focus-visible {
   font-size: 12px;
   line-height: 1.7;
 }
-/* 文档导入弹窗的格式速查：左竖线 + 淡底，帮用户或 AI 对齐模板字段名，避免解析不匹配。 */
+/* 文档导入弹窗的必填要素说明：左竖线 + 淡底，一句话说清导入前要交代哪些东西。 */
 .import-format-guide {
   border-left: 3px solid #c9d8e8;
   background: #f5f8fb;
@@ -2582,33 +2582,11 @@ a:focus-visible {
   font-size: 12px;
   line-height: 1.9;
 }
-.import-format-guide-title {
-  margin: 0 0 4px;
-  color: #314c65;
-  font-size: 12px;
-  font-weight: 600;
-}
-.import-format-guide ul {
+.import-format-guide p {
   margin: 0;
-  padding-left: 18px;
 }
-.import-format-guide code {
-  color: #314c65;
-  font-size: 11px;
-  background: #e7eef6;
-  padding: 1px 5px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-.import-format-guide strong {
-  color: #314c65;
-  font-weight: 600;
-}
-/* 选择文件读取成功后的提示行（说明内容已填入文本框、可编辑后预览）。 */
-.import-file-hint {
-  margin: 0;
-  color: #61788e;
-  font-size: 12px;
+.import-format-guide p + p {
+  margin-top: 6px;
 }
 .calm-section-title h3 {
   color: #314c65;
@@ -6882,4 +6860,921 @@ td.due-overdue {
   .popover {
     animation: none;
   }
+}
+
+/* ==========================================================================
+   ADR-069 文档导入工作台（2026-10-13）：左右分栏 + 结构化草稿 + 追问对话。
+   左栏是模板草稿（零线条、模块浅底分组，点哪改哪），右栏是 AI 助手；
+   空态左栏是浅底拖入区，右栏是空对话与禁用的输入行。
+   配色沿用产品确认的模拟页：模块绿 #e8f5ec / #2f7d4f，功能紫 #eeeaff / #6b58c4，
+   待补暖色 #fff3d6 / #8a6512，主色 #2472c3。
+   ========================================================================== */
+/* 双类名盖过 .surface-modal-lg 的 840px：工作台要放下两栏。 */
+.surface-modal.import-workbench {
+  width: min(1080px, calc(100vw - 56px));
+}
+.import-workbench .drawer-header {
+  padding: 18px 22px;
+}
+.import-workbench-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 22px 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.import-workbench-error {
+  flex-shrink: 0;
+}
+.import-panes {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.import-pane,
+.import-assist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #e2eaf3;
+  border-radius: 11px;
+  padding: 12px 13px;
+}
+.import-pane {
+  flex: 1.08;
+  background: #fff;
+}
+.import-assist {
+  flex: 0.92;
+  background: #f8fbfe;
+}
+/* 左栏内容区（空态拖入区 / 结构化草稿 / 原文）：拖动时虚线框只画这一块，
+   不再罩住整个工作台主体。 */
+.import-pane-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.import-pane-head,
+.import-assist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.import-pane-title {
+  color: #314c65;
+  font-size: 13px;
+  font-weight: 600;
+}
+.import-pane-headright,
+.import-assist-headright {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 「内容梳理 / 预览文档」下划线页签：只在有草稿后出现。 */
+.import-tabs {
+  display: flex;
+  gap: 16px;
+}
+.import-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 0 0 6px;
+  margin: 0;
+  font-size: 12.5px;
+  color: #5a7591;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.import-tabs button.is-on {
+  color: #16273a;
+  font-weight: 600;
+  border-bottom-color: #2472c3;
+}
+.import-pill {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f1fb;
+  color: #2f6fb0;
+}
+.import-pill.is-warn {
+  background: #fff3d6;
+  color: #8a6512;
+}
+.import-pill.is-danger {
+  background: #fdf0c4;
+  color: #7a5300;
+}
+.import-assist-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #16273a;
+}
+.import-assist-count {
+  font-size: 12.5px;
+  color: #5a7591;
+}
+/* 空态拖入区：浅底、不描边（用户定稿的那一版）。 */
+.import-drop {
+  flex: 1 1 auto;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  border-radius: 10px;
+  background: #f2f7fc;
+  color: #9dc2e6;
+}
+.import-drop.is-dragging {
+  background: #e8f1fb;
+  color: #2472c3;
+}
+.import-drop-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #35577a;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.import-drop-note {
+  margin: 0;
+  font-size: 12px;
+  color: #9db1c5;
+  line-height: 1.85;
+}
+.import-drop-or {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: #8fa5bb;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* 结构化草稿：零线条，靠字号 / 字重 / 留白分层，模块垫极浅底分组。 */
+.import-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.import-draft.is-hidden,
+.import-draft-raw.is-hidden {
+  display: none !important;
+}
+.import-draft-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.import-draft-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #16273a;
+  letter-spacing: 0.2px;
+}
+.import-draft-count {
+  font-size: 11.5px;
+  color: #9db1c5;
+}
+.import-draft-warn {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #8a6512;
+  background: #fff7e2;
+  border: 1px solid #f0dca6;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.import-draft-scroll {
+  flex: 1 1 auto;
+  /* 没有下限：空间被挤小的时候跟着缩（内容照样能滚），否则这个盒子会伸出
+     .import-draft 之外，把下面的提示行/文件行压出重影。 */
+  min-height: 0;
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.import-draft-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f7fafd;
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+.import-draft-modname {
+  font-size: 14px;
+  font-weight: 600;
+  color: #16273a;
+}
+.import-draft-meta,
+.import-draft-desc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12.5px;
+  color: #5a7591;
+}
+.import-draft-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+.import-draft-funcname {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #35577a;
+}
+.import-draft-task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding-left: 14px;
+  font-size: 12.5px;
+  color: #24405c;
+}
+.import-draft-taskname {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.import-draft-taskmeta {
+  flex: none;
+  font-size: 11.5px;
+  color: #8fa5bb;
+}
+.import-draft-taskextra {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11.5px;
+  color: #8fa5bb;
+}
+.import-draft-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.import-draft-fieldname {
+  /* 长文本值会撑满整行；标签不参与收缩也不折行，避免「项目说明」竖排。 */
+  flex: none;
+  white-space: nowrap;
+  color: #9db1c5;
+}
+/* 点哪改哪：默认是文字，点一下变输入框。 */
+.import-draft-value {
+  border: 0;
+  background: transparent;
+  padding: 0 3px;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  border-bottom: 1px dashed #cfdcea;
+  border-radius: 4px;
+  text-align: left;
+}
+.import-draft-value:hover {
+  background: #eef4fb;
+  border-bottom-color: #9dc2e6;
+}
+.import-draft-value.empty {
+  color: #8a6512;
+  background: #fff3d6;
+  border-bottom-color: #ecd9a4;
+}
+.import-draft-editor {
+  border: 1px solid #a9c8e8;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: #24405c;
+  background: #fff;
+  outline: none;
+  box-shadow: 0 0 0 3px #2472c31f;
+  min-width: 120px;
+}
+/* 成员字段按标签编辑（2026-10-14）：已写定的名字各是一个标签（带 ×），末尾的窄输入框只装
+   「正在输入的那一段」。这样第二个人打中文不再被前一段名字打断，候选列表也能一直挂着接着挑
+   下一个。标签与「指派给」的选中态同一套浅蓝底。 */
+.import-draft-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-width: 120px;
+}
+.import-draft-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid #cfe0f2;
+  border-radius: 999px;
+  padding: 0 3px 0 7px;
+  background: #eef5fc;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: #2d5b8b;
+  white-space: nowrap;
+}
+/* 创建者是固定成员（ADR-071）：名字就在名单里，但没有 × —— 用户删不掉，
+   样式从「可编辑的浅蓝」退成中性灰，一眼看出这枚不是用户自己加的。 */
+.import-draft-tag.is-locked {
+  padding-right: 7px;
+  border-color: #d8dde4;
+  background: #f4f6f8;
+  color: #55606d;
+  cursor: default;
+}
+.import-draft-tag-remove {
+  border: 0;
+  margin: 0;
+  padding: 1px 3px;
+  border-radius: 50%;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: #7d9ab8;
+  cursor: pointer;
+}
+.import-draft-tag-remove:hover {
+  background: #d7e6f6;
+  color: #2d5b8b;
+}
+.import-draft-member-input {
+  /* 标签后面还要留一段能写字的地方：打完一个字就出候选，不用很宽。 */
+  flex: 1 1 104px;
+  min-width: 96px;
+}
+
+.import-draft-raw {
+  font-family: ui-monospace, Consolas, monospace !important;
+  font-size: 12.5px !important;
+  line-height: 1.95 !important;
+  min-height: 300px;
+}
+.import-assist-msgs {
+  /* 消息区不封顶：右栏被左栏 stretch 撑高时，这里一旦提前收住，flex 列会把余量留在
+     列尾，输入行就浮在面板底部之上。让消息区吃掉余量，输入行自然贴底。 */
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* 拖动文件时的落点提示：框只罩左栏内容区（空态拖入区或草稿区），
+   但窗口级 drop 仍接受在弹窗任何位置松手。 */
+.import-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  /* 不吃指针事件：拖放仍然落在底下的元素上，再冒泡到窗口级处理。 */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #1467d8;
+  font-size: 13px;
+  text-align: center;
+  /* 底色要压住下面的草稿 / 空态文案，否则提示行会和被盖住的文字叠在一起。 */
+  background: rgb(255 255 255 / 95%);
+  border: 2px dashed #7fb1e8;
+  border-radius: 11px;
+}
+/* 读取 / 整理期间的进行中提示：右栏不再一片死寂。 */
+.import-msg.is-busy {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  color: #46617c;
+  font-size: 12.5px;
+  background: #f2f7fd;
+  border-color: #dbe8f6;
+}
+.import-busy-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2d84e6;
+  animation: import-busy-pulse 1s ease-in-out infinite;
+}
+@keyframes import-busy-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .import-busy-dot {
+    animation: none;
+    opacity: 1;
+  }
+}
+.import-assist-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  color: #b9c6d4;
+  font-size: 12.5px;
+  line-height: 1.9;
+  padding: 0 24px;
+}
+/* 「交给 AI 整理」：只在左栏还是自由正文（没有项目段 / 模块段）时出现。 */
+.import-assist-action {
+  align-self: flex-start;
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+/* 对话：AI 白气泡靠左，用户蓝气泡靠右，都不标发言者。 */
+.import-msg {
+  display: flex;
+  align-self: flex-start;
+  max-width: 92%;
+  background: #fff;
+  border: 1px solid #e4ecf5;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #24384c;
+}
+.import-msg.me {
+  align-self: flex-end;
+  background: #eaf3fe;
+  border-color: #d3e6fb;
+  color: #16406b;
+}
+.import-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.import-chip {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fff3d6;
+  color: #8a6512;
+  border: 1px solid #ecd9a4;
+}
+.import-chip.is-err {
+  background: #fdecea;
+  border-color: #e8a9a3;
+  color: #b03a2e;
+  font-weight: 600;
+}
+/* 待确认成员：不改草稿也不猜人，让用户在候选里点。 */
+.import-unmatched {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #f0dca6;
+  background: #fffbf0;
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+.import-unmatched-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a6512;
+}
+.import-unmatched-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 12px;
+}
+.import-unmatched-name {
+  font-weight: 600;
+  color: #7a5300;
+}
+.import-unmatched-pos,
+.import-unmatched-kind {
+  color: #8fa5bb;
+  font-size: 11.5px;
+}
+.import-unmatched-cands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+.import-member-picker {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow: auto;
+}
+.import-composer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid #e5ecf4;
+  padding-top: 9px;
+}
+.import-composer input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid #cfdcea;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #24384c;
+  background: #fff;
+}
+.import-composer input::placeholder {
+  color: #9db1c5;
+}
+.import-composer input:disabled {
+  background: #f7fafd;
+  color: #c3cfdb;
+}
+.import-composer .primary-button,
+.import-composer .ant-btn-primary {
+  flex: none;
+  height: 36px;
+}
+.import-assist-issues {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-issue {
+  margin: 0;
+  font-size: 11.5px;
+  color: #7d8f9f;
+}
+.import-issue.is-err {
+  color: #b03a2e;
+}
+/* 工作台把必填要素说明折成可展开的一条，避免占掉左栏高度。 */
+.import-workbench .import-format-guide {
+  flex-shrink: 0;
+  margin: 10px 0 14px;
+}
+.import-workbench .import-format-guide summary {
+  cursor: pointer;
+  color: #314c65;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.import-workbench .import-format-guide[open] summary {
+  margin-bottom: 4px;
+}
+/* 页脚：左边文件名 / 解析结果，右边动作按钮。 */
+.import-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.import-foot-note {
+  font-size: 12.5px;
+  color: #5a7591;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-foot-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* 预览态：项目名与元信息一行，下面按模块卡片列出功能与任务。 */
+.import-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 22px 0;
+  min-height: 0;
+  overflow: auto;
+}
+.import-summary-line {
+  margin: 0;
+  font-size: 13px;
+  color: #24405c;
+  line-height: 1.75;
+}
+.import-preview-proj {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-preview-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #16273a;
+}
+.import-preview-meta {
+  font-size: 12.5px;
+  color: #5a7591;
+}
+.import-plan-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.import-plan-card {
+  border: 1px solid #e3ebf4;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.import-plan-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f4f8fc;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #24405c;
+}
+.import-plan-block {
+  padding: 9px 11px 10px;
+}
+.import-plan-block + .import-plan-block {
+  border-top: 1px dashed #e3ebf4;
+}
+.import-plan-func {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #35577a;
+  margin-bottom: 6px;
+}
+.import-plan-task {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #24405c;
+  border-left: 2px solid #dbe7f4;
+  padding-left: 9px;
+  margin-top: 4px;
+}
+.import-plan-taskname {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.import-plan-taskmeta {
+  flex: none;
+  color: #5a7591;
+  font-size: 11.5px;
+}
+/* 标签：模块绿、功能紫、复用态浅灰，一眼分辨层级。 */
+.import-tag {
+  font-style: normal;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: #e8f5ec;
+  color: #2f7d4f;
+}
+.import-tag.is-feature {
+  background: #eeeaff;
+  color: #6b58c4;
+}
+.import-tag.is-reuse {
+  background: #eef4fb;
+  color: #35577a;
+}
+.import-tag.is-module-task {
+  background: #f3f5f8;
+  color: #7b90a5;
+}
+@media (max-width: 900px) {
+  /* 窄屏改成上下排列后，两栏不再按 flex 比例硬分高度：内容一多，比例分到的高度
+     装不下，内容就会越界压到相邻元素上。这里让两栏各自按内容排，整列放不下时
+     由 .import-panes 自己滚动，任何元素都不再落在别人身上。 */
+  .import-panes {
+    flex-direction: column;
+    overflow: auto;
+  }
+  .import-pane,
+  .import-assist {
+    flex: none;
+  }
+  /* 草稿区保留 46vh 的内部滚动（不再整栏摊开），否则内容一多就把右栏推到几千像素外；
+     右栏对话封在 240px，两栏合计放不下时由 .import-panes 滚动。 */
+  .import-assist-msgs {
+    max-height: 240px;
+  }
+}
+/* 「缺什么补什么」：黄色虚线小按钮，点一下在节点末尾插入一个空字段行。
+   缺失一律用黄色提示（与空值、右栏缺失标签同一套语义）。 */
+.import-draft-add {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.import-draft-addbtn {
+  border: 1px dashed #e3c98a;
+  background: #fffaf0;
+  border-radius: 999px;
+  padding: 0 8px;
+  margin: 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: #8a6512;
+  cursor: pointer;
+}
+.import-draft-addbtn:hover {
+  background: #fff3d6;
+  border-color: #d9b96a;
+  color: #7a5300;
+}
+/* 必填字段的入口：缺了服务端会拒绝，所以走红色实线 + 浅红底，与黄色的「建议补」
+   （虚线 + 暖黄）一眼分开——两者同色时用户分不清哪个不补会被打回。 */
+.import-draft-addbtn.is-required {
+  border-style: solid;
+  border-color: #e8a9a3;
+  background: #fdecea;
+  color: #b03a2e;
+  font-weight: 600;
+}
+.import-draft-addbtn.is-required:hover {
+  background: #fbdfdb;
+  border-color: #d98a82;
+  color: #8f2b21;
+}
+.import-unmatched-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: #9b8a5f;
+  line-height: 1.6;
+}
+
+/* 成员字段的账号建议：点「初始成员 / 负责人」的值变输入框，边打边按姓名筛出账号（点一条
+   就填进草稿）。antd-adapter.css 为顶栏的账户 / 通知气泡把 ``.ant-popover-container`` 压成
+   1×1 透明盒、内容层绝对定位；那两条规则写在 ``div.ant-popover > ...`` 上，会一并作用到这里。
+   照 features/common/components/calm-date-picker.css 的写法再加一个 `.import-member-popover`
+   提升特异性，把容器还原成正常尺寸的白色卡片。
+   z-index 必须显式抬到弹窗之上：适配层为了还原原型层级把 `.ant-popover` 压到 15，而弹窗
+   （`.ant-modal-mask` / `.ant-modal-wrap`）是 1000，不抬就会被整个盖住。 */
+div.ant-popover.import-member-popover {
+  z-index: 1080;
+}
+/* 出现动画（2026-10-14）：成员候选挂在编辑器下方、编辑期间一直开着，改前是从无到有硬蹦；
+ * 与侧栏气泡 / 下拉弹层统一成 150ms 淡入。只动 opacity：transform 会影响 rc-align 的首帧测量。
+ * 每次进入编辑态都是新挂载（destroyOnHidden），所以每次打开都会重播。 */
+div.ant-popover.import-member-popover {
+  animation-name: import-member-popover-in !important;
+  animation-duration: 150ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes import-member-popover-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  div.ant-popover.import-member-popover {
+    animation: none;
+  }
+}
+div.ant-popover.import-member-popover > div.ant-popover-container {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 1px solid #dce7f2;
+  border-radius: 10px;
+  background: #fff;
+  background-clip: border-box;
+  box-shadow:
+    0 18px 44px -14px #10253e2e,
+    0 3px 8px -3px #10253e14;
+}
+div.ant-popover.import-member-popover
+  > div.ant-popover-container
+  > div.ant-popover-content {
+  position: static;
+}
+.import-member-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 236px;
+  max-height: 218px;
+  overflow: auto;
+  padding: 6px;
+}
+.import-member-suggest-note {
+  margin: 0 0 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #9db1c5;
+  line-height: 1.5;
+}
+.import-member-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: #24405c;
+  text-align: left;
+  cursor: pointer;
+}
+.import-member-suggest-item:hover {
+  background: #eef4fb;
+}
+/* 头像色块与「指派给」下拉同源（CalmSelect 的 .calm-select-avatar）。 */
+.import-member-suggest-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+.import-member-suggest-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.import-member-suggest-admin {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: #eaf1fa;
+  font-size: 10.5px;
+  color: #5a7591;
 }

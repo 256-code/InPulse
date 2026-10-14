@@ -22,13 +22,24 @@ function extractMarker(text) {
   return marker ? marker[0] : "AIE2E-FALLBACK";
 }
 
-function buildContent(mode, text) {
+/** ADR-071 修订：草稿要写出创建者，姓名由服务端注进 system 提示词（本次导入人）。 */
+function extractCreatorName(systemText) {
+  const named = /本次导入人的姓名是「([^」]+)」/.exec(systemText);
+  return named ? named[1] : "";
+}
+
+function buildContent(mode, text, creatorName) {
   const owner = extractOwner(text);
   const marker = extractMarker(text);
   const lines = [];
   if (mode === "WHOLE_PROJECT") {
     lines.push("# 项目：AI 导入项目 " + marker);
     lines.push("- 项目编码：AIP" + marker.slice(6, 14));
+    // ADR-071 修订：先写创建者（取自提示词），再写文档里的全部任务负责人。
+    lines.push(
+      "- 初始成员：" +
+        [creatorName, owner].filter((item) => item.length > 0).join(", "),
+    );
     lines.push("");
   }
   lines.push("## 模块：AI 导入模块 " + marker);
@@ -62,6 +73,7 @@ const server = createServer((request, response) => {
     // user 才是抽取出来的用户原文；模式从 system 的模式约束里判定。
     let mode = "IN_PROJECT";
     let text = "";
+    let creatorName = "";
     try {
       const body = JSON.parse(raw);
       const messages =
@@ -75,16 +87,46 @@ const server = createServer((request, response) => {
       const systemMessage = messages.find(
         (message) => message && message.role === "system",
       );
-      if (
-        systemMessage &&
-        typeof systemMessage.content === "string" &&
-        systemMessage.content.includes("当前模式：整项目导入")
-      ) {
-        mode = "WHOLE_PROJECT";
+      if (systemMessage && typeof systemMessage.content === "string") {
+        creatorName = extractCreatorName(systemMessage.content);
+        if (systemMessage.content.includes("当前模式：整项目导入")) {
+          mode = "WHOLE_PROJECT";
+        }
       }
     } catch {
       // 故意保持宽松：stub 只需要 user message 里的标记行。
     }
+    // 推理模型的真实形状：正文为空、内容全在 reasoning_content，finish_reason=length。
+    // 用户文本里带这个标记时照此应答，供 E2E 断言界面提示的是长度上限。
+    if (text.includes("AIE2E-OUTPUT-LIMIT")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "chatcmpl-e2e-output-limit",
+          object: "chat.completion",
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "",
+                reasoning_content: "推理占满了输出预算",
+              },
+              finish_reason: "length",
+            },
+          ],
+          usage: {
+            prompt_tokens: 32,
+            completion_tokens: 8192,
+            total_tokens: 8224,
+            completion_tokens_details: { reasoning_tokens: 8192 },
+          },
+        }),
+      );
+      return;
+    }
+
     const payload = {
       id: "chatcmpl-e2e-stub",
       object: "chat.completion",
@@ -92,7 +134,10 @@ const server = createServer((request, response) => {
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: buildContent(mode, text) },
+          message: {
+            role: "assistant",
+            content: buildContent(mode, text, creatorName),
+          },
           finish_reason: "stop",
         },
       ],

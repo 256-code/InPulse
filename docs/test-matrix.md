@@ -6138,3 +6138,327 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | DOC-IMPORT-AI-GATE-001 | 门禁 | 整链回归 | `pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 workspace）、`pnpm build`、`db:migrations:check`（38 个）、`db:seed:check`、`check:deps`、`check:frontend:boundaries`、`check:deploy:test`、`check:secrets`、`check:docs` 通过 | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未在本批执行（`test` 分支不触发工作流）；② E2E 的 AI 上游为本机回环 stub，未连真实中转站；③ `mammoth` 与 `pdfjs-dist` 为新增生产依赖，按仓库规则仍须独立依赖 PR 人工确认（本批已锁定精确版本、懒加载、PDF Worker 与 CSP 实测）；④ `pnpm deps:audit` 在本机 npm 镜像缺 audit endpoint，改用公共 registry 执行（结果见开发日志）。
+
+## 文档导入工作台（ADR-069，用户指示，2026-10-13 本地落库）
+
+用户指示（原话要点）：「现在这个状态下这个文档导入界面不好，我们早上讨论出来那个还不错，我们优化一下实现」，并在模拟稿上确认左右分栏工作台与成员名字追问。本批为纯前端（工作台）+ E2E 对齐，无服务端、契约、数据库与依赖改动，路由仍 110 条。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-WORKBENCH-DRAFT-UNIT-001 | Web 单元 | 结构化草稿往返与补字段 | `document-draft.test.ts` **10 例通过**：文本与结构化视图双向往返稳定；项目 / 模块 / 功能 / 任务层级与计数正确；`setDocumentDraftValue` 只改目标行；`insertDocumentDraftField` 插到节点末尾且序列化后仍可解析；无法归属的行进入 `looseLineIndexes` 不丢 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-MATCH-UNIT-001 | Web 单元 | 成员名字确定性匹配与追问文案 | `document-assignee-match.test.ts` **8 例通过**：姓名精确且唯一才命中；同名多人 / 相近姓名（包含关系、编辑距离不超过 1）记为 SIMILAR 且候选受上限约束；查不到记为 UNKNOWN；追问与补充说明文案、收集去重与来源标签 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-WEB-UNIT-001 | Web 单元 | 工作台交互 | `DocumentImportModal.test.tsx` **26 例通过**：空态无「待分析」标签且输入与预览禁用；拖入 / 选择文件；结构化草稿就地编辑与「＋字段」；补充说明重调同一路由；覆盖确认两条分支；未匹配成员候选点选生成补充说明；缺失项与状态 pill 计算 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-WEB-FULL-001 | Web 全量 | 前端回归 | `pnpm --filter @inpulse/web exec vitest run` → **105 文件 786 例全绿**（`document-import` 目录 4 文件 59 例）；`pnpm test:unit` 同批通过（api 78 文件 496 例、ops 9 文件 60 例） | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-TYPE-LINT-001 | 门禁 | 类型 / lint / 格式 | `pnpm --filter @inpulse/web typecheck` 通过；`pnpm lint` 通过（修掉 `document-draft.ts` 1 处 `no-useless-assignment`）；`pnpm format:check` 通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-BROWSER-001 | 浏览器实测（真实 dev + PostgreSQL） | 空态 / 草稿态 / 预览态 | 登录后逐态核对：空态（拖入区 + 空对话 + 禁用输入与预览）、草稿态（结构化草稿 + 计数 + 缺失 chip + 右栏对话）、长草稿滚动、预览失败（行级问题）与预览成功（计划卡片） | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-E2E-001 | 浏览器 E2E | 文档导入两个 spec 对齐新界面 | `node scripts/test-e2e-local.mjs tests/document-import-ai.spec.ts tests/document-import.spec.ts` → **5 例通过（17.8 秒）**；既有用例改为先展开文本区、预览改用 `document-import-preview`，布局回归用例改断言「页脚不被裁切 + 文本区内部滚动」 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-SOURCE-PANE-001 | Web 单元 + 浏览器 E2E | 「预览文档」页签只读对照原文 | `DocumentImportModal.test.tsx` **27 例通过**（AI 改写只进「模板内容」；`导入文档内容` 在 `assistSourceText` 非空时 `readOnly` 且展示原文）；E2E `document-import-ai.spec.ts` + `document-import.spec.ts` + `settings-ai-assist.spec.ts` **7 例通过（21.2 秒）** | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-COMPOSER-PIN-001 | 浏览器 E2E | 右栏输入行贴底（高窗口不悬空） | 新增 `document-import.spec.ts` 用例「文档导入右栏输入行贴底：高窗口下不留悬空空隙」：1280×1040 + 10 模块草稿把右栏撑高后，断言 `.import-composer` 底部与 `.import-assist` 底部只差面板下内边距（8–18px）；临时回退 `.import-assist-msgs { max-height: 38vh }` 时该用例红灯，恢复后绿灯 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-GAP-REPORT-001 | Web 单元 + 浏览器 E2E | 助手主动报告缺失信息：不重复头部计数、随草稿实时更新 | `DocumentImportModal.test.tsx` **30 例通过**：上传模板文件后右栏结论行含「必填还差 1 处（缺负责人 ×1）」「另有 4 处建议补齐（见下方标签）」且不含「已整理」；点「＋负责人」补上必填后立刻改口；只有自由正文时报「还没整理成模板结构」且不再显示空态；`document-import` 目录 **4 文件 62 例通过**；E2E `document-import-ai.spec.ts` 上传 .docx 后断言结论行出现、`document-import.spec.ts` 布局回归同批 6 例通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-ASSIST-RAW-001 | Web 单元 + 浏览器实测 | 自由正文可点「交给 AI 整理」 | `DocumentImportModal.test.tsx` **31 例通过**（新增 1 例：粘贴自由正文后出现「交给 AI 整理」，点击以 `IN_PROJECT` + 原文调用 `assistDocumentImport`、不弹覆盖确认、AI 草稿落进左栏后入口消失）；真实渲染截图核对该入口与点击后的草稿 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-PROMPT-MEMBERS-001 | API 单元 | 提示词要求带出「初始成员」 | `apps/api/test/ai-assist.client.test.ts` **9 例通过**（`WHOLE_PROJECT` 的 system 指令断言含「必须把这些名字写进「- 初始成员：」」）；未连真实中转站（只看提示词与本地 stub） | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-CROWD-001 | 浏览器 E2E（布局回归） | 拥挤时草稿区 / 右栏不越界压字 | `document-import.spec.ts` 新增用例「F-32 文档导入拥挤时不越界压字」：1280×620 与 880×620 下断言 `.import-draft-scroll` 底边 ≤ `.import-draft` 底边、`.import-composer` 底边 ≤ `.import-assist` 底边；把草稿滚动区的 `min-height: 200px` 与窄屏 `flex` 比例分高度回退成改动前时该用例红灯（越界 43 / 101px），修后 **9 例通过（27.6 秒）** | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-DROP-ANYWHERE-001 | Web 单元 + 浏览器 E2E（真实拖放） | 拖放不再只在空态生效 + 读取/整理有反馈 | `DocumentImportModal.test.tsx` 新增 2 例（已有草稿时窗口级拖放会读取并调用 `assistDocumentImport`、拖动出现落点提示；读取期间显示进行中提示）→ 目录 **4 文件 65 例通过**；`document-import-ai.spec.ts` 新增「已有草稿时把 PDF 拖到工作台上同样能分析（真实拖放）」（`DataTransfer` 拖到 `.import-pane`，断言落点提示与覆盖确认后草稿落位），三个 spec **10 例通过（28.6 秒）**；临时停用窗口级监听时该用例红灯 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-UPSTREAM-DIAG-001 | API 单元 | 上游失败可诊断且不泄露正文 | `apps/api/test/ai-assist.client.test.ts` **10 例通过**：413 + `Request Entity Too Large` → `context-limit`；失败日志含 `"upstreamStatus":500`（非 2xx）与 `"upstreamStatus":200`（2xx 但缺 `message.content`）、含 `inputChars`、不含文档正文 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-CONTRACT-001 | 契约 / 权限 | 无路由与权限变化 | `pnpm contract:validate` 110 条路由通过、`pnpm contract:drift` 无漂移、`pnpm permissions:check` 110 条操作 / 110 条路由通过；`packages/api-contract` 未改动 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-GATE-001 | 门禁 | 本轮整链回归 | `pnpm lint`、`pnpm format:check`、`pnpm typecheck`（8 workspace）、`pnpm test:unit`、`pnpm build`、`pnpm check:deps`（820 文件）、`pnpm check:frontend:boundaries`（344 模块）、`pnpm check:secrets`（1238 文件）、`pnpm check:deploy:test`、`pnpm db:migrations:check`（39 个）、`pnpm db:seed:check`、`pnpm check:docs` 通过；`pnpm deps:audit` 仅剩 1 个 moderate（`mammoth > argparse > sprintf-js`，ADR-067 已记录）且无 high | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-SINGLE-PICKER-001 | Web 单元 + 浏览器 E2E | 左栏只留一个「选择文件」入口（用户指示） | 删除 `hasContent` 时渲染的 `.import-pane-foot`「⬆ 选择文件」行与其样式；`document-import` 目录 **4 文件 66 例全绿**、`pnpm --filter @inpulse/web typecheck` 通过；`document-import.spec.ts` + `document-import-ai.spec.ts` **9 例通过（25.9 秒）**，其中矮窗口布局回归改为量测「文本区滚到自身末尾 + 左栏不越出工作台」 | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差：① 全量 Playwright 未跑（本批只改文档导入弹窗，其它 spec 不引用该弹窗；文档导入两个 spec 已定向跑通）；② E2E 的 AI 上游仍是本机回环 stub，未连真实中转站；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 本批同批修掉上一批遗留的两处红门禁（11 个文件未过 prettier、`AiAssistSettingsPanel.test.tsx` 给 `apiKey` 赋字面量），并记录 ADR-068 的文档同步缺口（本文件等仍写 107 条路由 / 38 个迁移，未同步 110 条与迁移 `0040`）。
+
+## AI 辅助转换管理员在线配置（ADR-068，2026-10-13 本地补记）
+
+ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当时的文档同步只覆盖了 ADR-067；本节与三份设计、权限矩阵、AGENTS.md 于 2026-10-13 补记，并给出本轮实测数字。
+
+本节补记时列出的四条未运行 / 已知偏差已于同日补齐（第二小批，见开发日志第一百四十条）：新增三条管理员路由的真实 PostgreSQL 集成用例、设置页 E2E，并把 `deploy/compose.yaml` 的主密钥接线补齐；下表新增对应行、原偏差说明同步更新。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-CONFIG-UNIT-002 | API 单元 | 配置优先级、密钥 keyring 与运行时解析 | 4 文件 **38 例通过**：`ai-assist.config.test.ts` 10 例（四层优先级与 fail closed）、`ai-assist-secret-keyring.test.ts` 9 例（keyring 解析、`version:hex`、非 `/run/secrets/*` 拒绝、test 逃生、读不到文件 fail closed）、`ai-assist-runtime.service.test.ts` 10 例（急停优先、数据库行优先、解密失败分类）、`ai-assist.client.test.ts` 9 例 | 本地通过（2026-10-13 补记实测） |
+| DOC-IMPORT-AI-WEB-UNIT-002 | Web 单元 | 管理员设置页与页签可见性 | 2 文件 **15 例通过**：`AiAssistSettingsPanel.test.tsx` 6 例（状态卡片、保存校验、密钥不回显、测试连接结果映射）、`AdminUsersPageView.test.tsx` 9 例（管理员可见「AI 辅助转换」页签、非管理员深链回退成员页） | 本地通过（2026-10-13 补记实测） |
+| DOC-IMPORT-AI-CONTRACT-002 | 契约 / 权限 | 3 条管理员路由与纯校验 allowlist | `pnpm contract:validate` **110 条路由**、`pnpm contract:drift` 无漂移、`pnpm permissions:check` **110 条操作 / 110 条路由**；`testAiAssistSettings` 在纯校验 allowlist 内 | 本地通过（2026-10-13 补记实测） |
+| DOC-IMPORT-AI-DATABASE-002 | 数据库集成 | 迁移 `0040` 与授权 | `pnpm db:migrations:check` 校验 **39 个**迁移（含 `0040_ai_assist_settings.sql`）；迁移尾部校验单行 CHECK、`app_runtime` SELECT / INSERT / UPDATE 且无 DELETE、`app_backup` 只读 | 本地通过（2026-10-13 补记实测） |
+| DOC-IMPORT-AI-ASSIST-INTEGRATION-002 | 真实 PostgreSQL API 集成 | assist 路由回归（管理配置改动后） | `document-import-assist.integration.test.ts` **9 例通过**（stub 上游 + `app_ci`） | 本地通过（2026-10-13 补记实测） |
+| DOC-IMPORT-AI-DEPLOY-002 | 部署预检 | compose 与 Secret 渲染 | `pnpm check:deploy:test` 通过、`pnpm check:secrets` 通过（1239 个文件） | 本地通过（2026-10-13 补记实测） |
+
+未运行 / 已知偏差的第一批（2026-10-13 补记）已全部补齐为下表；原偏差说明保留在对应历史行，补记状态见下表与开发日志第一百四十条。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-CONFIG-PG-003 | 真实 PostgreSQL API 集成 | 三条管理员路由全链路 | 新增 `apps/api/test/admin-ai-assist-api.integration.test.ts`，**11 例通过**（`app_ci`）：GET 匿名 401 / 成员 403 / 管理员 200（环境变量模式、`no-store`、密钥不回显）；PUT 缺 `Idempotency-Key` 400、缺 CSRF 401、跨域 403、成员 403 且不落库、首次缺密钥 422（`details.apiKey`）、保存全链路 200（AES-256-GCM 落库且密文不含明文、审计不含明文）、同 Key 幂等重放不重复写且不同摘要 409、`apiKey` 缺省保持密钥并递增 `row_version`；数据库行优先于环境变量；急停优先 `KILL_SWITCH`；主密钥不可用 `ENCRYPTION_KEY_UNAVAILABLE` 且保存 503；密文不可认证按配置非法分类且重存恢复；测试连接上游 401 映射 `AUTH` | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-CONFIG-PG-003B | 真实 PostgreSQL API 集成 | assist 与管理员配置同批回归 | `document-import-assist.integration.test.ts` 9 例 + `admin-ai-assist-api.integration.test.ts` 11 例，合跑 **2 文件 20 例通过**（`app_ci`） | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-CONFIG-E2E-003 | 浏览器 E2E | 设置页保存 → 测试连接 → 经数据库配置完成转换 | 新增 `apps/e2e/tests/settings-ai-assist.spec.ts`，**2 例通过**：管理员保存后来源切换为「在线配置（数据库，优先于环境变量）」、密钥尾号回显且输入框清空、测试连接回显上游模型；随后普通成员文档导入经数据库配置完成转换；`document-import.spec.ts` / `document-import-ai.spec.ts` 连同本条共 5 例通过，全量 Playwright **78 例通过（6.2 分钟）** | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-DEPLOY-003 | 部署预检 | compose 主密钥接线 | `deploy/compose.yaml` 为 api 新增 `AI_ASSIST_ENCRYPTION_KEY_FILE` / `AI_ASSIST_ENCRYPTION_KEY_VERSION`、只读 Secret 挂载（uid/gid 10001、mode 0400）与顶层 `secrets.ai_assist_encryption_key`；`deploy/.env.deploy.example` 增补 `AI_ASSIST_ENCRYPTION_KEY_VERSION`；`pnpm check:deploy:test` 通过、`pnpm check:secrets` 通过（1242 个文件） | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差（本小批遗留）：① E2E 的 AI 上游仍是本机回环 stub，未连真实中转站；② GitHub Actions 未在本批执行（`test` 分支不触发工作流）；③ `apps/api/test/ai-assist.client.test.ts` 现为 9 例，本文件 `DOC-IMPORT-AI-CONFIG-UNIT-001` 行写的 8 例是该批之前的数字；④ ADR-067 各行写的「107 条路由 / 38 个迁移」是当时状态，当前为 110 条 / 39 个。
+
+## AI 辅助转换上游返回形状修复（用户截图「无法识别的内容」，2026-10-13 本地落库）
+
+用户截图反馈：文档导入提示「AI 服务返回了无法识别的内容，请稍后重试。」。定案过程与证据见开发日志第一百五十二条；本批为服务端错误分类 + 前端文案修复，路由仍 110 条、迁移仍 39 个、固定 reason 枚举未变。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-OUTPUT-BUDGET-001 | API 单元 | 推理模型占满输出预算不再判成「响应非法」 | `apps/api/test/ai-assist.client.test.ts` **11 例通过**：新增「200 + 空 `content` + `finish_reason:"length"`（`reasoning_content` 非空）→ `context-limit`」，失败日志含 `"reason":"context-limit"` 与 `"upstreamStatus":200`、含 `inputChars`、不含文档正文；空 `content` 且 `finish_reason:"stop"` 仍归 `invalid-response`；`pnpm --filter @inpulse/api test:unit` **78 文件 498 例全绿** | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-OUTPUT-BUDGET-002 | Web 单元 | 长度上限提示给出可操作解法 | `DocumentImportModal.test.tsx` **31 例通过**（新增 1 例：`AI_ASSIST_UPSTREAM_FAILED` + `reason=context-limit` → 「文档超出模型长度上限，或模型推理占满了输出预算：请精简文档或分次生成，也可让管理员调高「最大输出 tokens」。」）；`document-import` 目录 **4 文件 66 例通过** | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-OUTPUT-BUDGET-003 | 浏览器 E2E | 推理上限走真实 UI | `apps/e2e/tests/document-import-ai.spec.ts` 新增「ADR-067 推理占满输出上限：提示长度上限而不是「无法识别的内容」」（stub 按 `AIE2E-OUTPUT-LIMIT` 标记回「空 content + `finish_reason=length`」）→ 该 spec **4 例通过（14.6 秒）**；用未含本修复的旧 `apps/api/dist`（17:08:45）跑同一用例时红灯，界面回落到截图的「无法识别的内容」，`pnpm --filter @inpulse/api build` 后绿灯 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-OUTPUT-BUDGET-004 | 真实中转站复现（人工，不入 CI） | 上游真实返回形状 | 直连 `https://newapi.libiaorobot.com/v1/chat/completions`（模型 `deepseek-v4-flash-vision-exp`，输出上限 8192）：`max_tokens=1` 探测 = `200` + `content:""` + `reasoning_content:"The"` + `finish_reason:"length"`；30k 字符输入 `completion_tokens=3851` / `reasoning_tokens=3674`；120k 字符输入 `completion_tokens=6703` / `reasoning_tokens=6479`（`finish_reason:"stop"`）。结论：该中转站为推理模型，输出预算被推理吃满时正文为空——正是本批修复的触发条件 | 本地复现（2026-10-13） |
+
+未运行 / 已知偏差（本批）：① 只定向跑 `document-import-ai.spec.ts`（本批改动只影响 assist 的错误分类与该弹窗文案，其余 spec 不引用）；② E2E 的 AI 上游仍为本机回环 stub，真实中转站只做过人工复现，未进 CI；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 本修复只改提示与分类，**不改变**上游把输出预算花光这件事——已建议在中转站侧调高「最大输出 tokens」（面板上限 200000）或改用非推理模型，默认值 8192 属 ADR-067 定案未动。
+
+## AI 助手对用户发言的回应（用户反馈「为什么会不理我」，2026-10-13 本地落库）
+
+用户截图：右栏常驻结论说「另有 1 处建议补齐（见下方标签）」，用户发了「要补充什么」之后对话里没有任何回应。定案见开发日志第一百五十四条：那句话是实时算出来的常驻结论，用户发言只被当成「补充说明」拼进文档重跑一次，对话里不留回应。本批让用户每说一句都得到一条助手气泡；不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-REPLY-001 | Web 单元 | 用户发言后助手必须回一句 | `DocumentImportModal.test.tsx` **35 例通过**（新增 1 例：文件入口让 AI 草稿成为「已应用」草稿 → 发「要补充什么」→ 出现「我核对了一下，还有 5 处要补：缺负责人 ×1、模块说明 ×1、功能说明 ×1、截止时间 ×1、任务描述 ×1」，且回复气泡排在用户气泡之后）；`document-import` 目录 **4 文件 67 例通过** | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-REPLY-002 | 浏览器 E2E | 真实 UI 上的问答往返（2026-10-14 按第一百七十一条改成回执只报必填） | `apps/e2e/tests/document-import-ai.spec.ts` 的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」：docx 夹具 → AI 草稿落进左栏 → 发「要补充什么」→ 右栏回执含「必填都齐了」且**不含**「建议补齐」/「截止时间」，建议清单只出现在顶部常驻结论（另有 2 处建议补齐：截止时间 ×1（AI 导入任务）、任务描述 ×1（AI 导入任务））；再发第二句（必填缺口没变）只多一条落地汇报、「我重新核对了一遍」仍只有 1 条；与 `document-import.spec.ts` 合跑 **12 例通过（34.6 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-REPLY-003 | 门禁 | 本轮整链回归 | `pnpm check` **exit 0**：`pnpm contract:validate` 110 条路由、`pnpm permissions:check` 110 条操作 / 110 条路由、`pnpm check:deps`（821 文件）、`pnpm check:frontend:boundaries`（344 模块）、`pnpm check:secrets`（1242 文件）、`pnpm check:docs`（116 个 Markdown）、`pnpm build` 全部通过；`pnpm deps:audit` 仅 1 个 moderate，不阻断 | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批只改文档导入弹窗的右栏回应，其余 spec 不引用该弹窗；文档导入两个 spec 已定向跑通）；② E2E 的 AI 上游仍是本机回环 stub，未连真实中转站；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 助手回复是确定性的缺口复述，不是内容问答（见开发日志第一百五十四条「风险与后续」）。
+
+## 文档导入工作台「必填 / 可选」入口标注（用户选中方案 A，2026-10-13 本地落库）
+
+背景见开发日志第一百五十四 / 一百五十五条：用户追问「初始成员不是必填为什么点开才出现待补」，定案为它本来就可选，问题出在必填与可选的「＋字段」入口长得一样。本批只做显式标注，不改业务口径；不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-WORKBENCH-REQUIRED-001 | Web 单元 | 必填 / 可选入口可区分 | `DocumentImportModal.test.tsx` **36 例通过**（新增 1 例：整项目模式下 `＋负责人（必填）` / `＋项目编码（必填）` 文字含「必填」且带 `is-required`，`＋初始成员` 为素色无标记；原「点「＋负责人」补上必填」用例改用新 aria-label）；`document-import` 目录 **4 文件 68 例通过**、`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-REQUIRED-002 | 浏览器 E2E | 真实 UI 回归 | `apps/e2e/tests/document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（27.8 秒）**（含整项目导入关键路径与三条工作台布局回归） | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-REQUIRED-003 | 门禁 | 本轮整链回归 | `pnpm check` **exit 0**（110 条路由 / 权限、依赖边界、模块边界、Secret、116 个 Markdown、`pnpm build`）；`pnpm deps:audit` 仅 1 个 moderate，不阻断 | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只改文档导入弹窗的字段入口样式与文案，其余 spec 不引用该弹窗）；② 观感自查用了一次性临时 spec 截图（已删除，不入库），未进 CI；③ E2E 的 AI 上游仍是本机回环 stub；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 助手回应时机与常驻结论口径（用户「还是没有反应啊」，2026-10-13 本地落库）
+
+定案见开发日志第一百五十六条：常驻结论不再写「见下方标签」而是逐条点名；发问那一刻先本地回一句（不等模型），模型返回后只在缺口变化时再补一句。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-REPLY-004 | Web 单元 | 回话不等模型 + 常驻结论逐条点名 | `DocumentImportModal.test.tsx` **36 例通过**：assist mock 换成永不 resolve 的 Promise 后，busy 提示仍在（`document-import-assist-busy` 存在）而回复气泡必须已出现，内容逐条点名且排在用户气泡之后；两处常驻结论断言更新为 `另有 4 处建议补齐：模块说明 ×1、功能说明 ×1、截止时间 ×1、任务描述 ×1`；`document-import` 目录 **4 文件 68 例通过**、`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-REPLY-005 | 浏览器 E2E | 真实 UI 上的问答往返（回归） | `apps/e2e/tests/document-import-ai.spec.ts` 的「用户发问后助手回一句」更新为断言常驻结论 `另有 2 处建议补齐：截止时间 ×1、任务描述 ×1` 与立刻出现的回复 `我重新核对了一遍：必填都齐了；还有 2 处建议补齐：…`；与 `document-import.spec.ts` 合跑 **10 例通过（29.7 秒）** | 本地通过（2026-10-13） |
+
+未运行 / 已知偏差（本批）：① 用户那次「发一句没有回应」的具体操作没有复刻——`.data/dev/api.out.log` 显示 17:26 之后没有新的 `DocumentImportAiAssist` 请求，本批改为用「模型挂起时仍必须回话」的单测锁住该约束；② 全量 Playwright 未跑（只改右栏结论与回话时机，其余 spec 不引用该弹窗）；③ E2E 的 AI 上游仍是本机回环 stub；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 缺口点名到条目（用户「上传后就有哪些信息需要补充」，2026-10-13 本地落库）
+
+定案见开发日志第一百五十七条：上传完成后右栏那句话从「类别 + 数量」升级为「类别 + 数量 + 缺在哪几条」，最多点名 3 条、超出缀「等」。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-GAP-WHERE-001 | Web 单元 | 缺口明细带条目名 | `DocumentImportModal.test.tsx` **36 例通过**：断言更新为 `必填还差 1 处：缺负责人 ×1（修复重复回调）`、`另有 4 处建议补齐：模块说明 ×1（支付）、功能说明 ×1（退款）、截止时间 ×1（修复重复回调）、任务描述 ×1（修复重复回调）` 与回复里对应的 `还有 4 处建议补齐：…`；`document-import` 目录 **4 文件 68 例通过**、`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-GAP-WHERE-002 | 浏览器 E2E | 真实 UI 上的上传说清楚 | `document-import-ai.spec.ts` 的 docx 用例断言常驻结论 `另有 2 处建议补齐：截止时间 ×1（AI 导入任务）、任务描述 ×1（AI 导入任务）`；与 `document-import.spec.ts` 合跑 **10 例通过（30.7 秒）** | 本地通过（2026-10-13） |
+| DOC-IMPORT-GAP-WHERE-003 | 门禁 | 本轮整链回归 | 见开发日志第一百五十七条（`pnpm check` exit 0：110 条路由 / 权限、821 文件依赖边界、344 模块、Secret、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（用例 2026-10-13、整链 2026-10-14 复核） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只改右栏缺口文案，其余 spec 不引用该弹窗）；② 观感自查用一次性临时 spec 截图（已删除，不入库），未进 CI；③ E2E 的 AI 上游仍是本机回环 stub；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 左栏页签与空态标题改名「内容梳理」（用户「这个改一下，其实是内容梳理对吧」，2026-10-14 本地落库）
+
+定案见开发日志第一百五十八条：命名只改 UI 文案（下划线页签与空态标题），`leftView` 的 `DRAFT / RAW` 两个视图、草稿状态与「预览 → 确认导入」链路不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-WORKBENCH-TAB-RENAME-001 | Web 单元 | 页签与空态标题用新名 | `document-import` 目录 **4 文件 68 例通过**：`DocumentImportModal.test.tsx` 4 处按钮查询与切换用例标题改为 `内容梳理`，`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-WORKBENCH-TAB-RENAME-002 | 浏览器 E2E | 真实 UI 上新名页签仍可点回草稿 | `document-import-ai.spec.ts` + `document-import.spec.ts` **10 例通过（33.1 秒）**（docx / pdf / 拖放 / 输出上限 / 3 个布局回归用例均走新名页签） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 只改展示文案，全量 Playwright 未跑（整链 `pnpm check` 于 2026-10-14 复核 exit 0）；② E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 弹窗说明区块由「格式速查」改为「必填要素」书面指导（用户「格式速查完全改掉。改为一个描述必填要素的总结性指导，格式速查这四个字也改掉」+「内容再改改不要这么口语化，比如任务可以隶属于模块或者功能等等」+「一份可直接导入的文档需明确以下要素：这个很多余」+「（初始成员，填写登录名或姓名，多个以逗号分隔）改为（填写姓名）」+「加上：功能隶属于模块，任务可隶属于模块或功能」+「项目编码与任务负责人为必填项，缺失时导入会被拒绝；去掉」，2026-10-14 本地落库）
+
+定案见开发日志第一百五十九条：说明区块整体替换——标题「格式速查」→「必填要素」，正文换成两句话的书面表述（直接列要素 + 层级归属），旧清单的专属样式规则一并删除；文案按用户五轮口径逐句定稿。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-REQUIRED-GUIDE-001 | Web 单元 | 区块标题与正文定稿 | `document-import` 目录 **4 文件 68 例通过**：断言标题「必填要素」、含项目名称 / 项目编码 / 负责人 / 「参加人员（填写姓名）」/「功能隶属于模块，任务可隶属于模块或功能」，断言不再出现「格式速查」与「缺失时导入会被拒绝」；`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-REQUIRED-GUIDE-002 | 浏览器 E2E + 门禁 | 改文案后工作台入口仍可用 | `document-import-ai.spec.ts` + `document-import.spec.ts` **10 例通过（28.9 秒）**；整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 区块不再给字段行与标题层级写法、也不再说明哪些缺失会被服务端拒绝，这两类引导分别由模板全文 / AI 助手与右栏缺口提示、左栏 `＋字段` 红标承担；② 「参加人员」仍未校验（契约 `members` 无 `min(1)`、右栏按 WARNING 处理），是否升级为真必填待用户定；③ E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 缺失要素统一黄色提示 + 导入落地后助手主动汇总一条（用户「缺失的要素会显示黄色并且需要补充」+「右侧ai助手会发送一个信息告诉我现在有多少需要补充有多少待确认或者目前要素完好」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十条：左栏与右栏的缺失标记统一成同一套暖黄（必填用黄色实线 + 更深字色 + 「（必填）」标注，建议项用黄色虚线），导入落地后助手追加一条由本地确定性检查算出的汇总消息（需要补充 N 处 / 待确认 M 个名字 / 要素完好），一次落地只发一条。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-MISSING-YELLOW-001 | Web 单元 | 导入落地后汇报一次；手改草稿不重复刷屏 | `document-import` 目录 **4 文件 71 例通过**：新增 3 例分别断言文件导入（「需要补充 8 处、待确认 2 个名字」）、要素完好（`COMPLETE_DOCUMENT` → 「要素完好，可以直接点「预览」导入」）、直接粘贴结构化草稿（「已进入内容梳理」出现次数恒为 1，改一个模块名后仍为 1）；`pnpm --filter @inpulse/web exec vitest run` **105 文件 798 例通过**；`pnpm --filter @inpulse/web run typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MISSING-YELLOW-002 | 浏览器 E2E | 改配色与新增消息后工作台链路仍可用 | `document-import-ai.spec.ts` + `document-import.spec.ts` **10 例通过（29.3 秒，两次合跑一致）**；真实 dev 栈上按「整项目导入 → 直接粘贴文本」截图核对两组配色（建议项黄色虚线、必填项黄色实线 + 深暖色字）与右栏消息顺序 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MISSING-YELLOW-003 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只动该弹窗的配色与一条消息，其余 spec 不引用）；② 观感自查用真实 dev 栈截图（临时图放系统 %TEMP%，不入库），未进 CI；③ E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；⑤ 汇总消息的「缺口 / 待确认」是浏览器本地口径，与预览时服务端解析可能有差异，导入前以预览为准。
+
+## 文档导入不再弹「覆盖左侧草稿当前内容？」（用户「不要每次都问一下」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十一条：去掉覆盖确认弹层，并把根因一起修掉——每轮分析的输入从「首次读到的原文」改为「当前左栏草稿」（含手动修改），因此 AI 结果直接落回左栏也不会丢手改内容；「预览文档」对照的原文改由单独的状态维护，仍是只读原文。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-NO-OVERWRITE-CONFIRM-001 | Web 单元 | 手改后不再二次确认，且手改内容进入分析输入 | `document-import` 目录 **4 文件 71 例通过**：改写后的用例断言 `assistDocumentImport` 收到的 text = 手改后的草稿 + 「补充说明：补充一句」、页面无覆盖确认 dialog、AI 结果落回左栏；「名字对不上」用例改为反向断言无弹窗；`pnpm --filter @inpulse/web exec vitest run` **105 文件 798 例通过**；`pnpm --filter @inpulse/web run typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-NO-OVERWRITE-CONFIRM-002 | 浏览器 E2E | 已有草稿时拖入文件直接落草稿 | `document-import-ai.spec.ts` 拖放用例改为「草稿出现 AI 结果」+「覆盖确认 testid 不存在」；`document-import-ai.spec.ts` + `document-import.spec.ts` 合跑 **10 例通过（28.6 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-NO-OVERWRITE-CONFIRM-003 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只动该弹窗的确认链路与一例断言）；② 拖入新文件时旧草稿会被新文件的分析结果直接替换，不再有任何提示（用户主动换文档的预期行为，未加提示）；③ E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 点「直接粘贴文本」后直接可粘贴 + 补充说明不再被模型丢掉 + 每轮回执说清左栏改了什么（用户「为什么我让ai补上但是左边并没有反应」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十二条：点「直接粘贴文本」后文本区自动获得焦点；服务端 system 提示词补「补充说明」规则（第 3 条：补充说明里的信息也算真实信息；新增第 5 条：补充说明必须落实到草稿，点名的人写进「- 初始成员：」或对应任务的「- 负责人：」）；右栏每轮回执改成由前端确定性算出的「这一轮草稿改了什么」（`describeDraftChange`）。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-SUPPLEMENT-REPLY-001 | Web 单元 | 点开粘贴区即聚焦；每轮发言回报草稿变化 | `document-import` 目录 **4 文件 74 例通过**：新增「点「直接粘贴文本」后光标直接落在文本区，可以立刻粘贴」与「发完一句后说清这一轮改了什么」（断言「已按补充说明更新草稿：新增 1 行：「截止：2026-10-30」」），改写「模型这一轮没改动草稿时…」；`pnpm --filter @inpulse/web exec vitest run` **105 文件 801 例通过**；`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-SUPPLEMENT-REPLY-002 | API 单元 + 真实上游 | 补充说明被写进草稿 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 11 例通过**（新增两条 system 指令断言：含「以「补充说明：」开头」与「补充说明里点名要加入成员」）；本机 dev 栈接真实上游 `deepseek-v4-flash-vision-exp`：修前返回的 markdown 无 `- 初始成员：`，修后固定返回 `- 初始成员：特哥, 林雨妍`，2925 字长草稿同样生效，不给成员信息时不编造 | 本地通过（2026-10-14），真实上游未进 CI |
+| DOC-IMPORT-SUPPLEMENT-REPLY-003 | 浏览器 E2E + 门禁 | 改提示词与回执后工作台链路仍可用 | `document-import.spec.ts` 首例新增「点「直接粘贴文本」后 `导入文档内容` 为 `toBeFocused()`」断言；`document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（25.8 秒）**；整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 服务端提示词改动只在真实上游人工复现，未纳入 CI（CI 的 AI 上游仍是本机回环 stub，ADR-067 口径不变）；② 回执只如实说明「没变化 / 改了什么」，未做自动重试，也未新增等待期进度文案；③ 全量 Playwright 未跑（只动该弹窗与这两个 spec）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 预览阶段的 ✕ 只「关闭预览」退回工作台（用户「为什么预览后有错误点击叉会直接关闭整个文档导入弹窗」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十三条：预览阶段的头部 ✕ 与 Esc 由「关掉整个导入弹窗」改成「关闭预览」——回工作台、草稿保留；工作台阶段仍是关掉整个弹窗。确认导入进行中时预览阶段按 ✕ 不生效。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-PREVIEW-CLOSE-001 | Web 单元 | 预览阶段 ✕ 不关整个弹窗；工作台阶段 ✕ 仍关闭 | `document-import` 目录 **4 文件 76 例通过**：新增「预览阶段点右上角叉只关闭预览：`onClose` 未调用、文本区仍是原文、预览按钮回来、计划与问题清单消失」与「工作台阶段点叉仍然关掉整个导入弹窗（`onClose` 调一次）」；`pnpm --filter @inpulse/web exec vitest run` **105 文件 803 例通过**；`pnpm --filter @inpulse/web run typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-PREVIEW-CLOSE-002 | 浏览器 E2E | 真实弹窗里预览后按 ✕ 再走完导入 | `document-import.spec.ts` F-32 整项目用例：预览后点 `关闭预览` → 计划消失、文本区仍是原文 → 再点预览回到计划 → 确认导入成功；`document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（30.3 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-PREVIEW-CLOSE-003 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 预览阶段现在要两步才能完全退出（关闭预览 / 返回修改 → 取消），比原来多一次点击，是有意的保守取舍；② 预览阶段 Esc 与 ✕ 同义；③ 全量 Playwright 未跑（只动该弹窗与这一个 spec）；④ E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；⑤ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+## 拖动落点提示只罩左栏内容区（用户「项目拖进来的虚线应该是 p2 范围」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十四条：拖动文件时的虚线提示框由整个工作台主体收窄到左栏内容区（空态是拖入区、有草稿时是草稿区），遮罩不透明度由 82% 提到 95%；窗口级 drop 行为不变，弹窗内任何位置松手仍会读取文件。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-DROP-SCOPE-001 | Web 单元 | 落点提示挂在左栏内容区里 | `document-import` 目录 **4 文件 76 例通过**：既有拖放用例新增结构断言——提示框 `closest(".import-pane-body")` 存在、`closest(".import-assist")` 与 `closest(".import-format-guide")` 为空；`pnpm --filter @inpulse/web exec vitest run` **105 文件 803 例通过**；`pnpm --filter @inpulse/web run typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-DROP-SCOPE-002 | 浏览器 E2E | 真实拖放时提示框不越界 | 「已有草稿时把 PDF 拖到工作台上同样能分析（真实拖放）」新增几何断言：提示框四边落在 `.import-pane-body` 内（±1px）、右边界不越过 `.import-assist` 左边界；`document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（27.2 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-DROP-SCOPE-003 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 提示框范围与可落点范围当时还不一致（右栏松手仍能放），已由下一节收窄为「只认左栏」；② 观感自查用临时 Playwright spec 截图（空态 + 草稿态各一张，用完即删），不入库；③ 全量 Playwright 未跑（只动该弹窗与这一个 spec）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## drop 也收窄到左栏：右栏 / 页脚松手不导入，只提示（用户确认「可以」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十五条：可落点与虚线提示统一到左栏——`overPane(event)` 按事件目标判定，落在左栏之外不导入、回一句提示；窗口级 `dragover` 仍 `preventDefault` 以免浏览器打开文件。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-DROP-PANE-001 | Web 单元 | 左栏内可放；左栏之外不导入 | `document-import` 目录 **4 文件 77 例通过**：原「拖到弹窗任意位置」用例改名为「拖到左栏同样会读取并分析」并把派发目标换成左栏节点（保留 `closest(".import-pane-body")` 结构断言）；新增「松手在左栏之外不导入，只提示拖到左栏」——对右栏派发 `dragover` 无虚线框、`drop` 后 `extractDocumentText` / `assistDocumentImport` 都未调用、出现提示文案；`pnpm --filter @inpulse/web exec vitest run` **105 文件 804 例通过**；`pnpm --filter @inpulse/web run typecheck` 通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-DROP-PANE-002 | 浏览器 E2E | 真实拖放仍在左栏生效 | 「已有草稿时把 PDF 拖到工作台上同样能分析（真实拖放）」派发目标即左栏 section，几何与落点断言均保持通过；`document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（29.1 秒）** | 本地通过（2026-10-14） |
+| DOC-IMPORT-DROP-PANE-003 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 拖到右栏 / 页脚只回一句提示、不导入（用户确认的行为）；② `overPane` 按事件目标判定而非坐标；③ 全量 Playwright 未跑（只动该弹窗与这两个 spec）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 整项目导入的初始成员名单必填且必须含创建者与全部负责人（用户「初始成员必须包含创建者以及所有出现在任务负责人中的人」「初始成员必须名字能和目前系统中有的账号相对应」，2026-10-14 本地落库）
+
+定案见 [ADR-070](adr/ADR-070.md) 与开发日志第一百六十六条：整项目（模式 B）导入的 `- 初始成员：` 必填，且必须包含**创建者本人**与**全部任务负责人**，否则预览 422 拒绝（空名单 `MEMBER_REQUIRED`、缺创建者 `MEMBER_CREATOR_MISSING`、缺负责人 `ASSIGNEE_NOT_INITIAL_MEMBER`）；判据是解析后的账号而不是字面令牌，名字对不上账号仍是 `MEMBER_UNRESOLVED`。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-MEMBER-COVERAGE-001 | 真实 PostgreSQL API 集成 | 三条名单校验与「按账号判」 | `document-import.integration.test.ts` **6 例通过**：新增大用例三次预览——名单缺创建者 → 422 `MEMBER_CREATOR_MISSING`（且不报 `ASSIGNEE_NOT_INITIAL_MEMBER`）；名单只写创建者 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`（且不报缺创建者）；名单写登录名 + 负责人写姓名 → 200 且 `members == [assigneeId]`；既有「负责人未解析」用例新增 `MEMBER_REQUIRED` 断言（空名单一次说清） | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-002 | API 单元 + 真实 PostgreSQL | 整项目提示词带上导入人姓名、不知道时不编造 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 12 例通过**（整项目 system 提示词含「「- 初始成员：」必填」「所有任务的「负责人」都要写进去」「必须包含创建者本人（本次导入人，姓名：特哥）」；新增「不知道导入人姓名时不编造姓名」）；`document-import-assist.integration.test.ts` **9 例通过**（WHOLE_PROJECT 用例断言提示词含本次导入人的真实 `name`） | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-003 | Web 单元 | 工作台本地预检与服务端同口径、且不误报 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 88 例通过**：新增 `describe("ADR-070 初始成员名单校验")` 6 例（缺初始成员、缺创建者 + 缺负责人去重、写登录名算包含创建者、读不懂的登录名整体不报缺口、同名多人不报缺口、项目内 / 未登录不校验）与弹窗 5 例（缺初始成员、缺创建者 + 缺负责人、名单完整、登录名不误报、项目内不校验）；`pnpm test:unit` 的 Web 部分 **105 文件 815 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-004 | 浏览器 E2E | 整项目 AI 导入的草稿与预览 | `document-import-ai.spec.ts` 新增「整项目 AI 导入：初始成员带上创建者与任务负责人，预览不再报缺」（stub 从 system 提示词里读出创建者姓名并写进草稿；断言草稿含创建者姓名、verdict 不含「初始成员缺」、预览 issues 为 0、apply 后进入 `/projects/{id}/modules`）；`document-import.spec.ts` + `document-import-ai.spec.ts` **11 例通过（30.0 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 170 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-005 | 门禁 | 本轮单测与集成整链 | `pnpm test:unit` exit 0（web 105 文件 815 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例）；`node scripts/test-integration-local.mjs --skip-migrate` exit 0（database 2 文件 27 例、`apps/ops` 2 文件 7 例、`apps/api` 58 文件 560 例） | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-006 | 门禁 | 迁移不可变清单缺 `0040` 的旧漂移（与本 ADR 无关） | `database/test/integration/database.test.ts` 的「migrations are immutable and idempotent」期望清单补齐 `0040_ai_assist_settings.sql`（ADR-068 落库时漏补，本批跑集成时暴露）；database 集成 **2 文件 27 例通过** | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只动该弹窗与这两个 spec）；② E2E 的 AI 上游仍是本机回环 stub（ADR-067 口径不变）；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 整链 `pnpm check` 的结论见开发日志第一百六十六条。
+
+## 助手缺口结论不重复念（用户「这句话为什么一直重复？」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十七条：每次发送时立刻推的那条本地确定性缺口结论（「我重新核对了一遍：…」）改为按缺口签名去重——同一个缺口状态只念一次、缺口一变立刻再报、弹窗重开复位；这一轮到底改了什么仍由落地汇报（`describeDraftChange`）说清。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-GAP-REPLY-DEDUP-001 | Web 单元 | 缺口没变时不重复念同一句 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 89 例通过**：新增「缺口没变时不再重复念同一句核对结论」（模型两轮都原样返回同一份草稿、缺口一直是「1 处建议补齐」，两次补充后「我重新核对了一遍」只出现 1 次，同时仍有「草稿没有变化」的落地汇报）；既有「用户发问后助手立刻回一句，点名还缺哪些字段」用例继续通过（第一次照常立刻回）；`pnpm --filter @inpulse/web test:unit` **105 文件 816 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-GAP-REPLY-DEDUP-002 | 浏览器 E2E | 真实弹窗里「发问后立刻回一句」没被去重误伤、也不再复读建议 | `document-import-ai.spec.ts` 的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」（`.import-msg` 含「我重新核对了一遍」+「必填都齐了」，并断言不含「建议补齐」/「截止时间」；第二次发言后该气泡仍只有 1 条）与整项目 AI 导入用例均通过；`document-import.spec.ts` + `document-import-ai.spec.ts` **12 例通过（34.6 秒）**（按第一百七十一条口径复跑） | 本地通过（2026-10-14） |
+| DOC-IMPORT-GAP-REPLY-DEDUP-003 | 文档纠错 | 上一批例数写错 | `docs/adr/ADR-070.md` / `技术设计v1.2.2.md` / 本文件里 ADR-070 小节的「`document-import` 4 文件 82 例」修正为 **88 例**（ADR-069 的 77 + ADR-070 的 11：成员名单 6 例 + 弹窗 5 例；上一批漏算了成员名单那 6 例） | 已更正（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑这两个 spec）；② 缺口没变时那一轮不再有「立刻回一句」，用户要等模型返回才看到落地汇报（有意取舍）；③ GitHub Actions 未在本批执行（`test` 分支不触发工作流）；④ 整链 `pnpm check` 除 `deps:audit` 外一次跑通，`deps:audit` 因 npm registry 连接被重置失败、单独重试通过（1 个 moderate、无 high，不阻断），`check:secrets` 与 `check:docs`（117 个 Markdown）随后单独跑通过（详见开发日志第一百六十七条）。
+
+## 成员字段按姓名筛账号建议（用户「和成员相关的可不可以做到简单的搜索，比如我打名字的其中一个字然后会筛选出来和这个字有关的名字账号做成 p2 这样+」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十八条：成员字段（`负责人` / `初始成员` / `成员`）的编辑态按**姓名子串**给账号建议（前缀命中排前、同长度保持目录顺序、最多 8 条），点一条只替换「正在输入的那一段」；已经写定的名字、以及和正在输入一字不差的名字都不再建议；名单以某个已知成员的名字结尾时，末尾接着打的第一个非分隔符字符前自动补顿号。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-MEMBER-SUGGEST-001 | Web 单元 | 只认成员字段 + 筛选 / 排序 / 空段 / 去重 / 上限 | `document-assignee-match.test.ts` 新增 6 例：`isDocumentMemberFieldName` 只对 `负责人` / `初始成员` / `成员` 为真（`项目编码` / `项目说明` / `优先级` 为假）；打「小」按「前缀在前、同长度按目录顺序」给 `小潘 / 小吴 / 王小二`，打「雨」给 `林雨`，打「没人」为空；当前段为空时给整份目录（`林雨, ` 时已写定的 `林雨` 不再出现）；已写定的名字不再建议（`林雨, 林` 为空）；一字不差时不再建议（`林雨`、`小潘、小吴` 为空，`林` 仍给 `林雨`）；12 个「成员N」只给 8 条且首条为 `成员1` | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-002 | Web 单元 | 已知成员结尾时自动补顿号 | `document-assignee-match.test.ts` 新增 4 例：`continueMemberList("林雨、陈昊", "林雨、陈昊小")` → `林雨、陈昊、小`（`陈昊` 是目录里的成员）；已以分隔符结尾或名单为空时按原样输入；末尾那段不是已知成员（`王小` → `王小二`、`林语` → `林语雨`）或粘贴 / 删除 / 改中间时都不插手 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-003 | Web 单元 | 弹窗联动：出候选、点选填进草稿、非成员字段不弹 | `DocumentImportModal.test.tsx` 新增 3 例：初始成员「末尾打一个字 → 值里自动补顿号 → 候选为 `小潘 / 小邵（带「管理员」标记） / 王小二` → 点 `小潘` 值变成 `林雨、陈昊、小潘` → 回车写回 `- 初始成员：…`」；任务负责人整段换成「小」后同样出候选、点选回车后原文含 `- 负责人：小潘` 且不再含 `林语`；先在成员字段确认能出候选（排除「目录还没回来」的假通过）后，`项目编码` 打字不出候选。`pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 103 例通过**，`pnpm --filter @inpulse/web test:unit` **105 文件 830 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-004 | 浏览器 E2E | 真实弹窗里候选可点（顺带验证弹层浮在弹窗之上） | `document-import.spec.ts` 新增「成员字段按姓名筛账号：打字出候选、点选填进草稿（候选浮在导入弹窗之上）」：写成员姓名（不是登录名）→ 点 `项目：初始成员` → 末尾接着打另一个成员名字里的一小段 → 值里自动补了顿号 → 弹层 portal 到 body，`getByTestId("document-import-member-suggest")` 可见 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 值被替换 → 回车写回原文；两个 spec **12 例通过（32.7 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-005 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 830 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test 5 个 image ref / check:deps 821 文件 / check:frontend:boundaries 344 模块 1707 依赖 / permissions:check 110 条操作 110 条路由 / deps:audit 仅 1 个 moderate、不阻断 / check:secrets 1242 文件 / check:docs 117 个 Markdown） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 只按姓名筛，登录名仍手写（用户目录里没有登录名）；③ 建议是纯本地提示，点选只改左栏草稿，最终以服务端解析为准；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+## 成员字段改成标签化编辑（用户「这个下拉框要在选中的时候一直存在，方便添加下一个人…一个名字选中后形成一个单独小标签吧，分割开」，2026-10-14 本地落库）
+
+定案见开发日志第一百六十九条：成员字段的编辑态由「单行文本 + `continueMemberList` 自动补顿号」改成「标签行 + 窄输入框」，点候选 = 加一个标签、**候选列表编辑期间恒开**。本小节**替代**上一小节 `DOC-IMPORT-MEMBER-SUGGEST-002`（自动补顿号）与 003 中「输入框装整行文本」的描述；被删除的函数连同其单测一并移除，不留死代码。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-MEMBER-TAG-001 | Web 单元 | 建议筛选（新签名）+ 标签工具 | `document-assignee-match.test.ts` 6 + 3 例：`isDocumentMemberFieldName` 只认 `负责人` / `初始成员` / `成员`；打「小」给 `小潘 / 小吴 / 王小二`（前缀在前）、打「雨」给 `林雨`、打「没人」为空；输入框为空给整份目录、只剩空白也算空；已成标签的不再建议（`小` + `[小潘]` → `小吴 / 王小二`）；打全名照常给（点一下就成标签）；12 个「成员N」只给 8 条。`memberTagsFromValue` 三种分隔符拆开 + 去空白；`serializeMemberTags` 拼成顿号名单、`trim` 掉空段、同名只留一遍 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-002 | Web 单元 | 弹窗联动：标签化、候选常驻、摘标签、输入法 | `DocumentImportModal.test.tsx` 4 例：点开「项目：初始成员」→ 值是 `林雨、陈昊` 但输入框为空、两个标签（删除按钮的无障碍名为「移除 林雨」/「移除 陈昊」）→ 候选即 `小潘 / 小邵（带管理员标记） / 王小二` → 打「小」筛选 → 点 `小潘` → 标签变三个、输入框清空、候选仍在且只剩 `小邵 / 王小二` → 回车写回 `- 初始成员：林雨、陈昊、小潘`；任务负责人先摘掉「林语」再点候选，写回 `- 负责人：小潘` 且不再含 `林语`；回车带 `isComposing` 时不提交（标签行与草稿都不变）、再按真回车才写回 `- 初始成员：林雨、陈昊、小`；`项目编码` 打字不出候选 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-003 | 浏览器 E2E | 真实弹窗里标签与候选常驻 | `document-import.spec.ts`「F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻（候选浮在导入弹窗之上）」：点开即断言输入框为空、本人已成一个标签 → 候选（portal 到 body）可见 → 打另一个成员名字的一小段 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 输入框清空、多出第二个标签、候选仍可见 → 回车写回 `- 初始成员：A、B`；两个 spec **12 例通过（35.1 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-004 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 829 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test 5 个 image ref / check:deps 821 文件 / check:frontend:boundaries 344 模块 1707 依赖 / permissions:check 110 条操作 110 条路由 / deps:audit 仅 1 个 moderate、不阻断 / check:secrets 1242 文件 / check:docs 117 个 Markdown） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 只按姓名筛，登录名仍手写（用户目录里没有登录名）；③ 建议是纯本地提示，最终以服务端解析为准；④ 编辑期间候选列表常驻，手打登录名时会挡在下面（提交即收起）；⑤ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 整项目导入：创建者默认算初始成员 + 草稿里的锁定标签（用户「创建者名字不能直接写入固定吗？」，2026-10-14 本地落库）
+
+定案见 [ADR-071](adr/ADR-071.md) 与开发日志第一百七十条：整项目（模式 B）导入不再要求文档写出创建者——创建者由服务端默认算成员并排在第一位，工作台在「初始成员」行上挂一枚带锁图标、没有删除按钮的标签给用户看。本小节**取代**上一小节 `DOC-IMPORT-MEMBER-COVERAGE-001` 里 `MEMBER_CREATOR_MISSING`（缺创建者 → 422）的那部分断言：该报错已整条删除，`MEMBER_REQUIRED`（空名单）与 `ASSIGNEE_NOT_INITIAL_MEMBER`（缺负责人）保留。标签**不改文档正文**，所以「预览文档」仍是一字不改的原版。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-CREATOR-MEMBER-001 | 真实 PostgreSQL API 集成 | 创建者默认算成员、缺创建者不再拦 | `document-import.integration.test.ts` **6 例通过**：整项目大用例重写为「文档不写创建者 → 200 且成员含创建者（排第一位）」+「缺任务负责人 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`」；`addedMembers` 2 → 3、`memberAddCount` 1 → 2、`members` 断言补 `actor.userId`；`document-import-assist.integration.test.ts` **9 例通过**（提示词不再带 `creatorName`） | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-002 | Web 单元 | 锁定标签：看得见、删不掉、不改正文 | `DocumentImportModal.test.tsx` 新增 3 例：① `document-import-creator-lock` 存在、文本是创建者姓名、带 `is-locked`、内部没有 button，且 `导入文档内容` 文本区的值与粘贴的原文**完全相等**（创建者不写进正文）；② 点开「项目：初始成员」编辑后标签行只有名单里原有的名字（无「移除 林雨妍」按钮），锁定标签仍在；③ 模式 A（项目内导入）不渲染锁定标签 | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-003 | Web 单元 + 浏览器 E2E | 文案同口径与真实弹窗 | 契约模板说明行、工作台「必填要素」、右栏追问都改成「须包含全部任务负责人；创建者默认就是成员，不用写」（`contract:drift` 无漂移，模板版本仍 1）；`document-import-ai.spec.ts` 改写为「ADR-071 整项目 AI 导入：初始成员只写负责人，创建者默认算成员」并加断言预览名单含创建者，两个 spec **12 例通过**；浏览器实测：`- 初始成员：小潘` 那行渲染成「初始成员 [🔒 林雨妍] 小潘」，切到「预览文档」原文仍是 `- 初始成员：小潘` | 本地通过（2026-10-14） |
+| DOC-IMPORT-CHIP-COLOR-001 | Web 单元（class 断言）+ 浏览器实测 | 必填 / 可选入口不再同色 | `is-required`（必填）与普通（可选）仍是两个 class，单测只断言 class 不断言颜色；线上必填 = 淡红实线加粗（`#e8a9a3` / `#fdecea` / `#b03a2e`）、可选 = 暖黄虚线（`#e3c98a` / `#fffaf0` / `#8a6512`），浏览器实测两枚按钮的计算样式确为两套色 | **配色未定案**（用户看过 4 套对照页 `required-chip-colors.html` 后尚未选，当前保持淡红 / 暖黄） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 锁定标签只在项目段**已有**「初始成员」字段时渲染，文档整段没写成员时的显示与按负责人汇聚留待下一轮；③ 必填 / 可选配色未定案；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 编辑态按 Esc 会连整个导入弹窗一起关掉并清空草稿（既有问题，与本批无关，未修）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 助手回执只报必填 + 创建者不重复显示（用户「这个可选择性的补充重复次数太多了，不要每一次我和 ai 讲话就提醒我一下那些可以选择增加」，2026-10-14 本地落库）
+
+定案见开发日志第一百七十一条与 [ADR-069](adr/ADR-069.md) §4：每轮回执（`buildAssistReply`）只点名必填缺口，建议补齐清单交给顶部常驻结论与下方标签；去重指纹换成只看 ERROR 的 `requiredGapSignature`。另修一起显示重复：名单里已经写了创建者（姓名或登录名）时不再挂锁定标签。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-ASSIST-REPLY-001 | Web 单元 | 回执只报必填、建议不复读 | `DocumentImportModal.test.tsx`：必填缺负责人 + 4 项建议时，回执含「必填还差 1 处：缺负责人 ×1（修复重复回调）」且**不含**「建议补齐」；只剩建议项（必填齐全）时回执逐字等于「我重新核对了一遍：必填都齐了。」，连发两轮后对话气泡里只出现 1 次「我重新核对了一遍」、0 次「建议补齐」（顶部常驻结论不计） | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-004 | Web 单元 | 名单已写创建者时不重复显示 | 同上：`- 初始成员：林雨妍、林雨`（按姓名）与 `- 初始成员：linyuyan`（按登录名）两例都不渲染 `document-import-creator-lock`；名单没写创建者时仍渲染（DOC-IMPORT-CREATOR-MEMBER-002） | 本地通过（2026-10-14） |
+| DOC-IMPORT-ASSIST-REPLY-002 | 门禁 + 浏览器实测 | 整链回归与真实对话 | 整链 `pnpm check` exit 0（web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、118 个 Markdown、1243 文件 Secret 扫描）；浏览器实测：必填齐全只剩「模块说明 ×1」时连发两句补充说明，回执只有「我重新核对了一遍：必填都齐了。」与两条落地汇报，不再复读建议清单 | 本地通过（2026-10-14） |
+| DOC-IMPORT-ASSIST-REPLY-003 | 浏览器 E2E | 真实弹窗：建议不复查、回执不复读 | `node scripts/test-e2e-local.mjs --skip-migrate tests/document-import.spec.ts tests/document-import-ai.spec.ts` **12 例通过（34.6 秒）**（`pnpm build` 之后跑生产构建 + `vite preview`，API 用的是重建后的 `dist`）：改写后的「ADR-069 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」把旧断言（回执含「截止时间 ×1 / 任务描述 ×1」）换成「含『必填都齐了』、不含『建议补齐』/『截止时间』」，并追加第二句去重断言（「我重新核对了一遍」只 1 条、落地汇报 2 条） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② `pnpm build` 已重建 `dist`，但**本地 dev 里正在运行的 API 进程**仍是启动时那份代码（提示词要重启进程后才与前端同口径），UI 侧已对创建者去重；③ 必填无缺口时回执只念一次（指纹相同即静默），复查以顶部常驻结论为准；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 整项目 AI 草稿必须写出创建者（用户「可以初始成员里模型把创建者（林雨妍）也写了…提示词可以说得更准：『创建者不是任何任务负责人』时也要写」，2026-10-14 本地落库）
+
+定案见开发日志第一百七十二条与 [ADR-071](adr/ADR-071.md) §6（**取代** ADR-071 §2.2「创建者由系统默认算成员、不要写进名单」）：整项目导入的 AI 草稿必须把创建者写进 `- 初始成员：`，**与 TA 是不是任务负责人无关**；姓名由服务端从当前 Session 读出后注入 system 提示词，服务端兜底行为（文档写不写创建者都放行、都会落库）不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-AI-CREATOR-001 | API 单元 | 提示词点名创建者；拿不到姓名时不编造 | `ai-assist.client.test.ts` 12 例通过：传 `creatorName: "特哥"` 时 system 含「创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。」；不传姓名时含「本次导入人的姓名未知，不要编造姓名。」且不含「本次导入人的姓名是」 | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-002 | API 集成（真实 PostgreSQL + stub 上游） | 姓名取自当前 Session，且只进 system message | `document-import-assist.integration.test.ts` 9 例通过：system 含「本次导入人的姓名是「Test 〈loginName〉」」，user message 不含该姓名（顺带修夹具：`sessionActor` 的 SQL 漏了 `login_name AS "loginName"` 别名，`actor.loginName` 原为 `undefined`） | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-003 | API 集成（真实 PostgreSQL） | 服务端兜底不变：文档不写创建者也放行 | `document-import.integration.test.ts`「整项目导入：初始成员必填且必须含全部负责人；创建者由系统默认补进成员」：名单只写负责人 → `canApply=true`、`project.members` 为 `[创建者, 负责人]`、`summary.memberAddCount=2`；名单只写创建者但负责人不在名单 → 仍是 422 + `ASSIGNEE_NOT_INITIAL_MEMBER` | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-004 | 浏览器 E2E | 真实弹窗里草稿写出创建者与任务负责人 | `document-import-ai.spec.ts` 的「ADR-071 整项目 AI 导入：草稿写出创建者与任务负责人」（stub 从 system 里取注入的姓名，与文档里的任务负责人一起写名单）：草稿含创建者姓名与负责人登录名、助手结论不含「初始成员缺」、预览 `import-issues` 为 0、导入后跳到模块页；两个 spec **12 例通过（34.9 秒）**（`pnpm build` 之后跑生产构建） | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-005 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / `db:migrations:check` 39 个 / `db:seed:check` / `contract:drift` / `contract:validate` 110 条 / `build` / `check:deploy:test` 5 个 image ref / `check:deps` 821 个源文件 / `permissions:check` 110 条操作 110 条路由 / `deps:audit` / `check:secrets` 1243 文件 / `check:docs` 118 个 Markdown）；真实 PostgreSQL 集成 `node scripts/test-integration-local.mjs --skip-migrate`：apps/api 58 文件 560 例、database 2 文件 27 例、apps/ops 2 文件 7 例通过 | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-006 | 浏览器实测（真实上游 + 演示库，只读） | 创建者不是任何任务负责人、文档也没提到她时，草稿仍写出创建者 | 需求稿删掉「林雨妍」的一切出现（参与人员与全部任务负责人）后粘进「从文档导入整项目」→「交给 AI 整理」（约 40 秒出稿）：草稿「- 初始成员：」第一位是「林雨妍」，共 5 模块 / 8 功能 / 9 任务，助手结论只报 2 条建议（截止时间 ×2）且不提成员缺口；点「预览」（只读）得「AIDEMO2 · 编码可用 · 成员：林雨妍、小邵、小潘、小吴、邵晨宇」、`document-import-issues` 为 0、锁定标签不重复挂；「关闭预览」+「取消」未落库（项目列表仍 7 个、无 AIDEMO2） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② E2E 仍是本机回环 stub，但「真实模型也会把创建者写出来」已由 DOC-IMPORT-AI-CREATOR-006 的真实上游实机复测证实（只读核对、未导入）；③ 历史记录里的旧口径（ADR-071 §2.2、`技术设计v1.2.2.md` 相应记述、第一百七十条条目）按事实保留，由本小节与 ADR-071 §6 标注取代；④ ADR-071 §5 四项仍为已拍板未实现；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+
+## 「必填 / 可选」入口配色定案：保持现状（用户「现在这个状态挺好的」，2026-10-14）
+
+定案见开发日志第一百七十三条：用户看过 `required-chip-colors.html` 的 4 套对照页后选择保持当前线上（**方案 A**）。本小节**关闭**上一小节 `DOC-IMPORT-CHIP-COLOR-001` 的「配色未定案」状态以及该小节「未运行 / 已知偏差」的第 ③ 项；无代码改动，也不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| DOC-IMPORT-CHIP-COLOR-002 | 决策 | 「必填 / 可选」配色不再是待决项 | 必填 = 淡红实线加粗（`#e8a9a3` / `#fdecea` / `#b03a2e`）、可选 = 暖黄虚线（`#e3c98a` / `#fffaf0` / `#8a6512`）；对照页 `GET http://127.0.0.1:5599/required-chip-colors.html` 返回 200 且 4 个方案区块渲染正常（B/C/D 只留作本机参考，`.data` 不入库） | 已定案（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 无代码改动，未重跑整链门禁（沿用第一百七十二条的 `pnpm check` exit 0），只跑 `pnpm format:check` 与 `pnpm check:docs` 覆盖本批文档；② B/C/D 对照页在 `.data/annotations/`（git 忽略、只本机可见）；③ 单测只断言 `is-required` 这个 class、不断言颜色，换色不需要改测试。
+
+## 「跳转 / 弹窗缓冲」复查与补齐（用户「检查一下所有操作跳转或者弹窗都有做缓冲吗？」，2026-10-14 本地落库）
+
+定案见开发日志第一百七十四条。口径仍是 2026-10-10 定下的那套：路由内容 `.page-content > *` 180ms 淡入、`.calm-skeleton` 140ms 延迟闪现、`AppModal` 遮罩 160ms + 面板 `@starting-style`、侧栏 `.popover` 140ms、命令面板 `.overlay`/`.palette` 160ms、`CalmSelect` 的 `animated`、懒加载弹层把 `Suspense` 提到弹层外、`route-preload` 的路由 chunk 预取。本批补齐三类缺口：2 个 `CalmSelect` 漏传 `animated`（其余 43 处都已传）、2 个 antd `Popover` 没有出现动画、6 类跳转入口没接预取。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍 1。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| TRANSITION-BUFFERED-REVEAL-UNIT-002 | Web 单元 + 静态门禁 | 补齐过渡后前端不回归 | `pnpm --filter @inpulse/web test:unit` → **105 文件 837 例全绿**；`pnpm typecheck` 8 workspace 全绿；`pnpm check:frontend:boundaries` 0 违规（345 modules / 1713 dependencies）；定向 `eslint`（8 个改动文件）无输出 | 本地通过（2026-10-14） |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-005 | 浏览器实测 | 两个 `Popover` 的 150ms 淡入真的生效 | dev（5173）里 `div.ant-popover.calm-date-popover` 的 computed style：`animation-name: calm-date-popover-in`、`animation-duration: 0.15s`、`animation-timing-function: ease-out`、`animation-fill-mode: both`；新 CSS 已进入 40 张样式表，`calm-date-popover-in` 与 `import-member-popover-in` 的规则与关键帧均命中 | 本地通过（2026-10-14） |
+| TRANSITION-BUFFERED-REVEAL-BROWSER-006 | 浏览器 E2E（一次性探针，跑完即删、未入库） | 项目卡片悬停真的会预取目标页 chunk | `page.on("request")` 统计 `ModulesPage` chunk：悬停第一张 `.project-card` 前 **0** 次、悬停后 **1** 次（`assets/ModulesPage-rKS5_NS6.js`） | 本地通过（2026-10-14） |
+| TRANSITION-BUFFERED-REVEAL-E2E-002 | 浏览器 E2E | 改动入口的回归 | `node scripts/test-e2e-local.mjs --skip-migrate tests/project-create.spec.ts tests/document-import.spec.ts tests/document-import-ai.spec.ts tests/notifications.spec.ts tests/search.spec.ts tests/tasks.spec.ts` → **21 passed（1.1 分钟）** | 本地通过（2026-10-14） |
+| TRANSITION-BUFFERED-REVEAL-GATE-002 | 门禁 | 整链回归 | `pnpm check` **除 `deps:audit` 外全部通过**（lint / format:check / typecheck / test:unit 各 workspace（web 837 例、api 499 例、contract 102 例、ops 60 例、database 15 例、canonical-json 5 例）/ db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test / check:deps / check:frontend:boundaries / permissions:check 110 条操作 110 条路由）；`deps:audit` 因 `registry.npmjs.org` ECONNRESET → `fetch failed` 未完成（单独重试同样失败，本机网络问题、与改动无关），`check:secrets` 与 `check:docs` 在文档同步后单独跑通过 | 部分通过（audit 未运行，2026-10-14） |
+
+未运行 / 已知偏差（本批）：① `CalmSelect` 的 `animated` 动画只在 enter/appear 的 active 帧接管（窗口 150ms），本次抓取工具单次点击往返 263ms，未复测到 active 帧；机制与既有 43 处同构，本批只补 2 个 prop。② 弹窗**关闭**仍是瞬时（本批只补「出现」）。③ 仍未接预取的入口：任务中心 → 任务详情弹窗（`TaskDetailOverlay` 为 lazy，靠 `Suspense fallback={null}` 不闪空壳、只慢一拍）、弹窗内深链（`?taskId=`）与页面内按钮。④ 全量 Playwright 未跑（31 个 spec 里只定向跑 6 个、21 例）。⑤ 生产镜像构建与 Trivy 扫描未执行。⑥ GitHub Actions 未执行（`test` 分支不触发工作流）。

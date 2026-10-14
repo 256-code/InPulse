@@ -68,6 +68,7 @@ describe("DocumentImportAiAssistClient", () => {
     const client = new DocumentImportAiAssistClient(fetchImpl);
     await client.generateDraft(config, {
       mode: "WHOLE_PROJECT",
+      creatorName: "特哥",
       text: "我的项目文档原文",
     });
     expect(calls).toHaveLength(1);
@@ -89,10 +90,40 @@ describe("DocumentImportAiAssistClient", () => {
     expect(body.messages[0]!.role).toBe("system");
     expect(body.messages[0]!.content).toContain(DOCUMENT_IMPORT_TEMPLATE);
     expect(body.messages[0]!.content).toContain("整项目导入");
+    // ADR-070：初始成员必填，且名单里必须出现文档里的成员与全部负责人。
+    // ADR-071 修订：创建者也必须写进名单（不管 TA 是不是任务负责人），姓名由服务端注入。
+    expect(body.messages[0]!.content).toContain("「- 初始成员：」必填");
+    expect(body.messages[0]!.content).toContain(
+      "所有任务的「负责人」都要写进去",
+    );
+    expect(body.messages[0]!.content).toContain(
+      "创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。",
+    );
+    // 「补充说明：」行是写文档的人本人的补充，必须落到草稿上（否则用户看见的就是「AI 没反应」）。
+    expect(body.messages[0]!.content).toContain("以「补充说明：」开头");
+    expect(body.messages[0]!.content).toContain("补充说明里点名要加入的人");
     expect(body.messages[1]).toEqual({
       role: "user",
       content: "我的项目文档原文",
     });
+  });
+
+  test("整项目指令在拿不到导入人姓名时要求不要编造", async () => {
+    const { fetchImpl, calls } = stubFetch(() =>
+      jsonResponse(completion("## 模块：支付")),
+    );
+    const client = new DocumentImportAiAssistClient(fetchImpl);
+    await client.generateDraft(config, {
+      mode: "WHOLE_PROJECT",
+      text: "我的项目文档原文",
+    });
+    const body = JSON.parse(String(calls[0]!.init.body)) as {
+      messages: readonly { role: string; content: string }[];
+    };
+    expect(body.messages[0]!.content).toContain(
+      "必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名未知，不要编造姓名。",
+    );
+    expect(body.messages[0]!.content).not.toContain("本次导入人的姓名是");
   });
 
   test("IN_PROJECT 模式的 system 指令包含项目内导入约束", async () => {
@@ -137,11 +168,17 @@ describe("DocumentImportAiAssistClient", () => {
   test("401 → auth，429 → rate-limited，400 + context 提示 → context-limit", async () => {
     const auth = stubFetch(() => jsonResponse({ error: "bad key" }, 401));
     await expect(
-      new DocumentImportAiAssistClient(auth.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(auth.fetchImpl).generateDraft(config, {
+        mode: "IN_PROJECT",
+        text: "x",
+      }),
     ).rejects.toMatchObject({ reason: "auth" });
     const limited = stubFetch(() => jsonResponse({ error: "slow" }, 429));
     await expect(
-      new DocumentImportAiAssistClient(limited.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(limited.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "rate-limited" });
     const contextLimit = stubFetch(() =>
       jsonResponse(
@@ -154,11 +191,26 @@ describe("DocumentImportAiAssistClient", () => {
       ),
     );
     await expect(
-      new DocumentImportAiAssistClient(contextLimit.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(contextLimit.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
+    ).rejects.toMatchObject({ reason: "context-limit" });
+    const payloadTooLarge = stubFetch(() =>
+      jsonResponse({ error: { message: "Request Entity Too Large" } }, 413),
+    );
+    await expect(
+      new DocumentImportAiAssistClient(payloadTooLarge.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "context-limit" });
     const upstreamError = stubFetch(() => jsonResponse({}, 500));
     await expect(
-      new DocumentImportAiAssistClient(upstreamError.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(upstreamError.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
   });
 
@@ -169,35 +221,87 @@ describe("DocumentImportAiAssistClient", () => {
       throw abort;
     });
     await expect(
-      new DocumentImportAiAssistClient(timeout.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(timeout.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "timeout" });
     const network = stubFetch(() => {
       throw new TypeError("fetch failed");
     });
     await expect(
-      new DocumentImportAiAssistClient(network.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(network.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "network" });
   });
 
   test("非 JSON / 缺少 choices / 空 content / 超长 content → invalid-response", async () => {
     const notJson = stubFetch(() => new Response("not json", { status: 200 }));
     await expect(
-      new DocumentImportAiAssistClient(notJson.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(notJson.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const emptyChoices = stubFetch(() => jsonResponse({ choices: [] }));
     await expect(
-      new DocumentImportAiAssistClient(emptyChoices.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(emptyChoices.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const blank = stubFetch(() => jsonResponse(completion("   ")));
     await expect(
-      new DocumentImportAiAssistClient(blank.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(blank.fetchImpl).generateDraft(config, {
+        mode: "IN_PROJECT",
+        text: "x",
+      }),
     ).rejects.toMatchObject({ reason: "invalid-response" });
     const tooLong = stubFetch(() =>
       jsonResponse(completion("x".repeat(200_001))),
     );
     await expect(
-      new DocumentImportAiAssistClient(tooLong.fetchImpl).generateDraft(config, { mode: "IN_PROJECT", text: "x" }),
+      new DocumentImportAiAssistClient(tooLong.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
     ).rejects.toMatchObject({ reason: "invalid-response" });
+  });
+
+  test("推理模型占满输出预算：200 + 空 content + finish_reason=length → context-limit", async () => {
+    const warn = vi
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
+    warn.mockClear();
+    // 中转站常挂推理模型：正文为空、内容全在 reasoning_content，finish_reason=length。
+    const exhausted = stubFetch(() =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "",
+              reasoning_content: "先想了很多，把输出预算花完了",
+            },
+            finish_reason: "length",
+          },
+        ],
+        model: "reasoning-model",
+      }),
+    );
+    await expect(
+      new DocumentImportAiAssistClient(exhausted.fetchImpl).generateDraft(
+        config,
+        { mode: "WHOLE_PROJECT", text: "长文档正文-不要进日志" },
+      ),
+    ).rejects.toMatchObject({ reason: "context-limit" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = String(warn.mock.calls[0]?.[0] ?? "");
+    expect(line).toContain('"reason":"context-limit"');
+    expect(line).toContain('"upstreamStatus":200');
+    expect(line).not.toContain("长文档正文");
   });
 
   test("probe：max_tokens=1 探测请求，回显响应 model", async () => {
@@ -205,7 +309,9 @@ describe("DocumentImportAiAssistClient", () => {
       jsonResponse(completion("p", "stop", "probe-model")),
     );
     const client = new DocumentImportAiAssistClient(fetchImpl);
-    await expect(client.probe(config)).resolves.toEqual({ model: "probe-model" });
+    await expect(client.probe(config)).resolves.toEqual({
+      model: "probe-model",
+    });
     expect(calls).toHaveLength(1);
     const body = JSON.parse(String(calls[0]!.init.body)) as {
       max_tokens: number;
@@ -228,5 +334,43 @@ describe("DocumentImportAiAssistClient", () => {
     await expect(
       new DocumentImportAiAssistClient(noChoices.fetchImpl).probe(config),
     ).rejects.toMatchObject({ reason: "invalid-response" });
+  });
+
+  test("失败日志带上游状态码与分类，且不含文档正文", async () => {
+    const warn = vi
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
+    warn.mockClear();
+    const upstreamError = stubFetch(() => jsonResponse({}, 500));
+    await expect(
+      new DocumentImportAiAssistClient(upstreamError.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "机密正文-不要进日志" },
+      ),
+    ).rejects.toMatchObject({ reason: "invalid-response" });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = String(warn.mock.calls[0]?.[0] ?? "");
+    expect(line).toContain('"status":"failed"');
+    expect(line).toContain('"reason":"invalid-response"');
+    expect(line).toContain('"upstreamStatus":500');
+    expect(line).toContain('"inputChars":');
+    expect(line).not.toContain("机密正文");
+
+    // 2xx 但结构不对（例如上游换了返回形状）：同样留一条带状态码的失败记录。
+    warn.mockClear();
+    const wrongShape = stubFetch(() =>
+      jsonResponse({ choices: [{ message: { role: "assistant" } }] }, 200),
+    );
+    await expect(
+      new DocumentImportAiAssistClient(wrongShape.fetchImpl).generateDraft(
+        config,
+        { mode: "IN_PROJECT", text: "x" },
+      ),
+    ).rejects.toMatchObject({ reason: "invalid-response" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0] ?? "")).toContain(
+      '"upstreamStatus":200',
+    );
   });
 });

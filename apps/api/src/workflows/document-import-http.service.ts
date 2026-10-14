@@ -24,6 +24,7 @@ import {
   type HttpHeaderBag,
 } from "../auth/csrf.http.js";
 import { SessionAuthService } from "../auth/session-auth.service.js";
+import { UserReadPort } from "../auth/user-read.port.js";
 import type { TransactionContext } from "../database/transaction-context.js";
 import { PostgresUnitOfWork } from "../database/unit-of-work.js";
 import { ApiHttpError } from "../http/contract-errors.js";
@@ -76,6 +77,8 @@ export class DocumentImportHttpService {
     private readonly aiAssistRuntime: AiAssistRuntimeService,
     @Inject(DocumentImportAiAssistClient)
     private readonly aiAssist: DocumentImportAiAssistClient,
+    @Inject(UserReadPort)
+    private readonly users: UserReadPort,
   ) {}
 
   /** 项目内导入预览：仅已登录且拥有项目写权限的用户。 */
@@ -100,8 +103,24 @@ export class DocumentImportHttpService {
   }
 
   /**
+   * 取创建者（本次导入人）的展示姓名：短只读事务读一次，只用进 system 提示词。
+   * 读不到返回 undefined，由提示词退化为「姓名未知、不要编造」（ADR-067 2.5 不含用户正文）。
+   */
+  private async resolveCreatorName(
+    userId: number,
+  ): Promise<string | undefined> {
+    const [user] = await this.uow.run((tx) =>
+      this.users.listByIds(tx, [userId]),
+    );
+    const name = user === undefined ? "" : user.name.trim();
+    return name.length === 0 ? undefined : name;
+  }
+
+  /**
    * ADR-067 AI 辅助转换：身份解析走只读短事务，上游调用在事务外执行
    * （绝不在数据库事务内发起网络请求）；返回前用既有解析器预检草稿。
+   * 创建者（本次导入人）必须出现在草稿的初始成员名单里，所以整项目模式要先读出 TA 的
+   * 姓名注入提示词（短只读事务，仍不把上游调用放进事务）；姓名读不到时退化为「不要编造」。
    */
   async assist(
     headers: HttpHeaderBag,
@@ -126,11 +145,16 @@ export class DocumentImportHttpService {
         { reason: resolution.reason },
       );
     }
+    const creatorName =
+      input.mode === "WHOLE_PROJECT"
+        ? await this.resolveCreatorName(actor.userId)
+        : undefined;
     let draft: AiAssistDraft;
     try {
       draft = await this.aiAssist.generateDraft(resolution.config, {
         mode: input.mode,
         text: input.text,
+        creatorName,
       });
     } catch (error) {
       if (error instanceof AiAssistUpstreamError) {

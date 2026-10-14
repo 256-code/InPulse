@@ -132,7 +132,9 @@ describe("AiAssistRuntimeService.resolveFromRow（优先级矩阵）", () => {
 
   test("数据库行 enabled=false → NOT_ENABLED，即使环境变量已配置", () => {
     const service = serviceWithRow(undefined).service;
-    expect(service.resolveFromRow(rowOf({ enabled: false }), legacyEnv())).toEqual({
+    expect(
+      service.resolveFromRow(rowOf({ enabled: false }), legacyEnv()),
+    ).toEqual({
       kind: "DISABLED",
       reason: "NOT_ENABLED",
       detail: undefined,
@@ -158,7 +160,10 @@ describe("AiAssistRuntimeService.resolveFromRow（优先级矩阵）", () => {
     const tampered = Buffer.from(broken.apiKeyCiphertext);
     tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 0x01;
     expect(
-      service.resolveFromRow({ ...broken, apiKeyCiphertext: tampered }, keyringEnv()),
+      service.resolveFromRow(
+        { ...broken, apiKeyCiphertext: tampered },
+        keyringEnv(),
+      ),
     ).toMatchObject({ kind: "DISABLED", reason: "CONFIG_INVALID" });
   });
 
@@ -188,7 +193,10 @@ describe("AiAssistRuntimeService.resolveFromRow（优先级矩阵）", () => {
       detail: undefined,
     });
     expect(
-      service.resolveFromRow(undefined, { ...keyringEnv(), AI_ASSIST_ENABLED: "1" }),
+      service.resolveFromRow(undefined, {
+        ...keyringEnv(),
+        AI_ASSIST_ENABLED: "1",
+      }),
     ).toMatchObject({ kind: "DISABLED", reason: "CONFIG_INVALID" });
   });
 });

@@ -17,6 +17,7 @@ import {
 } from "./search-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { searchResultPath } from "./search-destination";
+import { routePreloadHandlers } from "@shared/routing/route-preload";
 import "./search-results.css";
 
 const { Text, Title } = Typography;
@@ -145,6 +146,7 @@ export const SearchPageView: React.FC<SearchPageViewProps> = ({
                   <a
                     className="search-result-link"
                     href={path}
+                    {...routePreloadHandlers(path)}
                     onClick={(event) => {
                       event.preventDefault();
                       onOpenResult(path);

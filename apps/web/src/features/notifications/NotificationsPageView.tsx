@@ -18,6 +18,7 @@ import {
   useNotificationUnreadCount,
 } from "./notification-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
+import { routePreloadHandlers } from "@shared/routing/route-preload";
 import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
 
 const { Title, Paragraph, Text } = Typography;
@@ -153,6 +154,9 @@ export const NotificationsPageView: React.FC<NotificationsPageViewProps> = ({
                 role="button"
                 tabIndex={0}
                 aria-label={`打开通知：${item.title}`}
+                {...(item.targetPath === null
+                  ? {}
+                  : routePreloadHandlers(item.targetPath))}
                 onClick={() => handleOpen(item)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {

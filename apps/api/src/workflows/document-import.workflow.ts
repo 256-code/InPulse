@@ -41,6 +41,7 @@ import {
   type ParsedTaskPriority,
 } from "../modules/document-import/document-template.parser.js";
 import { ProjectBootstrapWorkflow } from "../modules/projects/project-bootstrap.workflow.js";
+import { UserReadPort } from "../auth/user-read.port.js";
 
 /** 文档导入的稳定业务错误；HTTP 映射由 document-import-http.service 负责。 */
 export class DocumentImportError extends Error {
@@ -160,6 +161,8 @@ export class DocumentImportWorkflow {
     private readonly access: ProjectAccessQueryPort,
     @Inject(ActiveUsersQueryPort)
     private readonly activeUsers: ActiveUsersQueryPort,
+    // ADR-071：整项目导入要把创建者默认算进初始成员，需要取创建者姓名做展示引用。
+    @Inject(UserReadPort) private readonly users: UserReadPort,
     @Inject(ProjectMembersQueryPort)
     private readonly members: ProjectMembersQueryPort,
     @Inject(ProjectCodePort) private readonly codes: ProjectCodePort,
@@ -311,13 +314,29 @@ export class DocumentImportWorkflow {
       const members: DocumentImportMemberRef[] = [];
       const seen = new Set<number>();
       const addMember = (ref: DocumentImportMemberRef): void => {
-        if (ref.userId === input.creatorUserId || seen.has(ref.userId)) {
+        if (seen.has(ref.userId)) {
           return;
         }
         seen.add(ref.userId);
         memberIds.push(ref.userId);
         members.push(ref);
       };
+      // ADR-071：创建者默认就算初始成员（文档写不写都加入），名单第一位固定是创建者；
+      // 因此 memberIds / members / summary.memberAddCount 现在都含创建者（与落库的成员行一致）。
+      // 这里读姓名只为预览展示（UserReadPort 是展示用只读端口，返回停用用户；创建者来自
+      // 当前有效会话，不参与成员资格判据）。
+      const creatorRef = (
+        await this.users.listByIds(tx, [input.creatorUserId])
+      )[0];
+      if (creatorRef !== undefined) {
+        addMember({
+          token: creatorRef.name,
+          userId: creatorRef.userId,
+          name: creatorRef.name,
+        });
+      }
+      /** 判「名单是否完整」用的账号：文档写出的成员 + 默认在内的创建者。 */
+      const listedUserIds = new Set<number>([input.creatorUserId]);
       for (const token of project.memberTokens) {
         const resolution = byToken.get(normalizeDocumentName(token));
         if (resolution === undefined || resolution.kind === "not-found") {
@@ -336,8 +355,37 @@ export class DocumentImportWorkflow {
           );
           continue;
         }
+        listedUserIds.add(resolution.userId);
         addMember({ token, userId: resolution.userId, name: resolution.name });
       }
+      if (project.memberTokens.length === 0) {
+        error(
+          project.line,
+          "MEMBER_REQUIRED",
+          "整项目导入必须用「- 初始成员：」列出成员，且须包含创建者本人与全部任务负责人",
+        );
+      } else {
+        const reportedAssignees = new Set<number>();
+        for (const task of tasks) {
+          for (const ref of task.assignees) {
+            if (
+              listedUserIds.has(ref.userId) ||
+              reportedAssignees.has(ref.userId)
+            ) {
+              continue;
+            }
+            reportedAssignees.add(ref.userId);
+            error(
+              task.line,
+              "ASSIGNEE_NOT_INITIAL_MEMBER",
+              "任务负责人「" +
+                ref.token +
+                "」没有出现在「- 初始成员：」里；请把 TA 也写进初始成员",
+            );
+          }
+        }
+      }
+      // 负责人照样自动并入成员集合：上方的 ERROR 会拦住导入，这里是兜底（创建者已在上面并入过）。
       for (const task of tasks) {
         for (const ref of task.assignees) {
           addMember(ref);
@@ -347,7 +395,7 @@ export class DocumentImportWorkflow {
         error(
           project.line,
           "MEMBER_LIMIT_EXCEEDED",
-          "初始成员与任务负责人合计超过 " +
+          "初始成员（含创建者）与任务负责人合计超过 " +
             String(DOCUMENT_IMPORT_MAX_MEMBERS) +
             " 人上限",
         );

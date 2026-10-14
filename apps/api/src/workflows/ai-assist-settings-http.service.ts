@@ -28,9 +28,7 @@ import {
 import { AiAssistSettingsService } from "../modules/document-import/ai-assist-settings.service.js";
 
 export type AiAssistSettingsOperation =
-  | "getAiAssistSettings"
-  | "updateAiAssistSettings"
-  | "testAiAssistSettings";
+  "getAiAssistSettings" | "updateAiAssistSettings" | "testAiAssistSettings";
 
 export interface AiAssistSettingsHttpRequest {
   readonly headers: HttpHeaderBag;
@@ -87,12 +85,12 @@ export class AiAssistSettingsHttpService {
         const result = await this.settings.testConnection();
         return {
           status: 200,
-          body: schemaRegistry.AiAssistSettingsTestResponse.schema.parse(result),
+          body: schemaRegistry.AiAssistSettingsTestResponse.schema.parse(
+            result,
+          ),
         };
       }
-      if (
-        mutationSameOriginValidationError(request.headers) !== undefined
-      ) {
+      if (mutationSameOriginValidationError(request.headers) !== undefined) {
         throw new AiAssistSettingsHttpError(
           403,
           "CSRF_ORIGIN_REJECTED",
@@ -135,7 +133,10 @@ export class AiAssistSettingsHttpService {
             replayAuthContext: { actorUserId: actorId, settingsRowId: 1 },
           };
         },
-        replayAuthorizer: async (record: IdempotencyRecord, tx: TransactionContext) => {
+        replayAuthorizer: async (
+          record: IdempotencyRecord,
+          tx: TransactionContext,
+        ) => {
           // 重放前重新验证当前完整管理员会话与 CSRF（ADR-068 2.6）。
           const actor = await this.highRisk.verify(tx, request.headers);
           const context = aiAssistSettingsReplayContextSchema.parse(
