@@ -929,8 +929,6 @@ export function RecordSummaryModal({
         <div className="summary-scroll">{body}</div>
       </div>
       <div className="calm-action-footer">
-        {/* 左侧这行只报取数与编辑态出口（2026-10-15）：改过的段已由橙点标出，这里不再复述
-            「已手动改 N 处」；底栏右侧固定三枚按钮，撤销入口降级贴在这行末尾。 */}
         <span className="footer-leading summary-footer-count">
           {data === undefined
             ? summary.isError

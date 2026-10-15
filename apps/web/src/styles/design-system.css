@@ -8027,3 +8027,101 @@ div.ant-popover.import-member-popover
   align-items: center;
   gap: 10px;
 }
+
+/* 「AI 辅助转换」设置面板布局（2026-10-15）：单列堆叠、主开关在标题行右端，口径同 ADR-070 企业微信面板。 */
+.ai-assist-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px 20px 20px;
+}
+
+.ai-assist-body .permission-note {
+  margin: 0;
+}
+
+.ai-assist-status {
+  align-items: flex-start;
+}
+
+.ai-assist-status-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-assist-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-assist-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  color: #5b7892;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.ai-assist-status-meta > span + span::before {
+  content: "·";
+  margin: 0 8px;
+  color: #b7c7d7;
+}
+
+.ai-assist-form {
+  display: grid;
+  gap: 18px;
+}
+
+.ai-assist-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-assist-field > label {
+  color: #526b83;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-assist-field .form-hint {
+  margin: 0;
+}
+
+.ai-assist-field > small[role="alert"] {
+  color: #b45b55;
+  font-size: 11px;
+}
+
+.ai-assist-field .ant-input-number {
+  width: 100%;
+}
+
+.ai-assist-master {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-assist-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ai-assist-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .ai-assist-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

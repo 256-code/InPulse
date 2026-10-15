@@ -6531,3 +6531,15 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 口径替代：本节替代上文本批 `RECORD-SUMMARY-AI-004` 行里「底栏出现『已手动改 1 处』……减计数……清零」的表述——计数文案已于 2026-10-15 按用户要求删除，该行保留为 2026-10-14 的历史记录（对应实现已不存在该文案）。
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（纯样式与层级改动，dev 栈人工核对）；② 生产镜像构建与 Trivy 扫描、GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 「AI 辅助转换」主开关拨动即保存（用户「这个关闭就直接显示关闭吧，不用再点击保存了」，2026-10-15 本地落库，第一百八十五条增补）
+
+定案见开发日志第一百八十五条与 [ADR-068](adr/ADR-068.md) §7：`/settings → AI 辅助转换` 的**主开关拨动立即落库**，不再要求点「保存配置」。接口未变，仍是既有 `PUT /api/v1/admin/ai-assist` 的**整体替换**语义（路由 116 条、迁移 42 个均未变）：请求体以**服务端已保存**的 `endpoint / model / timeoutMs / maxTokens` 为基准、`apiKey` 传 `null`（不改密钥），因此表单里未保存的编辑不会被开关顺手提交；成功后用 PUT 响应直接更新前端缓存（不再重新 GET + 回填表单，状态卡与开关同帧一致），失败时开关回落到服务端已保存状态并复用既有错误文案；尚未配置密钥（无数据库行）时开关只改本地草稿、不发请求，并提示「首次配置必须提供 API 密钥」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AI-ASSIST-TOGGLE-001 | Web 单元 | 拨动即保存，且不以表单草稿为基准 | `AiAssistSettingsPanel.test.tsx`：拨到关闭时 `updateAiAssistSettings` 收到 `{ enabled: false, endpoint / model / timeoutMs / maxTokens 为服务端已保存值, apiKey: null }`，`issueCsrfToken` 1 次、带 `x-csrf-token` 与 `Idempotency-Key`，页面出现「已保存：AI 辅助转换已关闭」且开关转未选中；先改「模型」再拨开关时请求体仍是已保存的 `gpt-4o-mini`，输入框保留用户未保存的 `gpt-4o` | 本地通过（2026-10-15） |
+| AI-ASSIST-TOGGLE-002 | Web 单元 | 失败回退与首次配置拦截 | 保存失败（非 `ApiError`）时展示「AI 辅助转换配置服务暂时不可用，请重试。」、开关回到已保存的选中态；`keyConfigured=false` 时拨动开关不调用 `updateAiAssistSettings`，改由 API 密钥字段提示「首次配置必须提供 API 密钥」 | 本地通过（2026-10-15） |
+| AI-ASSIST-TOGGLE-003 | 浏览器 E2E（生产构建 + stub 上游 + `app_ci`） | 拨动即落库、刷新仍生效 | `apps/e2e/tests/settings-ai-assist.spec.ts` **3 例通过（17.2 秒）**：新增「主开关拨动即保存：刷新后仍为关闭，随后恢复启用供后续用例使用」——不点「保存配置」直接拨开关 → 出现「已保存：AI 辅助转换已关闭」→ `page.reload()` 后开关仍为关闭、状态卡显示「当前未启用」→ 再拨回开启（「已保存：AI 辅助转换已启用」）供后续成员导入用例使用；既有 2 例（保存配置并测试连接、在线配置对成员生效）继续通过 | 本地通过（2026-10-15） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 已跑：`pnpm test:e2e` **86 例通过（6.7 分钟）**，本批新增用例已并入整批（此前的定向单跑为 `settings-ai-assist.spec.ts` 3 例通过）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ dev 栈只做只读核对（开关尺寸 / 可访问名 / 状态卡位置），未改动演示库的 AI 配置状态；⑤ `deps:audit` 仍是第一百八十四条记录的 1 条 `mammoth > argparse > sprintf-js` moderate（低于 `--audit-level=high` 阈值，与本批无关）。

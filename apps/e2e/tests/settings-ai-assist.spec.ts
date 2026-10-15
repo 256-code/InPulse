@@ -79,6 +79,38 @@ test.describe.serial("ADR-068 管理员在线配置", () => {
     }
   });
 
+  // 串行依赖上一条用例保存的数据库配置：主开关拨动即落库，刷新后状态保持。
+  test("主开关拨动即保存：刷新后仍为关闭，随后恢复启用供后续用例使用", async ({
+    browser,
+    admin,
+  }) => {
+    const runtime = await loadRuntime();
+    const context = await browser.newContext({ baseURL: runtime.webBaseUrl });
+    const page = await context.newPage();
+    try {
+      await loginAdminViaUi(page, runtime, admin);
+      await page.goto("/settings?tab=aiAssist");
+      const panel = page.getByRole("region", { name: "AI 辅助转换" });
+      const toggle = panel.getByRole("switch", { name: "启用 AI 辅助转换" });
+      await expect(toggle).toBeChecked();
+
+      // 不点「保存配置」，开关自己落库。
+      await toggle.click();
+      await expect(panel.getByText("已保存：AI 辅助转换已关闭")).toBeVisible();
+
+      await page.reload();
+      await expect(
+        panel.getByRole("switch", { name: "启用 AI 辅助转换" }),
+      ).not.toBeChecked();
+      await expect(panel.getByText("当前未启用")).toBeVisible();
+
+      await panel.getByRole("switch", { name: "启用 AI 辅助转换" }).click();
+      await expect(panel.getByText("已保存：AI 辅助转换已启用")).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
   // 串行依赖上一条用例保存的数据库配置：在线配置对普通成员同样生效。
   test("在线配置生效：成员文档导入经数据库配置完成转换", async ({
     browser,
