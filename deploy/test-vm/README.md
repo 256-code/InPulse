@@ -215,6 +215,58 @@ sudo docker exec -i inpulse-deploy-db-1 pg_restore --list < backups/<文件名>.
 最后一条用来确认 dump 可读（应输出几百行条目；2026-10-15 那份是 677 行、43 张表）。
 恢复用 `pg_restore --clean --if-exists`，属于破坏性操作，执行前先确认没人在用这台 VM。
 
+## 把本地演示数据同步到测试 VM（2026-10-15 实作）
+
+目标：把本机演示库（`app` @ `127.0.0.1:55432`）的行数据整体搬到 VM。表结构跟随
+镜像迁移，不在本流程内。全程约 1 分钟；执行前先按上一节落一份 VM 备份。
+
+1. 本地导出（PowerShell）：
+
+   ```powershell
+   & "D:\PostgreSQL\18\pgsql\bin\pg_dump.exe" -Fc -f $env:TEMP\inpulse-demo-app.dump `
+     "postgresql://cluster_bootstrap@127.0.0.1:55432/app"
+   ```
+
+2. 干净性预检：本地演示库可能残留历史 E2E 夹具的悬空行（外键孤儿），直接恢复会在
+   加约束阶段失败。推荐在 VM 上建一个 scratch 演练库空跑一次恢复（`create database
+   app_scratch` → `pg_restore` 不加 `--single-transaction` 收集全部 `ERROR` →
+   `drop database app_scratch`），按报告清干净再重新导出。2026-10-15 实测只报出 4 行
+   `change_record_version_leftovers` 孤儿（对应记录本体早已删除），删除后通过。
+
+3. 上传并恢复（破坏性操作，确认没人在用 VM 时执行）：
+
+   ```bash
+   cd /home/libiao/inpulse-deploy
+   sudo docker compose --env-file .env.deploy -f compose.yaml stop api
+   sudo docker exec -i inpulse-deploy-db-1 pg_restore -U cluster_bootstrap -d app \
+     --clean --if-exists --single-transaction < /tmp/inpulse-demo-app.dump
+   sudo docker compose --env-file .env.deploy -f compose.yaml up -d
+   ```
+
+   `--single-transaction` 保证失败整体回滚、原数据完好（2026-10-15 实际演练过一次）。
+
+4. 迁移账本：dump 会连同本机的 `app.schema_migrations` 一起恢复。本机账本只要存在
+   行尾漂移，`migrate` 就会 checksum fail closed、连带 api 不启动（2026-10-15 实测
+   13 条漂移直接炸停）。处理二选一：优先修好本机账本（把 checksum 对齐到文件的 LF
+   形态，已修，此后本机与 VM 账本逐字节一致）；或恢复后用 pre-restore dump 的原账本
+   替换：
+
+   ```bash
+   docker exec -i inpulse-deploy-db-1 pg_restore -f - --data-only -t schema_migrations \
+     < backups/pre-restore-<时间戳>.dump > /tmp/mig-rows.sql
+   { echo "delete from app.schema_migrations;"; cat /tmp/mig-rows.sql; } | \
+     docker exec -i inpulse-deploy-db-1 psql -v ON_ERROR_STOP=1 -1 -U cluster_bootstrap -d app
+   ```
+
+   注意 `-t` 不要带 `app.` 前缀（带 schema 限定会匹配不到任何条目）。
+
+5. 收尾：清理 dump 带入的本机残留扩展（如 `drop extension if exists pg_trgm`，0005
+   契约迁移早已移除，本机属开发调试残留），再按「更新后验证」核对行数与站点探针。
+
+两处跨环境绑定差异（演示用途可接受）：审计链 HMAC 由各自环境的
+`secrets/audit_hmac_keyring` 签发，跨环境的审计链全量校验/归档任务会报不匹配；
+`ai_assist_settings` 的密钥密文由本地主密钥加密，VM 当前 `AI_ASSIST_ENABLED=0`
+不读取——要在 VM 试用 AI 助手，在管理页重新填写一次即可。
 ## 数据库迁移
 
 - `compose up -d` 时 `migrate` 先执行（`api` 依赖 `service_completed_successfully`）；
@@ -309,8 +361,9 @@ curl.exe -k -I https://test-inpulse.libiaorobot.com/api/v1/auth/sso/start
   ALLinSSL 工作流「部署成功」且 `openssl s_client -connect
   test-inpulse.libiaorobot.com:443 -servername test-inpulse.libiaorobot.com`
   主体为 `*.libiaorobot.com`。
-- 首个管理员：SSO 首次登录按 JIT 建号（`is_admin=false`、无项目成员关系），
-  需要人工在数据库里提升；管理员权限定义见 `docs/permissions.md`。
+- 首个管理员：空库时首个 SSO 登录账号自动成为系统管理员（[ADR-075](../../docs/adr/ADR-075.md)，
+  2026-10-15 起）；库非空时 JIT 开通仍为 `is_admin=false`、无项目成员关系，需要人工
+  在数据库里提升。管理员权限定义见 `docs/permissions.md`。
 
 ## 安全约束
 

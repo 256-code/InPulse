@@ -7971,16 +7971,18 @@ div.ant-popover.import-member-popover
   margin-top: 12px;
 }
 
-/* ADR-070 企业微信机器人设置面板（2026-10-13 布局调整）：正文统一内缩（与标题带
- * 20px 对齐），字段单列堆叠（标签在上、控件全宽、提示紧随），替代两列等宽网格
- * 造成的标签 / 控件远距与行间拥挤。 */
-.wecom-robot-body {
+/* ADR-070 设置面板正文容器（企业微信机器人 / AI 辅助转换共用）：正文统一内缩
+ * （与标题带 20px 对齐），字段单列堆叠（标签在上、控件全宽、提示紧随），替代
+ * 两列等宽网格造成的标签 / 控件远距与行间拥挤。 */
+.wecom-robot-body,
+.ai-assist-body {
   display: grid;
   gap: 14px;
   padding: 16px 20px 5px;
 }
 
-.wecom-robot-body .permission-note {
+.wecom-robot-body .permission-note,
+.ai-assist-body .permission-note {
   margin: 0;
 }
 
@@ -8012,6 +8014,45 @@ div.ant-popover.import-member-popover
 }
 
 .wecom-robot-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ADR-068 AI 辅助转换面板：与通知策略一致的「上标签、下控件、提示跟随控件」纵向布局。 */
+.ai-assist-form {
+  display: grid;
+  gap: 16px;
+}
+.ai-assist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ai-assist-field > label {
+  color: #526b83;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-assist-field .form-hint {
+  margin: 0;
+}
+.ai-assist-field > small[role="alert"] {
+  color: #b45b55;
+  font-size: 11px;
+}
+.ai-assist-field > .ant-input-number {
+  width: 100%;
+}
+.ai-assist-field--switch {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.ai-assist-actions {
   display: flex;
   align-items: center;
   gap: 10px;
