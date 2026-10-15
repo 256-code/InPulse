@@ -39,6 +39,7 @@ export type InpulseIconName =
   | "rotateCcw"
   | "settings"
   | "shield"
+  | "star"
   | "sliders"
   | "user"
   | "upload"
@@ -186,6 +187,16 @@ const iconContents: Readonly<Record<InpulseIconName, React.ReactNode>> = {
     <>
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.35-4.35" />
+    </>
+  ),
+  /**
+   * 星标（项目关注）。路径由几何圆角算出（外半径 9.4 / 内半径 4.7 / 圆角比 0.34），
+   * 顶点本身是圆弧，比直线星柔和；「已标」的实心态由使用方在 CSS 上写 fill 覆盖
+   * 组件固定的 fill="none"（presentation attribute 优先级低于 CSS 规则）。
+   */
+  star: (
+    <>
+      <path d="M11.06 4.5Q12 2.6 12.94 4.5L13.82 6.29Q14.76 8.2 16.86 8.5L18.84 8.79Q20.94 9.1 19.42 10.58L17.99 11.97Q16.47 13.45 16.83 15.54L17.17 17.51Q17.53 19.6 15.65 18.62L13.88 17.69Q12 16.7 10.12 17.69L8.35 18.62Q6.47 19.6 6.83 17.51L7.17 15.54Q7.53 13.45 6.01 11.97L4.58 10.58Q3.06 9.1 5.16 8.79L7.14 8.5Q9.24 8.2 10.18 6.29Z" />
     </>
   ),
   sliders: (

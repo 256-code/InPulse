@@ -6545,3 +6545,17 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | AI-ASSIST-TOGGLE-003 | 浏览器 E2E（生产构建 + stub 上游 + `app_ci`） | 拨动即落库、刷新仍生效 | `apps/e2e/tests/settings-ai-assist.spec.ts` **3 例通过（17.2 秒）**：新增「主开关拨动即保存：刷新后仍为关闭，随后恢复启用供后续用例使用」——不点「保存配置」直接拨开关 → 出现「已保存：AI 辅助转换已关闭」→ `page.reload()` 后开关仍为关闭、状态卡显示「当前未启用」→ 再拨回开启（「已保存：AI 辅助转换已启用」）供后续成员导入用例使用；既有 2 例（保存配置并测试连接、在线配置对成员生效）继续通过 | 本地通过（2026-10-15） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 已跑：`pnpm test:e2e` **86 例通过（6.7 分钟）**，本批新增用例已并入整批（此前的定向单跑为 `settings-ai-assist.spec.ts` 3 例通过）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ dev 栈只做只读核对（开关尺寸 / 可访问名 / 状态卡位置），未改动演示库的 AI 配置状态；⑤ `deps:audit` 仍是第一百九十二条记录的 1 条 `mammoth > argparse > sprintf-js` moderate（低于 `--audit-level=high` 阈值，与本批无关）。
+
+## 项目卡片：成员行并入操作按钮 + 星标「我的关注」（用户「这个编辑按钮我有点想放到成员的右侧」「先把星标加上吧这个星我想柔和一点，角不要那么尖再大一点」「还可以颜色可以透一点」「70」「标星的是为了排序在更前面」，2026-10-15 本地落库，第一百九十四、一百九十五条）
+
+定案见开发日志第一百九十四、一百九十五条：① 卡片页脚由两行（「N 位成员」+ 独占一行的操作）合并为一行——编辑 / 管理成员并入成员行右侧，`.project-card-actions` 的选择器收窄为 `.project-card-members > .project-card-actions`（`justify-content: flex-end`、`gap` 4px），失去引用的 `.project-card-actions-main` 删除。② 卡片右上角、状态徽章左侧新增星标按钮（26px 柔和圆角星 / 34×34 按钮，已标 `rgb(224 164 23 / 0.7)`），状态只写浏览器 `localStorage`（键 `inpulse.projects.starred`），**不新增接口 / 路由 / 迁移 / 依赖 / 权限**（仍 116 条路由 / 42 个迁移）。③ 点亮的项目在列表里排到前面：`visibleProjects` 之后加一层稳定排序 `orderedProjects`，星标组内与未标组内各自保持服务端原次序；两档数量、档内搜索、侧栏项目树、维护中档 `updatedAt` 重排均不受影响。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-STAR-UNIT-001 | Web 单元 | 星标本地存储读写 | `project-star.test.ts` 4 例：无记录 → `[]`；合法 `[2,5]` 原样读回；损坏（`{oops`）/ 非数组（`{"2":true}`）/ 含非法项（`'[2,"5",0,-1,3.5,null]'`）分别回落 `[]`、`[]`、`[2]`；切换 `[7,2,9]` 去掉 2 → `[7,9]`、再加回 → `[7,9,2]`（不打乱其它 ID 的相对顺序） | 本地通过（2026-10-15） |
+| PROJECT-STAR-UNIT-002 | Web 单元 | 卡片星标交互与恢复 | `ProjectsPageView.test.tsx`：点击 `star-project-2` → `aria-pressed=true`、class 含 `is-starred`、`localStorage` 写入 `[2]`，且**不**触发卡片跳转（`onOpenModules` 未被调用）；再点 → `aria-pressed=false`、写回 `[]`；预置 `[2]` 后重新挂载 → `aria-pressed=true` | 本地通过（2026-10-15） |
+| PROJECT-STAR-UNIT-003 | Web 单元 | 星标优先排序 | `ProjectsPageView.test.tsx`：预置 `[22]`、入参顺序 `[2, 22, 23]` → 标题次序 `["乙项目", "InPulse 研发交付平台", "丙项目"]`（点亮项上浮、未标之间次序不动）；再点 `star-project-23` → `["乙项目", "丙项目", "InPulse 研发交付平台"]`（并入星标组、组内按原次序）；取消 `star-project-22` → 回到入参原次序；维护中档预置 `[11]` → `["早维护", "晚维护"]`（星标优先，其余仍按进入维护时间从近到远）；搜索「项目」后 → `["丙项目", "乙项目"]` | 本地通过（2026-10-15） |
+| PROJECT-CARD-FOOTER-UNIT-001 | Web 单元 | 成员行与操作同行 | 既有断言覆盖：卡片页脚仍渲染「N 位成员」，`edit-project-<id>` 与「管理成员」按钮点击不冒泡（`onOpenModules` 未被调用，见 `ProjectsPageView.test.tsx` 的 card actions 用例）；本批未新增用例，整文件 67 例通过 | 本地通过（2026-10-15） |
+| PROJECT-STAR-E2E-001 | 浏览器 E2E（生产构建 + `app_ci`） | 全量回归（未新增用例） | `pnpm test:e2e:local` **86 例通过（6.6 分钟）**：项目卡新增星标按钮与成员行合并后，既有 86 例（含项目创建关键路径、项目成员、记录与任务全量路径）无回归；本批未新增 E2E 用例 | 本地通过（2026-10-15） |
+
+未运行 / 已知偏差（本批）：① 星标不含后端：跨设备 / 跨浏览器不同步，`localStorage` 被清即丢失；跨设备需要新表 + `listProjects` 契约（当前 `query: "none"`）+ 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 排序用稳定 `sort`，点亮后卡片落到星标组内它原本的相对位置（不会顶到组内第一）。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）；⑤ 整链 `pnpm check` 未跑，本批实际执行的门禁见开发日志第一百九十五条。
