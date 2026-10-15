@@ -17,6 +17,7 @@ import {
 } from "../src/modules/wecom-robot/wecom-robot-secret-keyring.js";
 import {
   connect,
+  createProject,
   createUser,
   testUrls,
   type TestUrls,
@@ -137,6 +138,54 @@ async function putConfig(options: {
 
 function idempotencyKey(): string {
   return `wecom-robot-${randomBytes(12).toString("hex")}`;
+}
+
+function requireBootstrap(): Sql {
+  if (bootstrap === undefined) {
+    throw new Error("bootstrap connection is not initialised");
+  }
+  return bootstrap;
+}
+
+/** 清除其他测试文件遗留的 ACTIVE 绑定，让解绑计数断言确定（ADR-078）。 */
+async function resetActiveBindings(sql: Sql): Promise<void> {
+  await sql`
+    UPDATE app.user_wecom_bindings
+       SET status = 'REVOKED',
+           revoked_at = now(),
+           updated_at = now(),
+           row_version = row_version + 1
+     WHERE status = 'ACTIVE'
+  `;
+  await sql`
+    UPDATE app.project_wecom_groups
+       SET status = 'REVOKED',
+           revoked_at = now(),
+           updated_at = now(),
+           row_version = row_version + 1
+     WHERE status = 'ACTIVE'
+  `;
+}
+
+async function countActiveBindings(
+  sql: Sql,
+): Promise<{ userBindings: number; projectGroups: number }> {
+  const rows = (await sql`
+    SELECT (SELECT count(*)::integer
+              FROM app.user_wecom_bindings
+             WHERE status = 'ACTIVE') AS "userBindings",
+           (SELECT count(*)::integer
+              FROM app.project_wecom_groups
+             WHERE status = 'ACTIVE') AS "projectGroups"
+  `) as unknown as readonly {
+    userBindings: number;
+    projectGroups: number;
+  }[];
+  const row = rows[0];
+  if (row === undefined) {
+    throw new Error("active binding count query returned no row");
+  }
+  return row;
 }
 
 async function expectBodyCode(
@@ -300,6 +349,8 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
       botProfileUrl: null,
       updatedAt: null,
       updatedByName: null,
+      revokedUserBindings: null,
+      revokedProjectGroups: null,
     });
   });
 
@@ -694,5 +745,199 @@ describe("企业微信机器人配置（真实 PostgreSQL + 真实 HTTP）", () 
     } finally {
       await backup.end({ timeout: 5 });
     }
+  });
+
+  test("更换机器人（botId 变化）解除全部个人绑定与项目群绑定并返回计数（ADR-078）", async () => {
+    const sql = requireRuntime();
+    const boot = requireBootstrap();
+    const admin = await sessionActor(
+      sql,
+      await createUser(sql, { admin: true }),
+    );
+    const csrf = await issueCsrf(admin.cookie);
+    await boot`DELETE FROM app.wecom_robot_config`;
+    await resetActiveBindings(sql);
+
+    const memberOne = await createUser(sql);
+    const memberTwo = await createUser(sql);
+    await sql`
+      INSERT INTO app.user_wecom_bindings (user_id, wecom_userid, status)
+      VALUES (${memberOne}, 'test-switch-member-one', 'ACTIVE')
+    `;
+    await sql`
+      INSERT INTO app.user_wecom_bindings (user_id, wecom_userid, status)
+      VALUES (${memberTwo}, 'test-switch-member-two', 'ACTIVE')
+    `;
+    const leader = await createUser(sql);
+    const project = await createProject(sql, leader);
+    await sql`
+      INSERT INTO app.project_wecom_groups (
+        project_id,
+        wecom_chat_id,
+        bound_by_user_id,
+        status
+      )
+      VALUES (${project.projectId}, 'test-switch-chat', ${leader}, 'ACTIVE')
+    `;
+    expect(await countActiveBindings(sql)).toEqual({
+      userBindings: 2,
+      projectGroups: 1,
+    });
+
+    const created = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-switch-bot-a", secret: TEST_ROBOT_SECRET },
+    });
+    expect(created.status).toBe(200);
+    const createdBody = (await created.json()) as Record<string, unknown>;
+    expect(createdBody["revokedUserBindings"]).toBeNull();
+    expect(createdBody["revokedProjectGroups"]).toBeNull();
+
+    const key = idempotencyKey();
+    const switched = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: key,
+      body: { botId: "aib-switch-bot-b" },
+    });
+    expect(switched.status).toBe(200);
+    const switchedBody = (await switched.json()) as Record<string, unknown>;
+    expect(switchedBody["revokedUserBindings"]).toBe(2);
+    expect(switchedBody["revokedProjectGroups"]).toBe(1);
+    expect(await countActiveBindings(sql)).toEqual({
+      userBindings: 0,
+      projectGroups: 0,
+    });
+
+    const revokedRows = (await sql`
+      SELECT status, revoked_at AS "revokedAt", row_version AS "rowVersion"
+        FROM app.user_wecom_bindings
+       WHERE user_id = ${memberOne}
+       ORDER BY id DESC
+       LIMIT 1
+    `) as unknown as readonly {
+      status: string;
+      revokedAt: Date | null;
+      rowVersion: number;
+    }[];
+    expect(revokedRows[0]?.status).toBe("REVOKED");
+    expect(revokedRows[0]?.revokedAt).not.toBeNull();
+    expect(revokedRows[0]?.rowVersion).toBe(2);
+
+    const groupRows = (await sql`
+      SELECT status, revoked_at AS "revokedAt"
+        FROM app.project_wecom_groups
+       WHERE project_id = ${project.projectId}
+       ORDER BY id DESC
+       LIMIT 1
+    `) as unknown as readonly { status: string; revokedAt: Date | null }[];
+    expect(groupRows[0]?.status).toBe("REVOKED");
+    expect(groupRows[0]?.revokedAt).not.toBeNull();
+
+    // 同 Key 重放返回原响应（含解绑计数），不再次执行解绑。
+    const replay = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: key,
+      body: { botId: "aib-switch-bot-b" },
+    });
+    expect(replay.status).toBe(200);
+    expect((await replay.json()) as Record<string, unknown>).toEqual(
+      switchedBody,
+    );
+
+    // GET 配置视图不携带解绑计数（只在保存响应出现）。
+    const followUp = await getConfig(admin.cookie);
+    const followUpBody = (await followUp.json()) as Record<string, unknown>;
+    expect(followUpBody["revokedUserBindings"]).toBeNull();
+    expect(followUpBody["revokedProjectGroups"]).toBeNull();
+
+    const reader = auditReader;
+    if (reader === undefined) throw new Error("audit reader missing");
+    const audits = (await reader`
+      SELECT event_payload AS payload
+        FROM app.audit_logs
+       WHERE action = 'admin.wecomRobot.update'
+       ORDER BY sequence_no DESC
+       LIMIT 1
+    `) as unknown as readonly { payload: unknown }[];
+    const payload = JSON.stringify(audits[0]?.payload);
+    expect(payload).toContain('"robotChanged":true');
+    expect(payload).toContain('"revokedUserBindings":2');
+    expect(payload).toContain('"revokedProjectGroups":1');
+  });
+
+  test("同一 botId 仅轮换 Secret 不触发解绑（ADR-078）", async () => {
+    const sql = requireRuntime();
+    const boot = requireBootstrap();
+    const admin = await sessionActor(
+      sql,
+      await createUser(sql, { admin: true }),
+    );
+    const csrf = await issueCsrf(admin.cookie);
+    await boot`DELETE FROM app.wecom_robot_config`;
+    await resetActiveBindings(sql);
+
+    const member = await createUser(sql);
+    await sql`
+      INSERT INTO app.user_wecom_bindings (user_id, wecom_userid, status)
+      VALUES (${member}, 'test-rotate-member', 'ACTIVE')
+    `;
+    const created = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-rotate-bot", secret: TEST_ROBOT_SECRET },
+    });
+    expect(created.status).toBe(200);
+
+    const rotated = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-rotate-bot", secret: TEST_ROBOT_SECRET_ALT },
+    });
+    expect(rotated.status).toBe(200);
+    const rotatedBody = (await rotated.json()) as Record<string, unknown>;
+    expect(rotatedBody["secretHint"]).toBe(TEST_ROBOT_SECRET_ALT.slice(-4));
+    expect(rotatedBody["revokedUserBindings"]).toBeNull();
+    expect(rotatedBody["revokedProjectGroups"]).toBeNull();
+    expect(await countActiveBindings(sql)).toEqual({
+      userBindings: 1,
+      projectGroups: 0,
+    });
+  });
+
+  test("更换机器人但没有生效绑定：返回 0 / 0 而不是 null（ADR-078）", async () => {
+    const sql = requireRuntime();
+    const boot = requireBootstrap();
+    const admin = await sessionActor(
+      sql,
+      await createUser(sql, { admin: true }),
+    );
+    const csrf = await issueCsrf(admin.cookie);
+    await boot`DELETE FROM app.wecom_robot_config`;
+    await resetActiveBindings(sql);
+
+    const created = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-empty-bot-a", secret: TEST_ROBOT_SECRET },
+    });
+    expect(created.status).toBe(200);
+
+    const switched = await putConfig({
+      cookie: admin.cookie,
+      csrf,
+      idempotencyKey: idempotencyKey(),
+      body: { botId: "aib-empty-bot-b" },
+    });
+    expect(switched.status).toBe(200);
+    const body = (await switched.json()) as Record<string, unknown>;
+    expect(body["revokedUserBindings"]).toBe(0);
+    expect(body["revokedProjectGroups"]).toBe(0);
   });
 });

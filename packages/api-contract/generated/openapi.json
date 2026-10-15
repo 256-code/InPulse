@@ -1389,7 +1389,7 @@
       },
       "put": {
         "operationId": "updateWecomRobotConfig",
-        "summary": "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥，botProfileUrl 缺省保持、null 清空），密钥经 AES-256-GCM 加密落库、明文永不入库；写审计（不含密钥）。",
+        "summary": "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥，botProfileUrl 缺省保持、null 清空），密钥经 AES-256-GCM 加密落库、明文永不入库；botId 与已存值不同（更换机器人）时同一事务解除全部企业微信绑定（个人 + 项目群）并在响应返回解绑计数；写审计（不含密钥）。",
         "responses": {
           "200": {
             "description": "成功",
@@ -1477,7 +1477,7 @@
           "csrfPolicy": "required",
           "idempotencyPolicy": "idempotencyRequired",
           "idempotencyExceptionAdr": "none",
-          "idempotencyContractVersion": "1.1.0",
+          "idempotencyContractVersion": "1.2.0",
           "idempotencyFingerprintVersion": "1.0.0",
           "behaviorHeaders": [],
           "idempotencyReplayPolicy": {
@@ -1492,6 +1492,8 @@
                     "configured",
                     "disabledReason",
                     "ready",
+                    "revokedProjectGroups",
+                    "revokedUserBindings",
                     "rowVersion",
                     "secretHint",
                     "secretKeyVersion",
@@ -3490,7 +3492,7 @@
       },
       "get": {
         "operationId": "getWecomBinding",
-        "summary": "当前登录用户的企业微信机器人绑定状态；未绑定且无待用码为 UNBOUND，有待用码为 PENDING，已绑定为 BOUND；身份由服务端从 Session Cookie 解析，不接受客户端指定用户。",
+        "summary": "当前登录用户的企业微信机器人绑定状态；未绑定且无待用码为 UNBOUND，有待用码为 PENDING，已绑定为 BOUND；身份由服务端从 Session Cookie 解析，不接受客户端指定用户。响应同时返回 robotConfigured：管理员尚未配置机器人时为 false，前端不得据此提示用户绑定（ADR-079）。",
         "responses": {
           "200": {
             "description": "成功",
@@ -28544,13 +28546,18 @@
               }
             ],
             "description": "管理员配置的机器人资料链接；未配置为 null；用于指引成员在企业微信中打开机器人"
+          },
+          "robotConfigured": {
+            "type": "boolean",
+            "description": "管理员是否已配置企微机器人（单行配置表是否存在）；未配置时绑定不可用，前端不得提示绑定（ADR-079）"
           }
         },
         "required": [
           "state",
           "boundAt",
           "codeExpiresAt",
-          "botProfileUrl"
+          "botProfileUrl",
+          "robotConfigured"
         ],
         "additionalProperties": false
       },
@@ -28666,6 +28673,32 @@
               }
             ],
             "description": "最近一次保存人的显示名；用于管理页核对变更来源"
+          },
+          "revokedUserBindings": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次保存是否因更换机器人触发解绑：未更换为 null，更换时为本事务解除的个人绑定数（可能为 0）"
+          },
+          "revokedProjectGroups": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本次保存是否因更换机器人触发解绑：未更换为 null，更换时为本事务解除的项目群绑定数（可能为 0）"
           }
         },
         "required": [
@@ -28678,7 +28711,9 @@
           "rowVersion",
           "botProfileUrl",
           "updatedAt",
-          "updatedByName"
+          "updatedByName",
+          "revokedUserBindings",
+          "revokedProjectGroups"
         ],
         "additionalProperties": false
       },

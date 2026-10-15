@@ -15,6 +15,7 @@ const unbound: WecomBindingStatus = {
   boundAt: null,
   codeExpiresAt: null,
   botProfileUrl: null,
+  robotConfigured: true,
 };
 
 const bound: WecomBindingStatus = {
@@ -22,6 +23,7 @@ const bound: WecomBindingStatus = {
   boundAt: "2026-10-13T02:00:00.000Z",
   codeExpiresAt: null,
   botProfileUrl: null,
+  robotConfigured: true,
 };
 
 const issuedCode = {
@@ -120,6 +122,7 @@ describe("WecomBindingModal（ADR-069）", () => {
       statuses: [
         {
           state: "PENDING",
+          robotConfigured: true,
           boundAt: null,
           codeExpiresAt: "2099-01-01T00:00:00.000Z",
           botProfileUrl:

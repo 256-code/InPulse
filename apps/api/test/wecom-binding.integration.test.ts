@@ -36,6 +36,7 @@ let app: NestExpressApplication | undefined;
 let baseUrl = "";
 let urls: TestUrls;
 let runtime: Sql | undefined;
+let bootstrap: Sql | undefined;
 let keyringDirectory: string | undefined;
 let previousEnvironment: Readonly<Record<string, string | undefined>> = {};
 let sessionKey: Buffer;
@@ -45,6 +46,13 @@ function requireRuntime(): Sql {
     throw new Error("runtime connection is not initialised");
   }
   return runtime;
+}
+
+function requireBootstrap(): Sql {
+  if (bootstrap === undefined) {
+    throw new Error("bootstrap connection is not initialised");
+  }
+  return bootstrap;
 }
 
 function randomWecomId(): string {
@@ -197,6 +205,7 @@ async function expectPrivilegeDenied(
 beforeAll(async () => {
   urls = testUrls();
   runtime = connect(urls.runtime, 20);
+  bootstrap = connect(urls.bootstrap, 2);
   await migrate(urls.migrator);
 
   sessionKey = randomBytes(32);
@@ -266,6 +275,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await runtime?.end({ timeout: 5 });
+  await bootstrap?.end({ timeout: 5 });
   for (const [name, value] of Object.entries(previousEnvironment)) {
     if (value === undefined) {
       delete process.env[name];
@@ -290,6 +300,8 @@ describe("企微机器人绑定（真实 PostgreSQL + 真实 HTTP）", () => {
   test("新用户 GET 返回 UNBOUND 且时间戳为 null", async () => {
     const sql = requireRuntime();
     const actor = await sessionActor(sql, await createUser(sql));
+    // 机器人配置是共享单行状态：先清空，保证 robotConfigured 断言与其它用例顺序无关。
+    await requireBootstrap()`DELETE FROM app.wecom_robot_config`;
     const response = await getBinding(actor.cookie);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -298,6 +310,7 @@ describe("企微机器人绑定（真实 PostgreSQL + 真实 HTTP）", () => {
       boundAt: null,
       codeExpiresAt: null,
       botProfileUrl: null,
+      robotConfigured: false,
     });
   });
 
@@ -305,11 +318,11 @@ describe("企微机器人绑定（真实 PostgreSQL + 真实 HTTP）", () => {
     const sql = requireRuntime();
     const actor = await sessionActor(sql, await createUser(sql));
 
-    // 单行配置表在此前用例中为空，botProfileUrl 应为 null。
+    // 单行配置表在此前用例中已清空：机器人未配置（robotConfigured=false）、botProfileUrl 为 null。
     const before = await getBinding(actor.cookie);
-    expect(
-      ((await before.json()) as Record<string, unknown>)["botProfileUrl"],
-    ).toBeNull();
+    const beforeBody = (await before.json()) as Record<string, unknown>;
+    expect(beforeBody["robotConfigured"]).toBe(false);
+    expect(beforeBody["botProfileUrl"]).toBeNull();
 
     // 直接写入配置行（密文任意 29 字节以上即可；绑定状态不做解密）。
     await sql`
@@ -338,18 +351,15 @@ describe("企微机器人绑定（真实 PostgreSQL + 真实 HTTP）", () => {
     try {
       const after = await getBinding(actor.cookie);
       expect(after.status).toBe(200);
-      expect(
-        ((await after.json()) as Record<string, unknown>)["botProfileUrl"],
-      ).toBe(
+      const afterBody = (await after.json()) as Record<string, unknown>;
+      expect(afterBody["robotConfigured"]).toBe(true);
+      expect(afterBody["botProfileUrl"]).toBe(
         "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
       );
     } finally {
-      // app_runtime 无 DELETE 授权：只清链接，行留给 robot 用例自行清理。
-      await sql`
-        UPDATE app.wecom_robot_config
-           SET bot_profile_url = NULL
-         WHERE id = 1
-      `;
+      // 配置行会让 robotConfigured 变为 true：经 bootstrap 连接整行删除，避免影响后续用例
+      //（app_runtime 对配置表没有 DELETE 授权）。
+      await requireBootstrap()`DELETE FROM app.wecom_robot_config`;
     }
   });
 

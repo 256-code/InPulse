@@ -287,7 +287,7 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
 | `getWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 只读机器人配置与可用状态（`configured` / `ready` / `disabledReason` / botId / 密钥尾号 / `botProfileUrl`）；响应 `no-store`、永不回显密钥；主密钥缺失 / 密文不可解按 `ENCRYPTION_KEY_UNAVAILABLE` / `CONFIG_INVALID` fail closed |
-| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret / botProfileUrl（secret 缺省或 null 保持原值，首次必填；botProfileUrl 缺省保持、null 清空；AES-256-GCM 加密落库、明文不落库）；CSRF + 数据库级幂等（1.1.0）；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
+| `updateWecomRobotConfig` | 401 | 403 | 403 | 403 | 401 | 允许 | 保存 botId / secret / botProfileUrl（secret 缺省或 null 保持原值，首次必填；botProfileUrl 缺省保持、null 清空；AES-256-GCM 加密落库、明文不落库）；**botId 与已存值不同（更换机器人）时同一事务解除全部企业微信绑定（个人 + 项目群，ADR-078）并在响应返回解绑计数**；CSRF + 数据库级幂等（1.2.0）；主密钥不可用且需加密新密钥时 503 `WECOM_ROBOT_CONFIG_KEY_UNAVAILABLE` |
 
 两条路由都只服务完整管理员 Session（ADR-031 起不要求 TOTP 重认证），只访问单行配置 `app.wecom_robot_config`；写审计 `admin.wecomRobot.update`（不含密钥材料）。凭据进入数据库是本 ADR 对 ADR-069 §2.4 的修订；桥接侧读取解密后的凭据为下一批改造。
 ## ADR-071 文档导入工作台（2026-10-13）

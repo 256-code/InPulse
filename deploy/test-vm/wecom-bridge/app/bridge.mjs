@@ -1,14 +1,21 @@
 // InPulse -> 企业微信智能机器人 临时通知桥 v4（演示用，不进入 InPulse 仓库）
 // v4 变化：消息改为 template_card 卡片（主标题 + 编号 + 字段行），通过 PoC raw 通道发送。
 // 数据：直连本地开发库只读查询（演示用 cluster_bootstrap；正式实现不得照搬此方式）。
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const { Pool } = pg;
 const here = dirname(fileURLToPath(import.meta.url));
-const configPath = process.argv[2] ? resolve(process.argv[2]) : join(here, "bridge-config.json");
+const configPath = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(here, "bridge-config.json");
 const config = JSON.parse(readFileSync(configPath, "utf8"));
 
 // 数据库连接：优先 DATABASE_URL（runner 注入），其次 bridge-config.databaseUrl
@@ -18,27 +25,59 @@ function buildDatabaseUrl() {
   const port = process.env.DB_PORT || "5432";
   const name = process.env.DB_NAME || "app";
   const user = process.env.DB_USER || "app_runtime";
-  const passwordFile = process.env.DB_PASSWORD_FILE || "/run/secrets/db_runtime_password";
+  const passwordFile =
+    process.env.DB_PASSWORD_FILE || "/run/secrets/db_runtime_password";
   const password = readFileSync(passwordFile, "utf8").trim();
   const sslmode = (process.env.DB_SSLMODE || "").trim();
-  const base = "postgresql://" + encodeURIComponent(user) + ":" + encodeURIComponent(password) + "@" + host + ":" + port + "/" + name;
+  const base =
+    "postgresql://" +
+    encodeURIComponent(user) +
+    ":" +
+    encodeURIComponent(password) +
+    "@" +
+    host +
+    ":" +
+    port +
+    "/" +
+    name;
   return sslmode.length > 0 ? base + "?sslmode=" + sslmode : base;
 }
-const envUrl = typeof process.env.DATABASE_URL === "string" ? process.env.DATABASE_URL.trim() : "";
-const configUrl = typeof config.databaseUrl === "string" ? config.databaseUrl.trim() : "";
-const databaseUrl = envUrl.length > 0 ? envUrl : configUrl.length > 0 ? configUrl : buildDatabaseUrl();
+const envUrl =
+  typeof process.env.DATABASE_URL === "string"
+    ? process.env.DATABASE_URL.trim()
+    : "";
+const configUrl =
+  typeof config.databaseUrl === "string" ? config.databaseUrl.trim() : "";
+const databaseUrl =
+  envUrl.length > 0
+    ? envUrl
+    : configUrl.length > 0
+      ? configUrl
+      : buildDatabaseUrl();
 const recipients = new Map(Object.entries(config.recipients || {}));
-const configuredTypes = Array.isArray(config.forwardTypes) ? config.forwardTypes : [];
-const forwardAll = configuredTypes.length === 0 || configuredTypes.includes("*");
+const configuredTypes = Array.isArray(config.forwardTypes)
+  ? config.forwardTypes
+  : [];
+const forwardAll =
+  configuredTypes.length === 0 || configuredTypes.includes("*");
 const forwardTypes = new Set(configuredTypes);
 const commandFile = resolve(here, config.commandFile || "config-commands.txt");
 const stateFile = resolve(here, config.stateFile || "bridge-state.json");
-const pollIntervalMs = Number(config.pollIntervalMs) > 0 ? Number(config.pollIntervalMs) : 3000;
+const pollIntervalMs =
+  Number(config.pollIntervalMs) > 0 ? Number(config.pollIntervalMs) : 3000;
 const dryRun = config.dryRun === true;
-const maxIterations = Number.isInteger(config.maxIterations) && config.maxIterations > 0 ? config.maxIterations : null;
+const maxIterations =
+  Number.isInteger(config.maxIterations) && config.maxIterations > 0
+    ? config.maxIterations
+    : null;
 const cardActionUrl = String(config.cardActionUrl || "https://example.com");
 
-const PRIORITY_LABELS = { LOW: "低", NORMAL: "普通", HIGH: "高", URGENT: "紧急" };
+const PRIORITY_LABELS = {
+  LOW: "低",
+  NORMAL: "普通",
+  HIGH: "高",
+  URGENT: "紧急",
+};
 const STATUS_LABELS = { TODO: "未完成", DONE: "已完成", CANCELED: "已取消" };
 const TYPE_LABELS = {
   "task.assigned": "新任务指派",
@@ -71,7 +110,15 @@ const SUBTITLE = {
   PROJECT_ARCHIVE_REJECTED: "项目归档申请被驳回",
 };
 const ASSIGNMENT_TYPES = new Set(["task.assigned", "leftover.convert"]);
-const BODY_IS_CODE_TYPES = new Set(["task.assigned", "leftover.convert", "task.complete", "task.reopen", "record.publish", "record.version.create", "record.leftover.add"]);
+const BODY_IS_CODE_TYPES = new Set([
+  "task.assigned",
+  "leftover.convert",
+  "task.complete",
+  "task.reopen",
+  "record.publish",
+  "record.version.create",
+  "record.leftover.add",
+]);
 
 const POLL_SQL = [
   "select",
@@ -80,13 +127,13 @@ const POLL_SQL = [
   "  n.notification_type,",
   "  n.title,",
   "  n.body as task_code,",
-      "  t.title as task_title,",
+  "  t.title as task_title,",
   "  t.priority,",
   "  t.work_status,",
   "  t.due_at,",
   "  p.name as project_name",
   "from app.notifications n",
-        "left join app.tasks t",
+  "left join app.tasks t",
   "  on t.id = nullif(substring(n.target_path from 'taskId=([0-9]+)'), '')::int",
   "left join app.projects p on p.id = n.project_id",
   "where n.id > $1",
@@ -99,7 +146,9 @@ function log(...parts) {
 }
 
 function clean(value) {
-  return String(value === null || value === undefined ? "" : value).replace(/\s+/g, " ").trim();
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function clamp(value, maxChars) {
@@ -112,24 +161,41 @@ function formatDue(value) {
   const date = value instanceof Date ? value : new Date(String(value));
   if (Number.isNaN(date.getTime())) return "";
   const pad = (part) => String(part).padStart(2, "0");
-  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+  return (
+    date.getFullYear() +
+    "-" +
+    pad(date.getMonth() + 1) +
+    "-" +
+    pad(date.getDate()) +
+    " " +
+    pad(date.getHours()) +
+    ":" +
+    pad(date.getMinutes())
+  );
 }
 
 function buildCard(row) {
   const typeLabel = TYPE_LABELS[row.notification_type] || row.notification_type;
   const title = clamp(clean(row.title) || typeLabel, 40);
-  const code = BODY_IS_CODE_TYPES.has(row.notification_type) ? clean(row.task_code) : "";
+  const code = BODY_IS_CODE_TYPES.has(row.notification_type)
+    ? clean(row.task_code)
+    : "";
   const rows = [];
   const projectName = clean(row.project_name);
   if (projectName.length > 0 && title.indexOf(projectName) < 0) {
     rows.push({ keyname: "项目", value: clamp(projectName, 40) });
   }
   const actorName = row.actor_type === "USER" ? clean(row.actor_name) : "";
-  rows.push({ keyname: ASSIGNMENT_TYPES.has(row.notification_type) ? "指派人" : "操作人", value: actorName.length > 0 ? actorName : "系统" });
+  rows.push({
+    keyname: ASSIGNMENT_TYPES.has(row.notification_type) ? "指派人" : "操作人",
+    value: actorName.length > 0 ? actorName : "系统",
+  });
   const isTask = row.task_title !== null && row.task_title !== undefined;
   if (isTask) {
-    if (PRIORITY_LABELS[row.priority]) rows.push({ keyname: "优先级", value: PRIORITY_LABELS[row.priority] });
-    if (STATUS_LABELS[row.work_status]) rows.push({ keyname: "状态", value: STATUS_LABELS[row.work_status] });
+    if (PRIORITY_LABELS[row.priority])
+      rows.push({ keyname: "优先级", value: PRIORITY_LABELS[row.priority] });
+    if (STATUS_LABELS[row.work_status])
+      rows.push({ keyname: "状态", value: STATUS_LABELS[row.work_status] });
     const due = formatDue(row.due_at);
     if (due.length > 0) rows.push({ keyname: "截止", value: due });
   }
@@ -163,7 +229,8 @@ function loadLastId() {
       // 状态文件损坏时忽略，走正常初始化
     }
   }
-  if (Number.isInteger(config.startFromId) && config.startFromId >= 0) return config.startFromId;
+  if (Number.isInteger(config.startFromId) && config.startFromId >= 0)
+    return config.startFromId;
   return null;
 }
 
@@ -176,7 +243,10 @@ async function reloadRecipients() {
     dbRows = result.rows;
   } catch (error) {
     // 绑定表暂不可读时保持现有映射，等待下一轮
-    log("读取绑定表失败（本轮沿用现有映射）:", error && error.message ? error.message : String(error));
+    log(
+      "读取绑定表失败（本轮沿用现有映射）:",
+      error && error.message ? error.message : String(error),
+    );
     return;
   }
   const next = new Map();
@@ -191,7 +261,11 @@ async function reloadRecipients() {
     // 用户一旦在数据库绑定或解绑过，其收件人一律以数据库为准。
     const live = JSON.parse(readFileSync(configPath, "utf8"));
     for (const [key, value] of Object.entries(live.recipients || {})) {
-      if (typeof value === "string" && value.length > 0 && !seenUserIds.has(key)) {
+      if (
+        typeof value === "string" &&
+        value.length > 0 &&
+        !seenUserIds.has(key)
+      ) {
         next.set(key, value);
       }
     }
@@ -207,7 +281,9 @@ let iterations = 0;
 const pool = new Pool({ connectionString: databaseUrl, max: 2 });
 
 async function currentMaxId() {
-  const result = await pool.query("select coalesce(max(id), 0) as max_id from app.notifications");
+  const result = await pool.query(
+    "select coalesce(max(id), 0) as max_id from app.notifications",
+  );
   return Number(result.rows[0].max_id);
 }
 
@@ -220,7 +296,14 @@ async function pollOnce() {
     if (!forwardAll && !forwardTypes.has(row.notification_type)) continue;
     const wecomUserId = recipients.get(String(row.recipient_id));
     if (!wecomUserId) {
-      log("跳过（该用户未绑定企业微信）: 通知", row.id, "-> 用户", row.recipient_id, row.notification_type, row.title);
+      log(
+        "跳过（该用户未绑定企业微信）: 通知",
+        row.id,
+        "-> 用户",
+        row.recipient_id,
+        row.notification_type,
+        row.title,
+      );
       continue;
     }
     const card = buildCard(row);
@@ -229,7 +312,12 @@ async function pollOnce() {
       console.log(JSON.stringify(card, null, 2));
     } else {
       appendCommand("raw " + wecomUserId + " " + JSON.stringify(card));
-      log("已投递发送队列: 通知", row.id, "[" + row.notification_type + "] ->", card.template_card.main_title.title);
+      log(
+        "已投递发送队列: 通知",
+        row.id,
+        "[" + row.notification_type + "] ->",
+        card.template_card.main_title.title,
+      );
     }
     delivered += 1;
   }
@@ -237,11 +325,22 @@ async function pollOnce() {
 }
 
 function persistState() {
-  writeFileSync(stateFile, JSON.stringify({ lastId: lastId, updatedAt: new Date().toISOString() }), "utf8");
+  writeFileSync(
+    stateFile,
+    JSON.stringify({ lastId: lastId, updatedAt: new Date().toISOString() }),
+    "utf8",
+  );
 }
 
 async function main() {
-  log("通知桥 v4 启动", dryRun ? "(dry-run)" : "(实发)", "| 转发范围:", forwardAll ? "全部类型" : [...forwardTypes].join(","), "| 卡片动作链接:", cardActionUrl);
+  log(
+    "通知桥 v4 启动",
+    dryRun ? "(dry-run)" : "(实发)",
+    "| 转发范围:",
+    forwardAll ? "全部类型" : [...forwardTypes].join(","),
+    "| 卡片动作链接:",
+    cardActionUrl,
+  );
   lastId = loadLastId();
   if (lastId === null) {
     lastId = await currentMaxId();
@@ -256,7 +355,14 @@ async function main() {
     try {
       const outcome = await pollOnce();
       if (outcome.rows > 0) {
-        log("本轮读取", outcome.rows, "条，投递", outcome.delivered, "条，lastId =", lastId);
+        log(
+          "本轮读取",
+          outcome.rows,
+          "条，投递",
+          outcome.delivered,
+          "条，lastId =",
+          lastId,
+        );
         if (!dryRun) persistState();
       }
     } catch (error) {

@@ -2187,6 +2187,7 @@ export type WecomBindingStatus = {
   readonly boundAt: (string | null);
   readonly codeExpiresAt: (string | null);
   readonly botProfileUrl: (string | null);
+  readonly robotConfigured: boolean;
 };
 
 export type WecomRobotConfig = {
@@ -2200,6 +2201,8 @@ export type WecomRobotConfig = {
   readonly botProfileUrl: (string | null);
   readonly updatedAt: (string | null);
   readonly updatedByName: (string | null);
+  readonly revokedUserBindings: (number | null);
+  readonly revokedProjectGroups: (number | null);
 };
 
 export type WecomRobotConfigUpdateRequest = {

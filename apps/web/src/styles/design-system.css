@@ -7790,7 +7790,7 @@ div.ant-popover.import-member-popover
   color: #5a7591;
 }
 
-/* ADR-069 企微机器人绑定弹层（账户菜单 → 绑定企业微信）。 */
+/* ADR-069 企微机器人绑定弹层（账户菜单 → 绑定企业微信）与 ADR-079 未绑定提醒弹层共用该头部口径。 */
 /* 该盒不吃 .catalog-modal 的默认头部排版：不补内边距，眉标会顶到盒子上沿
    被圆角裁切、正文贴着标题。这里按弹层既有口径（record-detail-modal 同款）
    补上头部内边距与分隔线，正文统一交给 .modal-body。 */

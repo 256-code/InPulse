@@ -1,9 +1,7 @@
 {
   "databaseUrl": "",
   "recipients": {},
-  "forwardTypes": [
-    "*"
-  ],
+  "forwardTypes": ["*"],
   "commandFile": "/tmp/test-commands.txt",
   "stateFile": "/tmp/test-state.json",
   "pollIntervalMs": 3000,

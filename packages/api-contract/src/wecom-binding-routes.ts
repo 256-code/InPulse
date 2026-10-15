@@ -18,7 +18,7 @@ export const wecomBindingRoutes: readonly RouteDefinition[] = [
     path: "/me/wecom-binding",
     operationId: "getWecomBinding",
     summary:
-      "当前登录用户的企业微信机器人绑定状态；未绑定且无待用码为 UNBOUND，有待用码为 PENDING，已绑定为 BOUND；身份由服务端从 Session Cookie 解析，不接受客户端指定用户。",
+      "当前登录用户的企业微信机器人绑定状态；未绑定且无待用码为 UNBOUND，有待用码为 PENDING，已绑定为 BOUND；身份由服务端从 Session Cookie 解析，不接受客户端指定用户。响应同时返回 robotConfigured：管理员尚未配置机器人时为 false，前端不得据此提示用户绑定（ADR-079）。",
     request: {
       path: "none",
       query: "none",

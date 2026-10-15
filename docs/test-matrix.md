@@ -6144,7 +6144,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 ## 企业微信机器人绑定（ADR-069，阶段一）
 
-用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。2026-10-13 扩展（迁移 `0043`，ADR-070）：绑定状态随机器人配置回传 `botProfileUrl`，弹窗（含待用码状态）展示机器人链接并提示去企业微信打开。
+用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。2026-10-13 扩展（迁移 `0043`，ADR-070）：绑定状态随机器人配置回传 `botProfileUrl`，弹窗（含待用码状态）展示机器人链接并提示去企业微信打开。2026-10-15 扩展（ADR-079）：绑定状态新增 `robotConfigured`（机器人是否已配置）；已登录且未绑定（UNBOUND）时弹「绑定提醒」——去绑定（打开绑定弹窗）/ 忽略（本次浏览器会话）/ 不再提醒（按账号持久），都只存浏览器本地；机器人未配置、PENDING、BOUND 或读取失败时一律不弹。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6158,13 +6158,16 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-BIND-UI-001 | Web 单测 | 弹窗三态与生成 | UNBOUND 引导；点「生成绑定码」只签发 CSRF（携带 `x-csrf-token`、无幂等 Key）、展示一次性明文码；生成后失效重取第二次 GET 为 BOUND 时自动「已绑定」；PENDING 无明文时提示有效期并引导重新生成；读取失败错误提示且生成按钮禁用 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-002 | Web 单测 | 解绑与复制 | 已绑定显示绑定时间；Popconfirm 确认后调用 DELETE（携带 `x-csrf-token` 与 `wecom-unbind-` 前缀幂等 Key），成功后回到未绑定视图；「复制绑定码」写入剪贴板并提示 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-003 | Web 单测 | 弹窗机器人链接展示与复制 | 服务端下发链接时展示链接与「用上面的链接在企业微信中打开机器人；」步骤文案，「复制机器人链接」写入剪贴板并提示；待用码存在（明文不在客户端）时同样展示链接块；未配置链接时回落原引导且不渲染链接块 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-007 | 真实 PostgreSQL 集成 | 机器人可用标记（ADR-079） | 配置表为空时 `robotConfigured=false`（UNBOUND 精确响应体含该字段）；管理员配置机器人后同接口返回 `robotConfigured=true`（配置行经 bootstrap 连接确定性清空） | 本地通过（2026-10-15） |
+| WECOM-BIND-UI-004 | Web 单测 | 未绑定提醒弹窗（ADR-079） | UNBOUND 且 `robotConfigured=true` 才弹「绑定企业微信，及时收到任务提醒」；`robotConfigured=false` / BOUND / PENDING / 读取失败静默不弹；「忽略」写 sessionStorage、「不再提醒」写 localStorage（均按用户 ID）、「去绑定」回调且按忽略处理；未登录 / 已忽略 / 已不再提醒都不发起请求；`AppLayout` 集成：弹窗出现、「去绑定」打开绑定弹窗、「不再提醒」持久后重新挂载不弹不请求 | 本地通过（2026-10-15） |
+| WECOM-BIND-GATE-002 | 静态门禁 | ADR-079 契约 / 门禁 | `contract:generate` 6 产物、`contract:drift` 无漂移、`contract:validate` 119 条、`permissions:check` 119 / 119、`check:frontend:boundaries`、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-15） |
 | WECOM-BIND-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 113 条、`contract:drift`（6 产物）、`permissions:check` 113 / 113、`db:migrations:check` 40 个、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 阶段二投递（长连接桥接按绑定关系推送、失败重试与可观测性）未实现、未测试；③ 未做浏览器 E2E（绑定需真实企微侧发送绑定码，E2E 只覆盖到 Web 单测；如需 E2E 需引入企微长连接 stub）。
 
 ## 企业微信机器人配置（ADR-070）
 
-用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。2026-10-13 扩展（迁移 `0043`）：管理员可再填写「机器人链接」（`bot_profile_url`），成员「绑定企业微信」弹窗（含待用码状态）展示该链接并提示去企业微信打开机器人。
+用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。2026-10-13 扩展（迁移 `0043`）：管理员可再填写「机器人链接」（`bot_profile_url`），成员「绑定企业微信」弹窗（含待用码状态）展示该链接并提示去企业微信打开机器人。2026-10-15 扩展（ADR-078，迁移 `0045`）：更换机器人（botId 变化）时同一事务解除全部个人绑定与项目群绑定并在保存响应返回解绑计数（未更换为 null、更换为计数含 0）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6178,7 +6181,11 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-ROBOT-UNIT-001 | API 单测 | keyring 解析与加解密 | 多版本解析（注释 / 空行 / 空白）、fail closed（非法版本 / 非法行 / 短键 / 重复版本 / 空 / 缺当前版本）、AES-256-GCM 往返（nonce‖tag‖body）、篡改与换版本解密被拒、过短密文、`/run/secrets` 路径防线、尾 4 位提示 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UI-001 | Web 单测 | 面板三态与提交 | 未配置提示 + 首次缺 Secret 本地拦截；首次保存先签发 CSRF 再携带一次性幂等 Key；已配置回填 botId 与尾号、留空提交 secret=null；主密钥不可用文案；读取失败错误 + 重试按钮 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UI-002 | Web 单测 | 机器人链接输入与校验 | 已配置回填链接；清空后提交 `botProfileUrl: null`；非 https 本地校验拦截提交并提示 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-006 | 真实 PostgreSQL 集成 | 更换机器人自动解绑（ADR-078） | 换 botId：响应返回 `revokedUserBindings` / `revokedProjectGroups` 实际计数，个人绑定与项目群绑定全部 REVOKED（`revoked_at` 非空、`row_version` +1），无绑定时返回 0 / 0；同 Key 重放返回原响应且不重复解绑；GET 恒 null；审计 payload 含 `robotChanged:true` 与两计数 | 本地通过（2026-10-15） |
+| WECOM-ROBOT-API-007 | 真实 PostgreSQL 集成 | 仅换 Secret 不解绑（ADR-078） | 同 botId 轮换 Secret：响应计数保持 null，绑定仍 ACTIVE | 本地通过（2026-10-15） |
+| WECOM-ROBOT-UI-003 | Web 单测 | 更换机器人提示（ADR-078） | 保存响应含解绑计数时展示「已更换机器人：解除了 N 个成员绑定、M 个项目群绑定」提示；计数为 null 时维持原成功文案 | 本地通过（2026-10-15） |
 | WECOM-ROBOT-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 115 条、`contract:drift`（6 产物）、`permissions:check` 115 / 115、契约单测 102 例、`db:migrations:check` 42 个；`lint` / `typecheck` / `format:check` / `check:docs` 见开发日志 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-GATE-002 | 静态门禁 | ADR-078 契约 / 迁移 / 权限 | `contract:validate` 119 条、`contract:drift`（6 产物）、`permissions:check` 119 / 119、契约单测 102 例、`db:migrations:check` 44 个（含 0045）；`lint` / `format:check` / `typecheck` / `check:docs` / `check:deps` / `check:secrets` 通过 | 本地通过（2026-10-15） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 桥接侧读取数据库凭据与配置变化重连、阶段二投递未实现、未测试；③ 未做机器人配置页浏览器 E2E。
 ## 文档导入工作台（ADR-071，用户指示，2026-10-13 本地落库）

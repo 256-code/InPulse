@@ -21,7 +21,7 @@ Compose + 本地 registry 的测试环境，不是生产发布流程：生产镜
 | 部署目录补充  | `backups/`（同步前的 pg_dump）、`compose.yaml.bak-*`、`.env.deploy.bak-*`（回滚用）                            |
 | 企业微信桥接  | 独立容器 `inpulse-wecom-bridge`（非 compose 管理；源码 `deploy/test-vm/wecom-bridge/` 为本地唯一源，用 `deploy/test-vm/update-bridge.ps1` 同步；个人绑定码自助绑定与项目群绑定兑换均已实现，见「企业微信机器人桥接」） |
 | AI 辅助转换   | 已启用（`AI_ASSIST_ENABLED=1`）；API Key 待管理员在设置页重填（见「AI 辅助转换启用」） |
-| 当前版本      | 5 个镜像统一为 `0.1.0-20261015-6f23ab4`，`BACKUP_GIT_SHA=6f23ab4`（2026-10-15 最新同步） |
+| 当前版本      | api/web/migrate 为 `0.1.0-20261015-8e97c8b`；db-bootstrap/ops 仍为 `0.1.0-20261015-6f23ab4`；桥接为 `0.1.0-20261015-bridgedd2084d`；`BACKUP_GIT_SHA=8e97c8b`（2026-10-15 最新同步） |
 
 ## 一次性准备
 
@@ -69,6 +69,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/test-vm/update.ps1 -T
 migrate 报 `0 applied, 42 already present`，api/web/db 全部 healthy，`/health/ready` 与
 `/` 返回 200，匿名访问受保护接口 401，`/api/v1/auth/sso/start` 302 跳到 Casdoor 测试环境，
 api 容器内访问 Casdoor discovery 返回 200（`egress` 生效）。
+
+2026-10-15 18:00 再次实测（`-Targets api,web,migrate -FixEol`，Tag `0.1.0-20261015-8e97c8b`，含企业微信项目群绑定第一批）：EOL 预检零漂移；migrate 报 `0 applied, 43 already present`（迁移 `0044` 已随此前数据同步在库，账本校验和按注释级改动定点修正，见 FAQ）；api/web/db 全部 healthy，探针与 `egress` 校验同上；桥接同步到内容哈希 Tag `0.1.0-20261015-bridgedd2084d` 并订阅成功。
 
 常用参数：
 
@@ -329,6 +331,8 @@ sudo docker start inpulse-wecom-bridge            # 恢复
 安静，不再触发私聊回声。`smoke-project-group-redeem.mjs`（镜像内 `/opt/wecom-bridge/`）自检 16 项
 （提取 / 首次绑定 / 幂等 / 换绑 / PWG01～PWG06）。**群消息投递**（任务派发与项目动态推送进项目群）仍属第二批，未部署。
 
+当前部署 Tag 为内容哈希 `0.1.0-20261015-bridgedd2084d`（2026-10-15 18:02 同步；源码自本次归档起以仓库 `deploy/test-vm/wecom-bridge/` 为唯一源，bridge3/bridge4 功能均含）。历史 Tag（bridge1～bridge4、`bridgee7cda2f`）都保留在 registry，可用 `-RollbackTo` 回滚。
+
 ## AI 辅助转换启用（2026-10-15）
 
 `.env.deploy` 的 `AI_ASSIST_ENABLED` 已置 1 并重建 api（备份
@@ -403,6 +407,7 @@ curl.exe -k -I https://test-inpulse.libiaorobot.com/api/v1/auth/sso/start
   `git ls-files --eol` 预检并列出问题文件，加 `-FixEol` 可按字节转回 LF
   （只改行尾、不改内容，git 也不会产生变更）。已经炸了就按「回滚」一节还原
   `.env.deploy`。2026-10-15 曾因 13 个迁移文件漂移成 CRLF 触发过一次。
+- migrate 报 `Applied migration "00xx_....sql" was modified` 但 EOL 预检零漂移时：校验和按文件原始字节计算，**注释级改动**（例如合并时 ADR 改号）同样会翻转校验和。2026-10-15 实例：合并把迁移 `0044` 注释里的 ADR-076 改成 ADR-077（仅 3 行注释、25902 字节等长、DDL 逐句全等），而本地/VM 账本仍记旧值，migrate fail closed。处置：先用 `git show <应用时的提交>:<文件>` 与当前文件逐行比对、证明差异仅为注释，再对两库执行定点 `UPDATE app.schema_migrations SET checksum=<新值> WHERE name=... AND checksum=<旧值>`（各影响 1 行），结论与取值须人工复核；不要用重跑迁移、删账本行或把文件改回旧字节来绕过。
 - 根因是仓库 `.gitattributes` 规定 `* text=auto eol=lf`，但本机
   `core.autocrlf=true`（来自 `D:/Git/etc/gitconfig`）会在工作区留下 CRLF。
   自查：`git ls-files --eol | Where-Object { $_ -notmatch '\sw/lf\s' }`。

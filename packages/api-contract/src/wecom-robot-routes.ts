@@ -29,6 +29,8 @@ const configReplayFields = [
   "configured",
   "disabledReason",
   "ready",
+  "revokedProjectGroups",
+  "revokedUserBindings",
   "rowVersion",
   "secretHint",
   "secretKeyVersion",
@@ -95,7 +97,7 @@ export const wecomRobotRoutes: readonly RouteDefinition[] = [
     path: "/admin/wecom-robot",
     operationId: "updateWecomRobotConfig",
     summary:
-      "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥，botProfileUrl 缺省保持、null 清空），密钥经 AES-256-GCM 加密落库、明文永不入库；写审计（不含密钥）。",
+      "系统管理员保存企业微信机器人配置（botId 必填，secret 缺省表示保持已存密钥，botProfileUrl 缺省保持、null 清空），密钥经 AES-256-GCM 加密落库、明文永不入库；botId 与已存值不同（更换机器人）时同一事务解除全部企业微信绑定（个人 + 项目群）并在响应返回解绑计数；写审计（不含密钥）。",
     request: {
       path: "none",
       query: "none",
@@ -116,7 +118,9 @@ export const wecomRobotRoutes: readonly RouteDefinition[] = [
     idempotencyExceptionAdr: "none",
     // 2026-10-13：请求新增 botProfileUrl 语义输入、响应新增该重放安全字段，
     // 同版本指纹变化，故升级契约版本让旧 Key 在新契约下 409。
-    idempotencyContractVersion: "1.1.0",
+    // 2026-10-15：响应新增解绑计数（revokedUserBindings / revokedProjectGroups），
+    // 同上让旧 Key 在新契约下 409，契约版本 1.1.0 → 1.2.0。
+    idempotencyContractVersion: "1.2.0",
     idempotencyFingerprintVersion: "1.0.0",
     behaviorHeaders: [],
     idempotencyReplayPolicy: configReplayPolicy,

@@ -4,9 +4,7 @@
     "6": "wosuIHCwAAvTuCkG701QzO7xdUMMiBnw",
     "7": "wosuIHCwAAh1SRfNoEO7dOWOrOfG590Q"
   },
-  "forwardTypes": [
-    "*"
-  ],
+  "forwardTypes": ["*"],
   "commandFile": "/state/commands.txt",
   "stateFile": "/state/bridge-state.json",
   "pollIntervalMs": 3000,
