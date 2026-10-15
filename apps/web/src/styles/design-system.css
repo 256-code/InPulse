@@ -1699,6 +1699,17 @@ td small {
   line-height: 1.4;
   margin: 7px 0 0;
 }
+/*
+ * 标题栏右侧操作位（ADR-076）：AppModal 的 headerActions 与关闭按钮同处一格，
+ * 自带 8px 间距；position: relative 让浮层（如「AI 助手」要求面板）能贴着按钮
+ * 向下拉出，不必再加一层定位容器或新的弹层。
+ */
+.modal-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
 .dialog {
   width: 530px;
   align-self: center;
@@ -7971,18 +7982,15 @@ div.ant-popover.import-member-popover
   margin-top: 12px;
 }
 
-/* ADR-070 设置面板正文容器（企业微信机器人 / AI 辅助转换共用）：正文统一内缩
- * （与标题带 20px 对齐），字段单列堆叠（标签在上、控件全宽、提示紧随），替代
- * 两列等宽网格造成的标签 / 控件远距与行间拥挤。 */
-.wecom-robot-body,
-.ai-assist-body {
+/* ADR-070 企业微信机器人设置面板：正文统一内缩（与标题带 20px 对齐），字段单列堆叠
+ * （标签在上、控件全宽、提示紧随），替代两列等宽网格造成的标签 / 控件远距与行间拥挤。 */
+.wecom-robot-body {
   display: grid;
   gap: 14px;
   padding: 16px 20px 5px;
 }
 
-.wecom-robot-body .permission-note,
-.ai-assist-body .permission-note {
+.wecom-robot-body .permission-note {
   margin: 0;
 }
 
@@ -8019,41 +8027,100 @@ div.ant-popover.import-member-popover
   gap: 10px;
 }
 
-/* ADR-068 AI 辅助转换面板：与通知策略一致的「上标签、下控件、提示跟随控件」纵向布局。 */
-.ai-assist-form {
+/* ADR-068 「AI 辅助转换」设置面板：与 ADR-070 企业微信面板同口径的单列堆叠，主开关在标题行右端。 */
+.ai-assist-body {
   display: grid;
   gap: 16px;
+  padding: 16px 20px 20px;
 }
-.ai-assist-field {
-  display: flex;
-  flex-direction: column;
+
+.ai-assist-body .permission-note {
+  margin: 0;
+}
+
+.ai-assist-status {
+  align-items: flex-start;
+}
+
+.ai-assist-status-body {
+  display: grid;
   gap: 6px;
   min-width: 0;
 }
+
+.ai-assist-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-assist-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  color: #5b7892;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.ai-assist-status-meta > span + span::before {
+  content: "·";
+  margin: 0 8px;
+  color: #b7c7d7;
+}
+
+.ai-assist-form {
+  display: grid;
+  gap: 18px;
+}
+
+.ai-assist-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .ai-assist-field > label {
   color: #526b83;
   font-size: 12px;
   font-weight: 600;
 }
+
 .ai-assist-field .form-hint {
   margin: 0;
 }
+
 .ai-assist-field > small[role="alert"] {
   color: #b45b55;
   font-size: 11px;
 }
-.ai-assist-field > .ant-input-number {
+
+.ai-assist-field .ant-input-number {
   width: 100%;
 }
-.ai-assist-field--switch {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
+
+.ai-assist-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
+
 .ai-assist-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.ai-assist-master {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  .ai-assist-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

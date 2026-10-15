@@ -341,7 +341,7 @@ afterAll(async () => {
   }
 });
 
-describe("项目企微群绑定（真实 PostgreSQL + 真实 HTTP，ADR-076）", () => {
+describe("项目企微群绑定（真实 PostgreSQL + 真实 HTTP，ADR-077）", () => {
   test("匿名读取 401；非成员与已移除成员 404", async () => {
     const sql = requireRuntime();
     const { actor, project } = await leaderContext(sql);

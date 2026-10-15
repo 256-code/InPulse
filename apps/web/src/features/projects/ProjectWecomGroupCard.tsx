@@ -13,7 +13,7 @@ import {
 
 export interface ProjectWecomGroupCardProps {
   readonly projectId: number;
-  /** ADR-076：组长 / 系统管理员可见「生成绑定码」与「解绑」；普通成员只读。 */
+  /** ADR-077：组长 / 系统管理员可见「生成绑定码」与「解绑」；普通成员只读。 */
   readonly canManage: boolean;
   readonly client?: InpulseApiClient | undefined;
 }
@@ -30,7 +30,7 @@ function formatRemaining(remainingMs: number): string {
 }
 
 /**
- * ADR-076 项目企微群绑定卡片（项目成员页）：三态展示（UNBOUND / PENDING /
+ * ADR-077 项目企微群绑定卡片（项目成员页）：三态展示（UNBOUND / PENDING /
  * BOUND）、一次性绑定码（明文只展示一次、10 分钟有效、倒计时）、解绑二次确认、
  * 桥接侧最近投递错误与机器人资料链接提示。签发与解绑的服务端门禁是组长 /
  * 系统管理员，普通成员只读；有待用码时每 5 秒轮询，群里发送后自动刷新。

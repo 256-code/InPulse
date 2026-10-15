@@ -20,7 +20,7 @@ import {
   hashWecomBindingCode,
 } from "../wecom-binding/index.js";
 
-/** 绑定码有效期沿用 ADR-069 的 10 分钟（ADR-076 复用同一编码与哈希规则）。 */
+/** 绑定码有效期沿用 ADR-069 的 10 分钟（ADR-077 复用同一编码与哈希规则）。 */
 const CODE_TTL_SECONDS = Math.floor(WECOM_BINDING_CODE_TTL_MS / 1000);
 
 export class ProjectWecomGroupError extends Error {
@@ -35,7 +35,7 @@ export class ProjectWecomGroupError extends Error {
 }
 
 /**
- * ADR-076 项目企微群绑定服务：读取绑定三态；签发一次性绑定码（组长/系统管理员）；
+ * ADR-077 项目企微群绑定服务：读取绑定三态；签发一次性绑定码（组长/系统管理员）；
  * 解绑（同一事务内作废待用码 + ACTIVE 绑定置 REVOKED + 写审计，不物理删除）。
  * 所有写命令必须显式接收同一个 TransactionContext。绑定兑换发生在长连接桥接侧，
  * 调用 app.redeem_project_wecom_binding_code（错误码 PWG01～PWG08）；本服务不接触
@@ -263,7 +263,7 @@ export class ProjectWecomGroupService {
   }
 
   /**
-   * ADR-076 写门禁：项目可写 + 组长/系统管理员专属（ADR-039 例外清单）。
+   * ADR-077 写门禁：项目可写 + 组长/系统管理员专属（ADR-039 例外清单）。
    * 普通成员 403 `PROJECT_WECOM_GROUP_FORBIDDEN`；非成员/已移除 404。
    */
   private async requireBinderRole(

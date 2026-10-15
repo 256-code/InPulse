@@ -25,7 +25,7 @@ interface ProjectWecomGroupControllerResponse {
   setHeader(name: string, value: string | readonly string[]): unknown;
 }
 
-/** ADR-076 项目企微群绑定 HTTP 入口；只绑定 Route Registry，不直接访问数据库。 */
+/** ADR-077 项目企微群绑定 HTTP 入口；只绑定 Route Registry，不直接访问数据库。 */
 @Controller("projects")
 export class ProjectWecomGroupController {
   constructor(

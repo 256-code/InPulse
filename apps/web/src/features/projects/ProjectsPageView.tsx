@@ -9,6 +9,7 @@ import type {
 } from "@generated/api";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { EditProjectModal } from "./ProjectManagementModals";
+import { useProjectStars } from "./project-star";
 import {
   CalmBadge,
   CalmEmptyState,
@@ -38,6 +39,29 @@ const hierarchyNotes = [
   { label: "迭代记录", text: "已经发生的变化，人员与时间自动生成。" },
   { label: "分支任务", text: "合并后保留的历史，不删除不覆盖。" },
 ];
+
+/**
+ * 卡片右上角的星标按钮（2026-10-15 用户指示）：位置在状态徽章左侧，只切换「我的关注」，
+ * 点亮的项目在列表里排到前面；不改侧栏、不加筛选；点击不冒泡到卡片，不会顺带跳进项目。
+ */
+const ProjectStarButton: React.FC<{
+  readonly projectId: number;
+  readonly projectName: string;
+  readonly starred: boolean;
+  readonly onToggle: (projectId: number) => void;
+}> = ({ projectId, projectName, starred, onToggle }) => (
+  <button
+    type="button"
+    className={starred ? "project-card-star is-starred" : "project-card-star"}
+    data-testid={`star-project-${projectId}`}
+    aria-pressed={starred}
+    aria-label={starred ? `取消星标：${projectName}` : `标星：${projectName}`}
+    title={starred ? "取消星标" : "标星"}
+    onClick={() => onToggle(projectId)}
+  >
+    <InpulseIcon name="star" size={26} />
+  </button>
+);
 
 export interface ProjectsPageViewProps {
   readonly client?: InpulseApiClient | undefined;
@@ -100,6 +124,8 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   // 档位由 AppLayout 的 ProjectTierProvider 持有，侧栏项目树读同一份状态，
   // 因此这里只负责渲染与切换，不再自己 useState。
   const { tier, selectTier } = useProjectTier();
+  // 星标（我的关注）：只存浏览器本地，是卡片右上角的一个开关，点亮的项目排到列表前面。
+  const { isStarred, toggleStar } = useProjectStars();
 
   // 两档计数在关键词之前算：滑块上的数字是当前可见项目的总量，不随搜索词跳动。
   const maintenanceProjectCount = projects.filter(
@@ -146,6 +172,13 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             project.code.toLocaleLowerCase().includes(keyword) ||
             (project.description ?? "").toLocaleLowerCase().includes(keyword),
         );
+
+  // 标星项目排到前面（2026-10-15 用户指示）：星标的意义就是「我要先看到它」，所以只调
+  // 展示顺序——先把点亮的挑到前面，星标之间、未标之间各自保持上面那条既有次序
+  // （Array#sort 稳定，同 key 不换位）。档位、两档数量与搜索过滤都不受影响。
+  const orderedProjects = [...visibleProjects].sort(
+    (left, right) => Number(isStarred(right.id)) - Number(isStarred(left.id)),
+  );
 
   return (
     <>
@@ -345,7 +378,7 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
             )
           ) : (
             <div className="cards-grid calm-projects">
-              {[...visibleProjects].map((project) => (
+              {orderedProjects.map((project) => (
                 <article
                   key={project.id}
                   className={
@@ -368,11 +401,19 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                 >
                   <span className="card-top">
                     <ProjectLogo code={project.code} />
-                    <CalmBadge
-                      tone={projectLifecycleTone(project.status, "blue")}
-                    >
-                      {projectLifecycleLabel(project.status)}
-                    </CalmBadge>
+                    <span className="card-top-right">
+                      <ProjectStarButton
+                        projectId={project.id}
+                        projectName={project.name}
+                        starred={isStarred(project.id)}
+                        onToggle={toggleStar}
+                      />
+                      <CalmBadge
+                        tone={projectLifecycleTone(project.status, "blue")}
+                      >
+                        {projectLifecycleLabel(project.status)}
+                      </CalmBadge>
+                    </span>
                   </span>
                   <h2>{project.name}</h2>
                   <p className="project-card-desc">{project.description}</p>
@@ -390,14 +431,12 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                       {project.stats.openTaskCount} 项待办
                     </span>
                   </span>
-                  <span className="card-footer">
+                  <span className="card-footer project-card-members">
                     <span>
                       <InpulseIcon name="users" size={14} />
                       {project.memberCount} 位成员
                     </span>
-                  </span>
-                  <div className="card-footer project-card-actions">
-                    <div className="project-card-actions-main">
+                    <span className="project-card-actions">
                       <Button
                         className="text-button"
                         data-testid={`edit-project-${project.id}`}
@@ -408,19 +447,19 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
                       >
                         编辑
                       </Button>
-                    </div>
-                    {isAdmin && onOpenMembers ? (
-                      <Button
-                        className="text-button"
-                        {...routePreloadHandlers(
-                          `/projects/${project.id}/members`,
-                        )}
-                        onClick={() => onOpenMembers(project.id)}
-                      >
-                        管理成员
-                      </Button>
-                    ) : null}
-                  </div>
+                      {isAdmin && onOpenMembers ? (
+                        <Button
+                          className="text-button"
+                          {...routePreloadHandlers(
+                            `/projects/${project.id}/members`,
+                          )}
+                          onClick={() => onOpenMembers(project.id)}
+                        >
+                          管理成员
+                        </Button>
+                      ) : null}
+                    </span>
+                  </span>
                 </article>
               ))}
             </div>

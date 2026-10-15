@@ -291,6 +291,7 @@ export class HealthController {
       "GET /api/v1/tasks/{taskId}/leftover-source",
       "POST /api/v1/project-imports/preview",
       "POST /api/v1/project-imports",
+      "POST /api/v1/record-summaries/assist",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/delete",
       "POST /api/v1/projects/{projectId}/modules/{moduleId}/features/{featureId}/delete",
       "POST /api/v1/tasks/{taskId}/complete",

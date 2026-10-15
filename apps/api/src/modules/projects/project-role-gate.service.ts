@@ -13,7 +13,7 @@ import { ProjectMembersQueryPort } from "./project-members-query.port.js";
  * 例外清单固定为：ADR-053 组长可以转移组长身份（`roleSetterRole`），
  * ADR-049/ADR-062 只有组长与系统管理员可以删除项目（`projectDeleterRole`，
  * 删除自 ADR-062 起是物理且不可撤销的），ADR-059 只有组长与系统管理员可以
- * 删除模块与功能（`scopeDeleterRole`），ADR-076 只有组长与系统管理员可以
+ * 删除模块与功能（`scopeDeleterRole`），ADR-077 只有组长与系统管理员可以
  * 签发/解绑项目企微群绑定（`wecomGroupBinderRole`）。
  */
 export type ProjectManageRole = "SYSTEM_ADMIN" | "MEMBER" | "LEADER";
@@ -121,7 +121,7 @@ export class ProjectRoleGateService {
   }
 
   /**
-   * ADR-076 项目企微群绑定门禁：只有系统管理员与本项目组长可以签发一次性
+   * ADR-077 项目企微群绑定门禁：只有系统管理员与本项目组长可以签发一次性
    * 绑定码或解绑（普通成员 403 `PROJECT_WECOM_GROUP_FORBIDDEN`，非成员
    * 404）。与删除门禁同源但单独成方法，避免绑定权限被未来的「成员可管理」
    * 改动顺带放大；解绑幂等重放复用同一方法，因此重放时组长被转移、成员被

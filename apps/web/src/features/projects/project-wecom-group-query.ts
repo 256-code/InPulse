@@ -11,7 +11,7 @@ import {
 import { createIdempotencyKey } from "@shared/api/idempotency-key";
 
 /**
- * ADR-076 项目企微群绑定数据层：GET 读取三态（UNBOUND / PENDING / BOUND）；
+ * ADR-077 项目企微群绑定数据层：GET 读取三态（UNBOUND / PENDING / BOUND）；
  * POST 签发一次性绑定码（securityFlow：只签发 CSRF、重新生成立即作废旧码）；
  * DELETE 解绑（先签发 CSRF，再携带一次性 Idempotency-Key）。所有请求都经
  * 生成客户端，组件不裸写 fetch。签发与解绑的服务端门禁是组长 / 系统管理员，

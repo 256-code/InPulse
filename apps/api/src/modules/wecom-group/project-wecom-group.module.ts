@@ -9,7 +9,7 @@ import { ProjectWecomGroupController } from "./project-wecom-group.controller.js
 import { ProjectWecomGroupHttpService } from "./project-wecom-group-http.service.js";
 import { ProjectWecomGroupService } from "./project-wecom-group.service.js";
 
-/** ADR-076 项目企微群绑定支柱；读路径独立事务，写命令只创建一个 UnitOfWork。 */
+/** ADR-077 项目企微群绑定支柱；读路径独立事务，写命令只创建一个 UnitOfWork。 */
 @Module({
   imports: [
     AuthModule,

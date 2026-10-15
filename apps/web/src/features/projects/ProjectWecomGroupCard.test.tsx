@@ -75,7 +75,7 @@ function mount(options: {
   };
 }
 
-describe("ProjectWecomGroupCard（ADR-076）", () => {
+describe("ProjectWecomGroupCard（ADR-077）", () => {
   it("未绑定且普通成员：展示引导与只读提示，无生成按钮", async () => {
     mount({ statuses: [unbound], canManage: false });
     await screen.findByText(/绑定后群聊即可收到项目消息/);

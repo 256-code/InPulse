@@ -1,6 +1,6 @@
 SET LOCAL ROLE app_owner;
 
--- ADR-076：企业微信项目群绑定（阶段二消息投递的数据面）。
+-- ADR-077：企业微信项目群绑定（阶段二消息投递的数据面）。
 -- 口径：
 --   1. app.project_wecom_binding_codes 每个项目最多一行「当前待用绑定码」：
 --      明文码永不入库，只存 SHA-256 Hash（32 字节）与有效期；重新生成覆盖
@@ -171,7 +171,7 @@ BEGIN
     RAISE EXCEPTION 'wecom userid is invalid' USING ERRCODE = 'PWG07';
   END IF;
 
-  -- 固定锁序（ADR-076）：码行 -> 发送者个人绑定行 -> 群绑定行（chat -> project）。
+  -- 固定锁序（ADR-077）：码行 -> 发送者个人绑定行 -> 群绑定行（chat -> project）。
   SELECT c.*
     INTO v_code
     FROM app.project_wecom_binding_codes AS c
@@ -427,7 +427,7 @@ BEGIN
   GET DIAGNOSTICS v_removed = ROW_COUNT;
   v_total := v_total + v_removed;
 
-  -- ADR-076：企微群投递记录与绑定行随项目一起物理删除，最后清待用码。
+  -- ADR-077：企微群投递记录与绑定行随项目一起物理删除，最后清待用码。
   DELETE FROM app.wecom_group_deliveries d
    USING app.project_wecom_groups g
    WHERE d.group_binding_id = g.id

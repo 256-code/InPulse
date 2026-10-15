@@ -52,7 +52,7 @@ class ProjectWecomGroupInputError extends Error {
 }
 
 /**
- * ADR-076 项目企微群绑定 HTTP 编排：读路径独立事务；签发绑定码是 securityFlow
+ * ADR-077 项目企微群绑定 HTTP 编排：读路径独立事务；签发绑定码是 securityFlow
  * （不进入通用幂等记录，直接单事务执行）；解绑由幂等 runner 持有单事务并在重放前
  * 重新执行同一组长/管理员门禁。
  */

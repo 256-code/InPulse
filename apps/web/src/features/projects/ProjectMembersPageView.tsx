@@ -325,7 +325,7 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
         />
       ) : null}
 
-      {/* ADR-076：组长 / 系统管理员可签发绑定码与解绑，普通成员只读。 */}
+      {/* ADR-077：组长 / 系统管理员可签发绑定码与解绑，普通成员只读。 */}
       <ProjectWecomGroupCard
         projectId={projectId}
         canManage={isSystemAdmin || viewerRole === "LEADER"}

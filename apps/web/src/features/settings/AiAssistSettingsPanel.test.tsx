@@ -3,7 +3,11 @@ import { ConfigProvider } from "antd";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import type { AiAssistSettings, InpulseApiClient } from "@generated/api";
+import type {
+  AiAssistSettings,
+  AiAssistSettingsUpdateRequest,
+  InpulseApiClient,
+} from "@generated/api";
 import { AiAssistSettingsPanel } from "./AiAssistSettingsPanel";
 
 const readySettings: AiAssistSettings = {
@@ -40,14 +44,27 @@ function mount(
           readonly model: string | null;
         }
       | undefined;
+    readonly updateError?: unknown;
   } = {},
 ) {
-  const getAiAssistSettings = vi
-    .fn()
-    .mockResolvedValue(options.settings ?? readySettings);
-  const updateAiAssistSettings = vi
-    .fn()
-    .mockResolvedValue(options.settings ?? readySettings);
+  const current = options.settings ?? readySettings;
+  const getAiAssistSettings = vi.fn().mockResolvedValue(current);
+  const updateAiAssistSettings = vi.fn();
+  if (options.updateError === undefined) {
+    // 服务端按请求体返回新的配置行；只有开关会变的场景下 enabled 随请求体走。
+    updateAiAssistSettings.mockImplementation(
+      async (body: AiAssistSettingsUpdateRequest) => ({
+        ...current,
+        enabled: body.enabled,
+        endpoint: body.endpoint,
+        model: body.model,
+        timeoutMs: body.timeoutMs,
+        maxTokens: body.maxTokens,
+      }),
+    );
+  } else {
+    updateAiAssistSettings.mockRejectedValue(options.updateError);
+  }
   const testAiAssistSettings = vi
     .fn()
     .mockResolvedValue(
@@ -152,6 +169,85 @@ describe("AiAssistSettingsPanel（ADR-068）", () => {
     });
     await screen.findByText("当前状态");
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(
+      await screen.findByText("首次配置必须提供 API 密钥"),
+    ).toBeInTheDocument();
+    expect(updateAiAssistSettings).not.toHaveBeenCalled();
+  });
+
+  it("主开关拨动即保存：以服务端已保存配置为基准 PUT，不必再点保存配置", async () => {
+    const { updateAiAssistSettings, issueCsrfToken } = mount();
+    await screen.findByText("当前状态");
+    const toggle = screen.getByLabelText("启用 AI 辅助转换");
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(updateAiAssistSettings).toHaveBeenCalledTimes(1),
+    );
+    expect(issueCsrfToken).toHaveBeenCalledTimes(1);
+    expect(updateAiAssistSettings).toHaveBeenCalledWith(
+      {
+        enabled: false,
+        endpoint: "https://api.example.com/v1/chat/completions",
+        model: "gpt-4o-mini",
+        timeoutMs: 60_000,
+        maxTokens: 8192,
+        apiKey: null,
+      },
+      {
+        headers: {
+          "x-csrf-token": "a".repeat(43),
+          "Idempotency-Key": expect.any(String),
+        },
+      },
+    );
+    expect(
+      await screen.findByText("已保存：AI 辅助转换已关闭"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("启用 AI 辅助转换")).not.toBeChecked(),
+    );
+  });
+
+  it("主开关拨动不提交表单里未保存的其它字段", async () => {
+    const { updateAiAssistSettings } = mount();
+    await screen.findByText("当前状态");
+    fireEvent.change(screen.getByLabelText("模型"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.click(screen.getByLabelText("启用 AI 辅助转换"));
+    await waitFor(() =>
+      expect(updateAiAssistSettings).toHaveBeenCalledTimes(1),
+    );
+    expect(updateAiAssistSettings.mock.calls[0]![0]).toMatchObject({
+      model: "gpt-4o-mini",
+    });
+    expect(screen.getByLabelText("模型")).toHaveValue("gpt-4o");
+  });
+
+  it("主开关保存失败：回退到服务端已保存状态并展示错误", async () => {
+    const { updateAiAssistSettings } = mount({
+      updateError: new Error("boom"),
+    });
+    await screen.findByText("当前状态");
+    fireEvent.click(screen.getByLabelText("启用 AI 辅助转换"));
+    await waitFor(() =>
+      expect(updateAiAssistSettings).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      await screen.findByText("AI 辅助转换配置服务暂时不可用，请重试。"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("启用 AI 辅助转换")).toBeChecked(),
+    );
+  });
+
+  it("尚未配置密钥时拨动主开关：不发保存请求，提示先补密钥", async () => {
+    const { updateAiAssistSettings } = mount({
+      settings: unconfiguredKeySettings,
+    });
+    await screen.findByText("当前状态");
+    fireEvent.click(screen.getByLabelText("启用 AI 辅助转换"));
     expect(
       await screen.findByText("首次配置必须提供 API 密钥"),
     ).toBeInTheDocument();

@@ -410,7 +410,7 @@ export const permissionMatrix = [
       },
     },
   },
-  // ADR-076：项目企微群绑定。读路径对本项目全体活跃成员开放（非成员 404）；
+  // ADR-077：项目企微群绑定。读路径对本项目全体活跃成员开放（非成员 404）；
   // 签发绑定码与解绑是新增的组长/系统管理员专属门禁（ADR-039 例外清单）；
   // 绑定兑换发生在桥接侧，要求发送者是项目成员或系统管理员并已绑定个人账号。
   {
@@ -419,7 +419,7 @@ export const permissionMatrix = [
       匿名: { kind: "deny", status: 401 },
       活跃成员: {
         kind: "conditional",
-        allowedWhen: "ADR-076：目标项目当前活跃成员（实时成员关系）",
+        allowedWhen: "ADR-077：目标项目当前活跃成员（实时成员关系）",
         deniedWith: 404,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -435,7 +435,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-076：系统管理员或本项目组长可签发一次性绑定码（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与同源必填；ADR-023 allowlist securityFlow，每次调用重签并立即作废旧码",
+          "ADR-077：系统管理员或本项目组长可签发一次性绑定码（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与同源必填；ADR-023 allowlist securityFlow，每次调用重签并立即作废旧码",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -456,7 +456,7 @@ export const permissionMatrix = [
       活跃成员: {
         kind: "conditional",
         allowedWhen:
-          "ADR-076：系统管理员或本项目组长可解绑（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与 Idempotency-Key 必填；作废待用码并把 ACTIVE 绑定置 REVOKED（不物理删除），写审计 project.wecomGroup.unbind",
+          "ADR-077：系统管理员或本项目组长可解绑（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与 Idempotency-Key 必填；作废待用码并把 ACTIVE 绑定置 REVOKED（不物理删除），写审计 project.wecomGroup.unbind",
         deniedWith: 403,
       },
       其他项目成员: { kind: "deny", status: 404 },
@@ -882,6 +882,19 @@ export const permissionMatrix = [
   // 不接触项目数据；未启用或上游故障统一 503，不泄露配置细节。
   {
     operationId: "assistDocumentImport",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  // ADR-076：迭代总结 AI 改写面向任何已登录用户（与 F-33 取数、AI 辅助转换
+  // 一致的可见性），服务端不查库、不接触项目数据；未启用或上游故障统一 503。
+  {
+    operationId: "assistRecordSummary",
     outcomes: {
       匿名: { kind: "deny", status: 401 },
       活跃成员: { kind: "allow" },

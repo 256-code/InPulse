@@ -3,7 +3,7 @@ import { z } from "zod";
 const id = z.number().int().positive().max(2147483647);
 
 /**
- * ADR-076 项目企微群绑定三态：
+ * ADR-077 项目企微群绑定三态：
  * UNBOUND 未绑定且无待用码；PENDING 已生成待用绑定码；BOUND 已绑定。
  * 已绑定且同时存在新待用码（准备换绑）时 state 优先 BOUND，
  * codeExpiresAt 仍独立返回便于页面提示「换绑中」。
@@ -54,7 +54,7 @@ export const projectWecomGroupStatusSchema = z
 
 /**
  * 新签发的一次性项目群绑定码（POST 响应）。明文码只在本响应返回一次：
- * 服务端只保存 SHA-256 Hash，10 分钟有效、一次性消费（ADR-076）。
+ * 服务端只保存 SHA-256 Hash，10 分钟有效、一次性消费（ADR-077）。
  */
 export const projectWecomGroupCodeSchema = z
   .object({

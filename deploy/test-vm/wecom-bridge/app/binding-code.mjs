@@ -80,7 +80,7 @@ export function extractBindingCode(rawText) {
 }
 
 /**
- * 兑换项目群绑定码（ADR-076）：outcome 为 bound / failed / not-a-code；
+ * 兑换项目群绑定码（ADR-077）：outcome 为 bound / failed / not-a-code；
  * failed 时 sqlState 取 PWG01～PWG08 或 UNKNOWN。
  * 兑换在 app.redeem_project_wecom_binding_code（SECURITY DEFINER）单事务内完成。
  */
@@ -121,4 +121,3 @@ export const PROJECT_BINDING_FAILURE_REASONS = {
   PWG08: "绑定发生并发冲突，请稍后重试。",
   UNKNOWN: "绑定失败，请稍后再试。",
 };
-

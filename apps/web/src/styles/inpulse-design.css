@@ -1756,21 +1756,66 @@
   flex: 1 1 auto;
 }
 
-/* 操作行：常规操作居左、管理成员固定靠右；按钮统一高度与内边距，
-   不再一个描边大块、一个无边小字地混排。 */
-.project-card-actions {
+/* 成员行：左侧「N 位成员」、右侧操作（编辑 / 管理成员）。操作原本独占一行，
+   2026-10-15 起按用户要求并入成员行右侧——卡片少一行，操作与它作用的成员信息同行；
+   按钮仍是统一高度与内边距，不再一个描边大块、一个无边小字地混排。 */
+.project-card-members > .project-card-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
-.project-card-actions-main {
+/* 项目星标（2026-10-15 用户指示）：卡片右上角、状态徽章左侧，只切换「我的关注」，
+   点亮的项目排到列表前面。
+   图标路径自带圆角（不是描边圆头），按用户要求做得更柔和、更大；「已标」用 CSS 的
+   fill 覆盖图标组件固定的 fill="none"。色值一律带 alpha，避免实心块过重。
+   标星的项目排到列表前面；不进侧栏、不加筛选。 */
+.project-card .card-top-right {
   display: flex;
   align-items: center;
-  gap: 2px;
-  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.project-card-star {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(148 163 184 / 0.62);
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.project-card-star:hover {
+  background: rgb(148 163 184 / 0.12);
+  color: rgb(224 164 23 / 0.7);
+}
+
+.project-card-star.is-starred {
+  color: rgb(224 164 23 / 0.7);
+}
+
+.project-card-star.is-starred svg {
+  fill: currentColor;
+}
+
+.project-card-star:focus-visible {
+  outline: 2px solid #7fb0e8;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-card-star {
+    transition: none;
+  }
 }
 
 .project-card-actions .text-button.ant-btn,

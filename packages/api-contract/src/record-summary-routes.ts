@@ -18,7 +18,53 @@ const errors = (statuses: readonly number[]) =>
  * 非成员项目被静默排除而不是返回 403 / 404（与 listRecordFeed、R-6、R-7 同族），
  * 因此不登记 403 与 404。请求校验失败（日期格式、起止倒置、跨度超限、
  * groupBy 非法）统一 422。
+ *
+ * ADR-076 追加迭代总结 AI 改写路由（纯校验，无持久化副作用）。
  */
+/**
+ * ADR-076 迭代总结 AI 改写：`POST /record-summaries/assist`。
+ * 纯校验接口（无任何持久化副作用）：会话认证、无 CSRF、无幂等；把用户自己
+ * 已经看到的事实正文按一句话要求改写，不查库、不写库、不产生新的读权限。
+ */
+const assistRoute: RouteDefinition = {
+  method: "POST",
+  path: "/record-summaries/assist",
+  operationId: "assistRecordSummary",
+  summary:
+    "按用户一句话要求改写当前筛选范围的总结正文（给谁看 / 突出什么 / 篇幅多长），返回改写后的正文与截断标记；不写任何持久化状态，请求里的正文只回给发送者本人。",
+  request: {
+    path: "none",
+    query: "none",
+    headers: "none",
+    body: {
+      contentTypes: [
+        {
+          contentType: "application/json",
+          schemaRef: "RecordSummaryAssistRequest",
+        },
+      ],
+    },
+  },
+  responses: {
+    "200": json("RecordSummaryAssistResponse"),
+    ...errors([400, 401, 422, 500, 503]),
+  },
+  authPolicy: "session",
+  // ADR-076：纯校验接口（不写任何持久化状态）显式声明 none。
+  csrfPolicy: "none",
+  idempotencyPolicy: "none",
+  idempotencyExceptionAdr: "none",
+  idempotencyContractVersion: "none",
+  idempotencyFingerprintVersion: "none",
+  behaviorHeaders: "none",
+  idempotencyReplayPolicy: "none",
+  replayAuthorizationPolicy: "none",
+  securityFlowPolicy: "none",
+  versionPolicy: "none",
+  concurrencyPolicy: "none",
+  auditAction: "none",
+};
+
 export const recordSummaryRoutes: readonly RouteDefinition[] = [
   {
     method: "GET",
@@ -50,4 +96,5 @@ export const recordSummaryRoutes: readonly RouteDefinition[] = [
     concurrencyPolicy: "none",
     auditAction: "none",
   },
+  assistRoute,
 ];

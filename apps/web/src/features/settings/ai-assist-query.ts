@@ -92,9 +92,9 @@ export function useAiAssistSettings(client?: InpulseApiClient) {
         },
       });
     },
-    onSuccess: async () => {
+    onSuccess: (settings) => {
       retryKey.current = null;
-      await cache.invalidateQueries({ queryKey: AI_ASSIST_SETTINGS_QUERY_KEY });
+      cache.setQueryData(AI_ASSIST_SETTINGS_QUERY_KEY, settings);
     },
   });
 

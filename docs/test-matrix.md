@@ -6505,9 +6505,64 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 未运行 / 已知偏差（本批）：① `CalmSelect` 的 `animated` 动画只在 enter/appear 的 active 帧接管（窗口 150ms），本次抓取工具单次点击往返 263ms，未复测到 active 帧；机制与既有 43 处同构，本批只补 2 个 prop。② 弹窗**关闭**仍是瞬时（本批只补「出现」）。③ 仍未接预取的入口：任务中心 → 任务详情弹窗（`TaskDetailOverlay` 为 lazy，靠 `Suspense fallback={null}` 不闪空壳、只慢一拍）、弹窗内深链（`?taskId=`）与页面内按钮。④ 全量 Playwright 未跑（31 个 spec 里只定向跑 6 个、21 例）。⑤ 生产镜像构建与 Trivy 扫描未执行。⑥ GitHub Actions 未执行（`test` 分支不触发工作流）。
 
-## 项目企微群绑定（ADR-076，第一批）
 
-需求原话要点：「机器人能做到项目和群聊绑定吗，就是项目里面有变动或者任务派发就发送到对应项目群聊里」「项目组长 + 系统管理员生成绑定码/解绑，先默认发『任务派发 + 全部 MEMBER 可见动态』，群推送与现有个人单聊并存，一个项目一个群、一个群一个项目」。本批落库迁移 `0044`（三张表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08）与三条项目级路由（115 → 118）；长连接桥接的 `chat_type:2` 投递改造为第二批、未实现，本批不产生任何群投递。
+## 生成总结内嵌 AI 改写：一句话要求 → 生成 → 生成后逐段手改（ADR-076，2026-10-14 本地落库）
+
+定案见开发日志第一百九十条与 [ADR-076](adr/ADR-076.md)：用户明确「不准备用对话的模式就仅仅是提要求」，所以入口是**标题栏右上角「✦ AI 助手」按钮 + 按需拉出的浮层**（不是聊天记录），生成后浮层收起、正文逐段可手改（改过的段落橙点、悬停「回退这句」、底栏「已手动改 N 处」+「撤销手动修改」）。事实由前端当前范围的确定性正文（`summaryDocumentToText`）给出，服务端只做一次出站改写、不查库不写库不写审计、不解析筛选意图。新增 1 条路由（115 → 116），无数据库迁移（仍 42 个）、无新增依赖、无权限变化、无契约模板改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SUMMARY-AI-001 | API 集成（真实 PostgreSQL + 本机回环 stub 上游） | 全链路、提示词与「不写库」 | `record-summary-assist.integration.test.ts` **7 例通过**：200 全链路 + 提示词断言（事实唯一来源、不许改数字 / 人名、保留分节）、`truncated`、匿名 401、422 三种、上游 429 → rate-limited、500 → invalid-response、未启用 503；并断言不写任何业务表 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-002 | API 单元 | 出站请求构造与日志口径 | `ai-assist.client.test.ts` 覆盖新增的 `generateSummaryDraft`：messages 只含 system + 事实 / 要求，日志按 `kind: "summary"` 记录且不含正文 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-003 | Web 单元 | 浮层不是对话、传参正确 | `RecordSummaryModal.test.tsx`：点「✦ AI 助手」拉出 `role="dialog"` 浮层（无对话气泡 / 无轮次概念）；点「生成总结」时把当前范围事实与 `requirement` 传给 `assistRecordSummary` | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-004 | Web 单元 | 逐段手改 + 橙点 + 单句回退 + 全量撤销 | 改一段 → 该段 `data-edited="true"`、底栏出现「已手动改 1 处」；「回退这句」恢复该段原文并减计数；「撤销手动修改」清零且按钮转 `disabled` | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-005 | Web 单元 | 复制 / 导出取编辑后正文 | 编辑后复制得到编辑后文本（`summaryAssistDocumentToText` 口径），不是 AI 原始返回；未编辑时两者一致 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-006 | Web 单元 | 未启用 / 上游失败的提示 | 返回 503 `AI_ASSIST_DISABLED` 时浮层内以 `role="alert"` 显示固定文案，正文与已手动改动不被清空 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-007 | 门禁 + 浏览器实测 | 整链回归与真实上游 | `contract:validate` 116 条、`permissions:check` 116 条操作 / 116 条路由、`contract:drift` 无漂移；`pnpm test:web` **108 文件 865 例**、api 集成 **61 文件 594 例**、database 27 例、ops 7 例、契约单测 102 例；dev 栈 + 演示库实机跑通真实上游（约 33 秒出稿、正文切 79 段可编辑、数字 / 人名 / 分节保留、编辑与回退生效，只读核对未导入数据） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批前端改动只在 dev 栈手动实机核对，未新增 E2E 用例）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ 首跑 api 集成时 `search-api.integration.test.ts` 的「单字查询」用例在并行下偶发 `expected 0 to be greater than 0`（该文件本批未改动、与本次改动无关），隔离运行 10/10、整批复跑 61 文件 594 例全绿；⑤ `deps:audit` 见开发日志第一百九十条的如实记录。
+
+## 「生成总结」底栏层级与「复制正文」永远最右（用户「按钮排序和颜色我需要进行更改，复制正文按钮永远要在最右侧」+「还是丑这个撤销键很必要吗」，2026-10-15 本地落库，第一百九十二条）
+
+定案见开发日志第一百九十二条与 [ADR-076](adr/ADR-076.md) §2.4：底栏右侧固定三枚按钮「查看明细 → 重新生成 → 复制正文」，**「复制正文」永远是底栏最后一个按钮**；编辑态的「撤销手动修改」不占底栏按钮位、也不用警示色（首版 `danger` 红按钮被用户否掉），降级为左侧状态行末尾的浅色链接，只在有手动改动时出现（用户「现在状态是手动更改的部分本来就会显示出来」→ 状态行不再复述「已手动改 N 处」，编辑态由段落橙点 + 该入口的存在共同表示）；底栏只保留「复制正文」一个主按钮。不新增接口 / 路由 / 迁移（仍 116 条 / 42 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SUMMARY-FOOTER-001 | Web 单元 | 底栏层级与「复制正文」永远在最右侧 | `RecordSummaryModal.test.tsx`：未编辑时 `.calm-action-footer > button`（只取直接子级）逐字等于 `["查看明细", "重新生成", "复制正文"]` 且无「撤销手动修改」；改一句后它出现、`closest(".summary-footer-count")` 命中（即已降级进状态行）、class 匹配 `ant-btn-(link\|variant-link)` 且不含 `ant-btn-dangerous`，底栏直接子级按钮仍是那三枚、最后一个仍是「复制正文」；状态行**不再**出现「已手动改 N 处」（编辑态改由 `data-edited="true"` 橙点与撤销入口表示：两段改动 → 两段 `data-edited="true"`；单句回退 → 该段转 `data-edited="false"` 而第二段仍为 `true`、入口仍在；全量撤销 → 入口消失）；本文件 15 例通过 | 本地通过（2026-10-15） |
+
+口径替代：本节替代上文本批 `RECORD-SUMMARY-AI-004` 行里「底栏出现『已手动改 1 处』……减计数……清零」的表述——计数文案已于 2026-10-15 按用户要求删除，该行保留为 2026-10-14 的历史记录（对应实现已不存在该文案）。
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（纯样式与层级改动，dev 栈人工核对）；② 生产镜像构建与 Trivy 扫描、GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 「AI 辅助转换」主开关拨动即保存（用户「这个关闭就直接显示关闭吧，不用再点击保存了」，2026-10-15 本地落库，第一百九十三条增补）
+
+定案见开发日志第一百九十三条与 [ADR-068](adr/ADR-068.md) §7：`/settings → AI 辅助转换` 的**主开关拨动立即落库**，不再要求点「保存配置」。接口未变，仍是既有 `PUT /api/v1/admin/ai-assist` 的**整体替换**语义（路由 116 条、迁移 42 个均未变）：请求体以**服务端已保存**的 `endpoint / model / timeoutMs / maxTokens` 为基准、`apiKey` 传 `null`（不改密钥），因此表单里未保存的编辑不会被开关顺手提交；成功后用 PUT 响应直接更新前端缓存（不再重新 GET + 回填表单，状态卡与开关同帧一致），失败时开关回落到服务端已保存状态并复用既有错误文案；尚未配置密钥（无数据库行）时开关只改本地草稿、不发请求，并提示「首次配置必须提供 API 密钥」。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| AI-ASSIST-TOGGLE-001 | Web 单元 | 拨动即保存，且不以表单草稿为基准 | `AiAssistSettingsPanel.test.tsx`：拨到关闭时 `updateAiAssistSettings` 收到 `{ enabled: false, endpoint / model / timeoutMs / maxTokens 为服务端已保存值, apiKey: null }`，`issueCsrfToken` 1 次、带 `x-csrf-token` 与 `Idempotency-Key`，页面出现「已保存：AI 辅助转换已关闭」且开关转未选中；先改「模型」再拨开关时请求体仍是已保存的 `gpt-4o-mini`，输入框保留用户未保存的 `gpt-4o` | 本地通过（2026-10-15） |
+| AI-ASSIST-TOGGLE-002 | Web 单元 | 失败回退与首次配置拦截 | 保存失败（非 `ApiError`）时展示「AI 辅助转换配置服务暂时不可用，请重试。」、开关回到已保存的选中态；`keyConfigured=false` 时拨动开关不调用 `updateAiAssistSettings`，改由 API 密钥字段提示「首次配置必须提供 API 密钥」 | 本地通过（2026-10-15） |
+| AI-ASSIST-TOGGLE-003 | 浏览器 E2E（生产构建 + stub 上游 + `app_ci`） | 拨动即落库、刷新仍生效 | `apps/e2e/tests/settings-ai-assist.spec.ts` **3 例通过（17.2 秒）**：新增「主开关拨动即保存：刷新后仍为关闭，随后恢复启用供后续用例使用」——不点「保存配置」直接拨开关 → 出现「已保存：AI 辅助转换已关闭」→ `page.reload()` 后开关仍为关闭、状态卡显示「当前未启用」→ 再拨回开启（「已保存：AI 辅助转换已启用」）供后续成员导入用例使用；既有 2 例（保存配置并测试连接、在线配置对成员生效）继续通过 | 本地通过（2026-10-15） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 已跑：`pnpm test:e2e` **86 例通过（6.7 分钟）**，本批新增用例已并入整批（此前的定向单跑为 `settings-ai-assist.spec.ts` 3 例通过）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ dev 栈只做只读核对（开关尺寸 / 可访问名 / 状态卡位置），未改动演示库的 AI 配置状态；⑤ `deps:audit` 仍是第一百九十二条记录的 1 条 `mammoth > argparse > sprintf-js` moderate（低于 `--audit-level=high` 阈值，与本批无关）。
+
+## 项目卡片：成员行并入操作按钮 + 星标「我的关注」（用户「这个编辑按钮我有点想放到成员的右侧」「先把星标加上吧这个星我想柔和一点，角不要那么尖再大一点」「还可以颜色可以透一点」「70」「标星的是为了排序在更前面」，2026-10-15 本地落库，第一百九十四、一百九十五条）
+
+定案见开发日志第一百九十四、一百九十五条：① 卡片页脚由两行（「N 位成员」+ 独占一行的操作）合并为一行——编辑 / 管理成员并入成员行右侧，`.project-card-actions` 的选择器收窄为 `.project-card-members > .project-card-actions`（`justify-content: flex-end`、`gap` 4px），失去引用的 `.project-card-actions-main` 删除。② 卡片右上角、状态徽章左侧新增星标按钮（26px 柔和圆角星 / 34×34 按钮，已标 `rgb(224 164 23 / 0.7)`），状态只写浏览器 `localStorage`（键 `inpulse.projects.starred`），**不新增接口 / 路由 / 迁移 / 依赖 / 权限**（仍 116 条路由 / 42 个迁移）。③ 点亮的项目在列表里排到前面：`visibleProjects` 之后加一层稳定排序 `orderedProjects`，星标组内与未标组内各自保持服务端原次序；两档数量、档内搜索、侧栏项目树、维护中档 `updatedAt` 重排均不受影响。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-STAR-UNIT-001 | Web 单元 | 星标本地存储读写 | `project-star.test.ts` 4 例：无记录 → `[]`；合法 `[2,5]` 原样读回；损坏（`{oops`）/ 非数组（`{"2":true}`）/ 含非法项（`'[2,"5",0,-1,3.5,null]'`）分别回落 `[]`、`[]`、`[2]`；切换 `[7,2,9]` 去掉 2 → `[7,9]`、再加回 → `[7,9,2]`（不打乱其它 ID 的相对顺序） | 本地通过（2026-10-15） |
+| PROJECT-STAR-UNIT-002 | Web 单元 | 卡片星标交互与恢复 | `ProjectsPageView.test.tsx`：点击 `star-project-2` → `aria-pressed=true`、class 含 `is-starred`、`localStorage` 写入 `[2]`，且**不**触发卡片跳转（`onOpenModules` 未被调用）；再点 → `aria-pressed=false`、写回 `[]`；预置 `[2]` 后重新挂载 → `aria-pressed=true` | 本地通过（2026-10-15） |
+| PROJECT-STAR-UNIT-003 | Web 单元 | 星标优先排序 | `ProjectsPageView.test.tsx`：预置 `[22]`、入参顺序 `[2, 22, 23]` → 标题次序 `["乙项目", "InPulse 研发交付平台", "丙项目"]`（点亮项上浮、未标之间次序不动）；再点 `star-project-23` → `["乙项目", "丙项目", "InPulse 研发交付平台"]`（并入星标组、组内按原次序）；取消 `star-project-22` → 回到入参原次序；维护中档预置 `[11]` → `["早维护", "晚维护"]`（星标优先，其余仍按进入维护时间从近到远）；搜索「项目」后 → `["丙项目", "乙项目"]` | 本地通过（2026-10-15） |
+| PROJECT-CARD-FOOTER-UNIT-001 | Web 单元 | 成员行与操作同行 | 既有断言覆盖：卡片页脚仍渲染「N 位成员」，`edit-project-<id>` 与「管理成员」按钮点击不冒泡（`onOpenModules` 未被调用，见 `ProjectsPageView.test.tsx` 的 card actions 用例）；本批未新增用例，整文件 67 例通过 | 本地通过（2026-10-15） |
+| PROJECT-STAR-E2E-001 | 浏览器 E2E（生产构建 + `app_ci`） | 全量回归（未新增用例） | `pnpm test:e2e:local` **86 例通过（6.6 分钟）**：项目卡新增星标按钮与成员行合并后，既有 86 例（含项目创建关键路径、项目成员、记录与任务全量路径）无回归；本批未新增 E2E 用例 | 本地通过（2026-10-15） |
+
+未运行 / 已知偏差（本批）：① 星标不含后端：跨设备 / 跨浏览器不同步，`localStorage` 被清即丢失；跨设备需要新表 + `listProjects` 契约（当前 `query: "none"`）+ 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 排序用稳定 `sort`，点亮后卡片落到星标组内它原本的相对位置（不会顶到组内第一）。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）；⑤ 整链 `pnpm check` 未跑，本批实际执行的门禁见开发日志第一百九十五条。
+
+## 项目企微群绑定（ADR-077，第一批）
+
+需求原话要点：「机器人能做到项目和群聊绑定吗，就是项目里面有变动或者任务派发就发送到对应项目群聊里」「项目组长 + 系统管理员生成绑定码/解绑，先默认发『任务派发 + 全部 MEMBER 可见动态』，群推送与现有个人单聊并存，一个项目一个群、一个群一个项目」。本批落库迁移 `0044`（三张表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08）与三条项目级路由（116 → 119）；长连接桥接的 `chat_type:2` 投递改造为第二批、未实现，本批不产生任何群投递。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6525,4 +6580,4 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | WECOM-GROUP-UI-004 | Web 单测 | 普通成员只读 | 已绑定状态普通成员看不到解绑与重新生成按钮 | 本地通过（2026-10-15） |
 | WECOM-GROUP-UI-005 | Web 单测 | 待用码无明文 | 客户端没有明文时展示「已有一个待用绑定码」与有效期，组长可见「重新生成绑定码」 | 本地通过（2026-10-15） |
 | WECOM-GROUP-UI-006 | Web 单测 | 复制 | 「复制机器人链接」与「复制绑定码」写入剪贴板（后者写入一次性明文码） | 本地通过（2026-10-15） |
-| WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 118 条操作 / 118 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |
+| WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 119 条操作 / 119 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |

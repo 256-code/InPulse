@@ -95,6 +95,35 @@ describe("项目卡", () => {
     expect(screen.getByText("编辑项目")).toBeInTheDocument();
   });
 
+  it("星标点击即生效、再点取消，并且不触发卡片跳转", () => {
+    globalThis.localStorage.clear();
+    const { onOpenModules } = mount({});
+    const star = screen.getByTestId("star-project-2");
+    expect(star.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(star);
+    expect(star.getAttribute("aria-pressed")).toBe("true");
+    expect(star.className).toContain("is-starred");
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred")).toBe(
+      "[2]",
+    );
+    expect(onOpenModules).not.toHaveBeenCalled();
+
+    fireEvent.click(star);
+    expect(star.getAttribute("aria-pressed")).toBe("false");
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred")).toBe(
+      "[]",
+    );
+  });
+
+  it("重新进入页面时按本地记录恢复星标", () => {
+    globalThis.localStorage.setItem("inpulse.projects.starred", "[2]");
+    mount({});
+    expect(
+      screen.getByTestId("star-project-2").getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
   it("keeps GitHub links off the project card, matching the design reference", () => {
     mount({});
     expect(screen.queryByRole("button", { name: "GitHub 链接" })).toBeNull();
@@ -192,6 +221,68 @@ describe("项目列表生命周期滑块（2026-10-09 用户指示）", () => {
     expect(
       within(screen.getByRole("button", { name: "维护中" })).getByText("2"),
     ).toBeInTheDocument();
+  });
+});
+
+const openSecond: ProjectListItem = {
+  ...project,
+  id: 22,
+  code: "S2",
+  name: "乙项目",
+  updatedAt: "2026-09-02T00:00:00.000Z",
+};
+
+const openThird: ProjectListItem = {
+  ...project,
+  id: 23,
+  code: "S3",
+  name: "丙项目",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
+describe("项目星标排序（2026-10-15 用户指示）", () => {
+  const cardNames = () =>
+    screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+
+  it("点亮的项目排到前面，未标之间保持原有次序", () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem("inpulse.projects.starred", "[22]");
+    mount({ projects: [project, openSecond, openThird] });
+
+    expect(cardNames()).toEqual(["乙项目", "InPulse 研发交付平台", "丙项目"]);
+
+    // 现场点亮另一张卡：它离开未标组、并入星标组，组内仍按原有次序（22 在 23 前）。
+    fireEvent.click(screen.getByTestId("star-project-23"));
+    expect(cardNames()).toEqual(["乙项目", "丙项目", "InPulse 研发交付平台"]);
+  });
+
+  it("取消星标后回到原次序位置", () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem("inpulse.projects.starred", "[22]");
+    mount({ projects: [project, openSecond, openThird] });
+
+    fireEvent.click(screen.getByTestId("star-project-22"));
+    expect(cardNames()).toEqual(["InPulse 研发交付平台", "乙项目", "丙项目"]);
+  });
+
+  it("维护中一档同样星标优先，其余仍按进入维护时间从近到远", () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem("inpulse.projects.starred", "[11]");
+    mount({ projects: [maintenanceEarly, maintenanceLate] });
+    fireEvent.click(screen.getByRole("button", { name: "维护中" }));
+
+    expect(cardNames()).toEqual(["早维护", "晚维护"]);
+  });
+
+  it("搜索过滤后仍按星标优先排序", () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem("inpulse.projects.starred", "[23]");
+    mount({ projects: [project, openSecond, openThird] });
+    fireEvent.change(screen.getByLabelText("搜索项目"), {
+      target: { value: "项目" },
+    });
+
+    expect(cardNames()).toEqual(["丙项目", "乙项目"]);
   });
 });
 

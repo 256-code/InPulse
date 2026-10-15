@@ -8,7 +8,7 @@ const json = (schemaRef: SchemaName): RouteDefinition["responses"][string] => ({
 const error = json("ErrorResponse");
 
 /**
- * ADR-076：企业微信项目群绑定（项目级）。
+ * ADR-077：企业微信项目群绑定（项目级）。
  * GET 读取当前绑定状态（成员可读）；POST codes 签发一次性绑定码
  * （securityFlow，ADR-023 allowlist 扩展，仅组长/系统管理员）；DELETE 解绑
  * （状态流转 + 审计，仅组长/系统管理员）。绑定兑换发生在长连接桥接侧，
@@ -52,7 +52,7 @@ export const projectWecomGroupRoutes: readonly RouteDefinition[] = [
     path: "/projects/{projectId}/wecom-group/codes",
     operationId: "createProjectWecomGroupCode",
     summary:
-      "为项目签发一次性企微群绑定码（10 分钟有效；明文只返回一次，服务端只存 SHA-256 Hash）。ADR-076 将本路由加入 ADR-023 allowlist：签发一次性安全材料，重复请求签发新码并立即作废旧码、不进入通用幂等记录。仅系统管理员或本项目组长可签发（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN，非成员 404），CSRF 与同源校验必填。",
+      "为项目签发一次性企微群绑定码（10 分钟有效；明文只返回一次，服务端只存 SHA-256 Hash）。ADR-077 将本路由加入 ADR-023 allowlist：签发一次性安全材料，重复请求签发新码并立即作废旧码、不进入通用幂等记录。仅系统管理员或本项目组长可签发（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN，非成员 404），CSRF 与同源校验必填。",
     request: {
       path: "ProjectWecomGroupPath",
       query: "none",

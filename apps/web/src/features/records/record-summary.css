@@ -194,8 +194,28 @@
 }
 
 .summary-footer-count {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
   color: var(--muted-foreground);
   font-size: 12px;
+}
+
+/* 编辑态出口：撤销降级为状态行末尾的浅链接（2026-10-15）。 */
+.summary-revert-link.ant-btn {
+  height: auto;
+  padding: 0;
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-revert-link.ant-btn:hover:not(:disabled),
+.summary-revert-link.ant-btn:focus:not(:disabled) {
+  color: var(--primary);
+  text-decoration: underline;
+  background: transparent;
 }
 
 /* 明细行可展开（2026-09-29）：整个横向区域可点，首列箭头只做展开态的视觉提示；
@@ -313,4 +333,356 @@
 .summary-detail-table td:nth-child(5),
 .summary-detail-table td:nth-child(6) {
   white-space: nowrap;
+}
+
+/* ===== ADR-076 迭代总结 AI 助手 =====
+   入口钉在标题栏右上角（不占正文宽度、不占底栏），点开从按钮下方拉出浮层；
+   生成后浮层收起，正文转成可逐段编辑：改过的段画橙点，悬停可单独回退这一句，
+   底栏显示改动处数并可全量撤销。 */
+.summary-ai-slot {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.summary-ai-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border: 1px solid #e4dcf9;
+  border-radius: 999px;
+  background: var(--card);
+  color: #5b45c9;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px #5b45c914;
+}
+
+.summary-ai-trigger:hover {
+  background: #f6f4ff;
+}
+
+.summary-ai-trigger[aria-expanded="true"] {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7a63e6, #5b45c9);
+  color: #fff;
+  box-shadow: 0 6px 18px #5b45c938;
+}
+
+.summary-ai-trigger:focus-visible {
+  outline: 2px solid #b39cf0;
+  outline-offset: 2px;
+}
+
+/* 浮层压在筛选行与正文之上：绝对定位在标题栏操作位下方，z-index 高于正文区。 */
+.summary-ai-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 25;
+  width: 428px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 8px;
+  border: 1px solid #ece7fb;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow:
+    0 24px 60px #5b45c924,
+    0 3px 10px #14283c0f;
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.summary-ai-pop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    240px 130px at 88% 0%,
+    #5b45c90d,
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.summary-ai-pop::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 46px;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid #ece7fb;
+  border-left: 1px solid #ece7fb;
+  background: var(--card);
+  transform: rotate(45deg);
+}
+
+.summary-ai-pop:focus-within {
+  border-color: #d6c9f9;
+  box-shadow:
+    0 24px 60px #5b45c92b,
+    0 0 0 4px #5b45c912;
+}
+
+.summary-ai-reqbox {
+  position: relative;
+}
+
+.summary-ai-request {
+  display: block;
+  width: 100%;
+  min-height: 92px;
+  padding: 13px 40px 8px 16px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.65;
+  resize: none;
+}
+
+.summary-ai-request::placeholder {
+  color: #a7aec2;
+}
+
+.summary-ai-request:focus {
+  outline: none;
+}
+
+.summary-ai-clear {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #9aa3b8;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.summary-ai-clear:hover {
+  background: #f1eefc;
+  color: #5b45c9;
+}
+
+.summary-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 10px 6px;
+}
+
+.summary-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #f6f4ff;
+  color: #6a58d6;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+
+.summary-ai-chip:hover {
+  background: #f0edfd;
+}
+
+.summary-ai-chip.on {
+  background: linear-gradient(135deg, #948aec, #7263d8);
+  color: #fff;
+  box-shadow: 0 4px 12px #7263d83b;
+}
+
+.summary-ai-chip.on::before {
+  content: "✓";
+  font-size: 11px;
+}
+
+.summary-ai-error {
+  margin: 0 16px 2px;
+  color: #c0453f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.summary-ai-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 9px 10px 6px 16px;
+  border-top: 1px solid #f0edfa;
+}
+
+.summary-ai-applied {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-ai-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-ai-count {
+  color: #a6aec0;
+  font-size: 11px;
+}
+
+.summary-ai-count.warn {
+  color: #c0453f;
+  font-weight: 600;
+}
+
+.summary-ai-generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 17px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7a63e6, #5b45c9);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px #5b45c942;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s,
+    opacity 0.12s;
+}
+
+.summary-ai-generate:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px #5b45c952;
+}
+
+.summary-ai-generate:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.summary-ai-generate:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.summary-ai-generate kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #ffffff2b;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* 可编辑正文：段落与模型原文一一对应，改过的段左侧画橙点。 */
+.summary-ai-doc > .summary-ai-sec:first-child > .summary-ai-paragraph {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.summary-ai-sec {
+  position: relative;
+}
+
+.summary-ai-sec[data-edited="true"]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e2a72e;
+}
+
+.summary-ai-heading {
+  margin: 0 0 8px;
+  font-size: 14.5px;
+}
+
+.summary-ai-paragraph {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.summary-ai-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  display: grid;
+  gap: 7px;
+}
+
+.summary-ai-list li {
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.summary-ai-edit {
+  outline: none;
+}
+
+.summary-ai-edit:focus {
+  border-radius: 4px;
+  background: #f7fbff;
+  box-shadow: 0 0 0 2px #1467d81f;
+}
+
+.summary-ai-sec[data-edited="true"] > .summary-ai-edit {
+  border-radius: 4px;
+  background: #fff8e6;
+}
+
+.summary-ai-revert {
+  position: absolute;
+  right: 0;
+  top: -2px;
+  z-index: 3;
+  display: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: #5b6f84;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.summary-ai-sec:hover > .summary-ai-revert,
+.summary-ai-sec:focus-within > .summary-ai-revert {
+  display: block;
 }
