@@ -1700,7 +1700,7 @@ td small {
   margin: 7px 0 0;
 }
 /*
- * 标题栏右侧操作位（ADR-075）：AppModal 的 headerActions 与关闭按钮同处一格，
+ * 标题栏右侧操作位（ADR-076）：AppModal 的 headerActions 与关闭按钮同处一格，
  * 自带 8px 间距；position: relative 让浮层（如「AI 助手」要求面板）能贴着按钮
  * 向下拉出，不必再加一层定位容器或新的弹层。
  */
@@ -7982,9 +7982,8 @@ div.ant-popover.import-member-popover
   margin-top: 12px;
 }
 
-/* ADR-070 企业微信机器人设置面板（2026-10-13 布局调整）：正文统一内缩（与标题带
- * 20px 对齐），字段单列堆叠（标签在上、控件全宽、提示紧随），替代两列等宽网格
- * 造成的标签 / 控件远距与行间拥挤。 */
+/* ADR-070 企业微信机器人设置面板：正文统一内缩（与标题带 20px 对齐），字段单列堆叠
+ * （标签在上、控件全宽、提示紧随），替代两列等宽网格造成的标签 / 控件远距与行间拥挤。 */
 .wecom-robot-body {
   display: grid;
   gap: 14px;
@@ -8028,7 +8027,7 @@ div.ant-popover.import-member-popover
   gap: 10px;
 }
 
-/* 「AI 辅助转换」设置面板布局（2026-10-15）：单列堆叠、主开关在标题行右端，口径同 ADR-070 企业微信面板。 */
+/* ADR-068 「AI 辅助转换」设置面板：与 ADR-070 企业微信面板同口径的单列堆叠，主开关在标题行右端。 */
 .ai-assist-body {
   display: grid;
   gap: 16px;
@@ -8100,14 +8099,6 @@ div.ant-popover.import-member-popover
   width: 100%;
 }
 
-.ai-assist-master {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
 .ai-assist-field-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8118,6 +8109,14 @@ div.ant-popover.import-member-popover
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.ai-assist-master {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @media (max-width: 700px) {

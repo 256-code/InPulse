@@ -19,10 +19,10 @@ const errors = (statuses: readonly number[]) =>
  * 因此不登记 403 与 404。请求校验失败（日期格式、起止倒置、跨度超限、
  * groupBy 非法）统一 422。
  *
- * ADR-075 追加迭代总结 AI 改写路由（纯校验，无持久化副作用）。
+ * ADR-076 追加迭代总结 AI 改写路由（纯校验，无持久化副作用）。
  */
 /**
- * ADR-075 迭代总结 AI 改写：`POST /record-summaries/assist`。
+ * ADR-076 迭代总结 AI 改写：`POST /record-summaries/assist`。
  * 纯校验接口（无任何持久化副作用）：会话认证、无 CSRF、无幂等；把用户自己
  * 已经看到的事实正文按一句话要求改写，不查库、不写库、不产生新的读权限。
  */
@@ -50,7 +50,7 @@ const assistRoute: RouteDefinition = {
     ...errors([400, 401, 422, 500, 503]),
   },
   authPolicy: "session",
-  // ADR-075：纯校验接口（不写任何持久化状态）显式声明 none。
+  // ADR-076：纯校验接口（不写任何持久化状态）显式声明 none。
   csrfPolicy: "none",
   idempotencyPolicy: "none",
   idempotencyExceptionAdr: "none",

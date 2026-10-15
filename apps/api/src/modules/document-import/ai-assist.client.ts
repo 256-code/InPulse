@@ -25,7 +25,7 @@ export class AiAssistUpstreamError extends Error {
 }
 
 /**
- * 出站调用的日志标签（ADR-067 2.5 / ADR-075）：只带「调用种类 + 输入规模」，
+ * 出站调用的日志标签（ADR-067 2.5 / ADR-076）：只带「调用种类 + 输入规模」，
  * 不带任何正文，因此可以在同一份日志格式里同时容纳文档草稿与总结改写。
  */
 interface AiAssistCallLabel {
@@ -115,7 +115,7 @@ export class DocumentImportAiAssistClient {
   }
 
   /**
-   * ADR-075 迭代总结 AI 改写：把用户已经看到的事实正文按一句话要求改写。
+   * ADR-076 迭代总结 AI 改写：把用户已经看到的事实正文按一句话要求改写。
    * 与 ADR-067 共用同一份运行时配置、同一套失败分类与截断判定，只有提示词与
    * 日志标签不同（仍然不记录正文与密钥）。
    */

@@ -10,6 +10,7 @@
 
 2026-09-18 修订（[ADR-036](adr/ADR-036.md) 修订 ADR-032 前端入口）：`/login` 默认展示本地口令表单，不再自动整页跳转；登录框下方新增「或以统一身份认证登录」图标入口，点击后整页跳转 `/api/v1/auth/sso/start`（302 导航与 fail closed 回落不变：未启用时回落 `/login?local=1&sso=disabled` 并提示、隐藏入口）；`?sso_error=` 回落保留本地表单与可重试的 SSO 入口；退出登录与「前往登录」回 `/login`。登录页单测、`AppLayout` 退出用例与 E2E `auth.spec.ts` 的未配置回落用例已同步改写；服务端路由、契约与权限矩阵无改动。
 2026-09-20 修订（[ADR-038](adr/ADR-038.md) 调整本地会话空闲时长）：本地会话空闲有效期由 30 分钟（1800 秒）改为默认 2 小时（7200 秒），口令与 SSO 共用 `SESSION_TTL_POLICY`，`SESSION_IDLE_MAX_AGE_SECONDS` 仍可覆盖；「自签发起固定计算、不随请求滑动续期」与绝对超时 7 天的语义不变。SEC-018 的期望窗口改为 7200 秒，`session-ttl.policy.test.ts` 与 `sso-login.integration.test.ts` 的断言同步更新；部署示例 `deploy/.env.deploy.example` 与 `deploy/.env.deploy.test` 写入 `SESSION_IDLE_MAX_AGE_SECONDS=7200`。无契约、权限矩阵与数据库改动。
+2026-10-15 修订（[ADR-075](adr/ADR-075.md) 空库首个 SSO 账号自动成为系统管理员）：JIT 开通在开通事务内判定平台此前没有任何账号（`app.users` 无行，含停用账号也算有）时授予 `is_admin=true`，其余情况维持 `is_admin=false`；判定与 INSERT 由固定键 `pg_advisory_xact_lock` 串行化，并发首登只有先提交的事务成为管理员；审计 `auth.sso_account_provisioned` payload 增加 `grantedAdmin`。SEC-018 的 `is_admin=false` 口径限「平台已有账号」，空库首账号情形由新增 SEC-022 覆盖（`apps/api/test/sso-first-admin.integration.test.ts`，真实 PostgreSQL 临时库全量迁移 + 桩 IdP）。
 
 ## F-09 数据安全专项（A，2026-09-10 本地实现）
 
@@ -442,10 +443,11 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | SEC-014 | API + PostgreSQL 集成 | ~~管理员 MFA 重置（F-02.5）~~（2026-09-15 随 ADR-031 移除，实现与用例已删除，保留历史） | 仅另一名完成 5 分钟双因子重认证的 ACTIVE 系统管理员可执行；目标必须是另一名 ACTIVE 且已启用 TOTP 的系统管理员，可用 MFA 管理员数必须大于 1；同一事务禁用目标因子、失效恢复码、递增 auth_version、撤销目标全部 Session 并写审计；自重置/仅剩一名 MFA 管理员返回 409，非管理员目标 403，缺少重认证 403；两个管理员互相重置时只有一个成功且至少保留一名 MFA 管理员 | 已自动化到本地（Controller 9 例；真实 PostgreSQL 6 例；`pnpm check` 全绿；Playwright 16/16；GitHub Actions 已通过，PR #63） |
 | SEC-016 | API 单元 | 单点登录配置 fail closed（ADR-032） | `ssoEnabled` 只认真值；未启用时 `loadSsoConfig` 既不返回配置也不报错；启用后缺 issuer/client id/Secret 文件、issuer 非 https、回调地址不是 `/api/v1/auth/sso/callback` 或带查询串、Secret 文件不在 `/run/secrets/` 下、为空或不可读时返回分类原因且不返回配置；错误信息不回显 Secret 内容 | 已本地通过（`apps/api/test/sso.config.test.ts` 9 例，2026-09-15） |
 | SEC-017 | API 单元 | id_token 验签与 JWKS 轮换 | RS256 签名与 `iss`/`aud`（含数组）/`exp`/`nbf`/`iat`/`nonce` 逐项校验；只提取 `subject/loginName/displayName/email`，Casdoor 的 `isAdmin` 等 claim 被丢弃；非 RS256、篡改载荷、未知 kid、非 JWT 一律 `SsoProtocolError`；kid 未命中时强制刷新一次 JWKS；discovery 结果按 TTL 缓存，issuer 不一致或端点非 https 时拒绝 | 已本地通过（`apps/api/test/sso-oidc.client.test.ts` 13 例，2026-09-15） |
-| SEC-018 | API + PostgreSQL 集成 | 单点登录纵切片（桩 IdP） | start 只落库 state 的 HMAC 与 key version 并下发 `__Host-sso-state`；回调必须同时匹配 URL state 与 Cookie（缺失或不同即 `state-mismatch`）后一次性消费；JIT 开通写 `sso_subject`、`password_hash=NULL`、`is_admin=false`，二次登录按 subject 命中并同步展示名/邮箱；仅当登录名命中且邮箱一致才绑定，邮箱不一致或被占用为 `account-conflict`；停用账号 `account-disabled`；重放 `state-consumed`、过期 `state-expired`、未知 state `state-invalid`、nonce 不符 `token-invalid`、IdP 返回 error 为 `idp-error`；成功签发 `AUTHENTICATED` 会话（空闲 7200s、绝对 7 天、只存 Hash）并写 `auth.sso_account_provisioned`/`auth.sso_account_linked`/`auth.sso_login` 审计 | 已本地通过（`apps/api/test/sso-login.integration.test.ts` 13 例，真实 PostgreSQL + 桩 IdP，2026-09-15） |
+| SEC-018 | API + PostgreSQL 集成 | 单点登录纵切片（桩 IdP） | start 只落库 state 的 HMAC 与 key version 并下发 `__Host-sso-state`；回调必须同时匹配 URL state 与 Cookie（缺失或不同即 `state-mismatch`）后一次性消费；JIT 开通写 `sso_subject`、`password_hash=NULL`、`is_admin=false`（基线库已有账号；空库首账号授予管理员见 SEC-022），二次登录按 subject 命中并同步展示名/邮箱；仅当登录名命中且邮箱一致才绑定，邮箱不一致或被占用为 `account-conflict`；停用账号 `account-disabled`；重放 `state-consumed`、过期 `state-expired`、未知 state `state-invalid`、nonce 不符 `token-invalid`、IdP 返回 error 为 `idp-error`；成功签发 `AUTHENTICATED` 会话（空闲 7200s、绝对 7 天、只存 Hash）并写 `auth.sso_account_provisioned`/`auth.sso_account_linked`/`auth.sso_login` 审计 | 已本地通过（`apps/api/test/sso-login.integration.test.ts` 13 例，真实 PostgreSQL + 桩 IdP，2026-09-15） |
 | SEC-019 | API 单元 | SSO 302 导航与回落目标 | 未启用时 `start` 302 到 `/login?local=1&sso=disabled` 并保留规范化后的站内 `from`，外部地址被丢弃；启用时 302 携带 `Location`、`no-store` 与 state Cookie（HttpOnly/Secure/SameSite=Lax/Path=/）；成功回调同时下发清理 state 与 `__Host-session`；内部异常统一 302 到 `/login?sso_error=internal` 且不泄露内部原因 | 已本地通过（`sso.controller.test.ts` 6 例、`sso-return-to.test.ts` 6 例、`session-ttl.policy.test.ts` 3 例，2026-09-15） |
 | SEC-020 | API + PostgreSQL 集成 | 无口令账号的本地登录 | SSO JIT 账号 `password_hash` 为 NULL 时，`PasswordService.verify` 对 `null`/`undefined`/非 Argon2id 编码一律走等时占位校验并返回 false（不抛错、不 500），`UserCredential.passwordHash` 允许为空，隐藏口令入口对这类账号必然 401 | 已本地通过（`sso-login.integration.test.ts` 内断言 + `apps/api/test/password.service.test.ts`，2026-09-15） |
 | SEC-021 | 契约 + API HTTP | SSO 回调查询契约（RFC 9207 `iss`） | 回调 query 接受 OIDC 授权响应携带的 `iss` 并透传到网关，`.strict()` 仍拒绝其它未知键；`iss` 缺省放行，回传值去掉尾斜杠后必须等于配置 `SSO_ISSUER`，否则按 `issuer-mismatch` 302 回 `/login?sso_error=issuer-mismatch`（不消费 state、不交换 token） | 已本地通过（`apps/api/test/sso-callback-http.test.ts` 2 例 HTTP 边界 + 反事实红灯；`sso-login.integration.test.ts` 新增 2 例，真实 PostgreSQL + 桩 IdP，2026-10-08） |
+| SEC-022 | API + PostgreSQL 集成 | 空库首个 SSO 账号自动成为系统管理员（ADR-075） | 在 cluster_bootstrap 新建的临时库上跑完整迁移（并在 app_ci 之外独立建库）后：首个 JIT 账号 `is_admin=true` 且审计 `auth.sso_account_provisioned` payload 为 `grantedAdmin=true`，紧随其后的第二个账号 `false`；平台仅有停用账号（无 ACTIVE 行）时不授予；两并发首登事务恰好一个管理员、另一个 `false` | 已本地通过（`apps/api/test/sso-first-admin.integration.test.ts` 3 例，真实 PostgreSQL 临时库全量迁移 + 桩 IdP，2026-10-15） |
 | SEC-015 | PostgreSQL 集成 | Session 分批清理（F-01） | 按主键分批删除已撤销超过 30 天或绝对过期超过 7 天的 `user_sessions`、过期 `session_csrf_tokens` 以及过期/已消费 `preauth_sessions`；单事务内有限批次数、`FOR UPDATE SKIP LOCKED`，活跃 Session/CSRF/预认证 Session 保留 | 已自动化（`session-cleanup.integration.test.ts` 2 例，2026-09-09；CI 已执行） |
 
 ## 搜索、部署与恢复
@@ -6504,9 +6506,9 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 未运行 / 已知偏差（本批）：① `CalmSelect` 的 `animated` 动画只在 enter/appear 的 active 帧接管（窗口 150ms），本次抓取工具单次点击往返 263ms，未复测到 active 帧；机制与既有 43 处同构，本批只补 2 个 prop。② 弹窗**关闭**仍是瞬时（本批只补「出现」）。③ 仍未接预取的入口：任务中心 → 任务详情弹窗（`TaskDetailOverlay` 为 lazy，靠 `Suspense fallback={null}` 不闪空壳、只慢一拍）、弹窗内深链（`?taskId=`）与页面内按钮。④ 全量 Playwright 未跑（31 个 spec 里只定向跑 6 个、21 例）。⑤ 生产镜像构建与 Trivy 扫描未执行。⑥ GitHub Actions 未执行（`test` 分支不触发工作流）。
 
 
-## 生成总结内嵌 AI 改写：一句话要求 → 生成 → 生成后逐段手改（ADR-075，2026-10-14 本地落库）
+## 生成总结内嵌 AI 改写：一句话要求 → 生成 → 生成后逐段手改（ADR-076，2026-10-14 本地落库）
 
-定案见开发日志第一百八十二条与 [ADR-075](adr/ADR-075.md)：用户明确「不准备用对话的模式就仅仅是提要求」，所以入口是**标题栏右上角「✦ AI 助手」按钮 + 按需拉出的浮层**（不是聊天记录），生成后浮层收起、正文逐段可手改（改过的段落橙点、悬停「回退这句」、底栏「已手动改 N 处」+「撤销手动修改」）。事实由前端当前范围的确定性正文（`summaryDocumentToText`）给出，服务端只做一次出站改写、不查库不写库不写审计、不解析筛选意图。新增 1 条路由（115 → 116），无数据库迁移（仍 42 个）、无新增依赖、无权限变化、无契约模板改动。
+定案见开发日志第一百九十条与 [ADR-076](adr/ADR-076.md)：用户明确「不准备用对话的模式就仅仅是提要求」，所以入口是**标题栏右上角「✦ AI 助手」按钮 + 按需拉出的浮层**（不是聊天记录），生成后浮层收起、正文逐段可手改（改过的段落橙点、悬停「回退这句」、底栏「已手动改 N 处」+「撤销手动修改」）。事实由前端当前范围的确定性正文（`summaryDocumentToText`）给出，服务端只做一次出站改写、不查库不写库不写审计、不解析筛选意图。新增 1 条路由（115 → 116），无数据库迁移（仍 42 个）、无新增依赖、无权限变化、无契约模板改动。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6518,11 +6520,11 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | RECORD-SUMMARY-AI-006 | Web 单元 | 未启用 / 上游失败的提示 | 返回 503 `AI_ASSIST_DISABLED` 时浮层内以 `role="alert"` 显示固定文案，正文与已手动改动不被清空 | 本地通过（2026-10-14） |
 | RECORD-SUMMARY-AI-007 | 门禁 + 浏览器实测 | 整链回归与真实上游 | `contract:validate` 116 条、`permissions:check` 116 条操作 / 116 条路由、`contract:drift` 无漂移；`pnpm test:web` **108 文件 865 例**、api 集成 **61 文件 594 例**、database 27 例、ops 7 例、契约单测 102 例；dev 栈 + 演示库实机跑通真实上游（约 33 秒出稿、正文切 79 段可编辑、数字 / 人名 / 分节保留、编辑与回退生效，只读核对未导入数据） | 本地通过（2026-10-14） |
 
-未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批前端改动只在 dev 栈手动实机核对，未新增 E2E 用例）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ 首跑 api 集成时 `search-api.integration.test.ts` 的「单字查询」用例在并行下偶发 `expected 0 to be greater than 0`（该文件本批未改动、与本次改动无关），隔离运行 10/10、整批复跑 61 文件 594 例全绿；⑤ `deps:audit` 见开发日志第一百八十二条的如实记录。
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批前端改动只在 dev 栈手动实机核对，未新增 E2E 用例）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ 首跑 api 集成时 `search-api.integration.test.ts` 的「单字查询」用例在并行下偶发 `expected 0 to be greater than 0`（该文件本批未改动、与本次改动无关），隔离运行 10/10、整批复跑 61 文件 594 例全绿；⑤ `deps:audit` 见开发日志第一百九十条的如实记录。
 
-## 「生成总结」底栏层级与「复制正文」永远最右（用户「按钮排序和颜色我需要进行更改，复制正文按钮永远要在最右侧」+「还是丑这个撤销键很必要吗」，2026-10-15 本地落库，第一百八十四条）
+## 「生成总结」底栏层级与「复制正文」永远最右（用户「按钮排序和颜色我需要进行更改，复制正文按钮永远要在最右侧」+「还是丑这个撤销键很必要吗」，2026-10-15 本地落库，第一百九十二条）
 
-定案见开发日志第一百八十四条与 [ADR-075](adr/ADR-075.md) §2.4：底栏右侧固定三枚按钮「查看明细 → 重新生成 → 复制正文」，**「复制正文」永远是底栏最后一个按钮**；编辑态的「撤销手动修改」不占底栏按钮位、也不用警示色（首版 `danger` 红按钮被用户否掉），降级为左侧状态行末尾的浅色链接，只在有手动改动时出现（用户「现在状态是手动更改的部分本来就会显示出来」→ 状态行不再复述「已手动改 N 处」，编辑态由段落橙点 + 该入口的存在共同表示）；底栏只保留「复制正文」一个主按钮。不新增接口 / 路由 / 迁移（仍 116 条 / 42 个）。
+定案见开发日志第一百九十二条与 [ADR-076](adr/ADR-076.md) §2.4：底栏右侧固定三枚按钮「查看明细 → 重新生成 → 复制正文」，**「复制正文」永远是底栏最后一个按钮**；编辑态的「撤销手动修改」不占底栏按钮位、也不用警示色（首版 `danger` 红按钮被用户否掉），降级为左侧状态行末尾的浅色链接，只在有手动改动时出现（用户「现在状态是手动更改的部分本来就会显示出来」→ 状态行不再复述「已手动改 N 处」，编辑态由段落橙点 + 该入口的存在共同表示）；底栏只保留「复制正文」一个主按钮。不新增接口 / 路由 / 迁移（仍 116 条 / 42 个）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6532,9 +6534,9 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（纯样式与层级改动，dev 栈人工核对）；② 生产镜像构建与 Trivy 扫描、GitHub Actions 未执行（`test` 分支不触发工作流）。
 
-## 「AI 辅助转换」主开关拨动即保存（用户「这个关闭就直接显示关闭吧，不用再点击保存了」，2026-10-15 本地落库，第一百八十五条增补）
+## 「AI 辅助转换」主开关拨动即保存（用户「这个关闭就直接显示关闭吧，不用再点击保存了」，2026-10-15 本地落库，第一百九十三条增补）
 
-定案见开发日志第一百八十五条与 [ADR-068](adr/ADR-068.md) §7：`/settings → AI 辅助转换` 的**主开关拨动立即落库**，不再要求点「保存配置」。接口未变，仍是既有 `PUT /api/v1/admin/ai-assist` 的**整体替换**语义（路由 116 条、迁移 42 个均未变）：请求体以**服务端已保存**的 `endpoint / model / timeoutMs / maxTokens` 为基准、`apiKey` 传 `null`（不改密钥），因此表单里未保存的编辑不会被开关顺手提交；成功后用 PUT 响应直接更新前端缓存（不再重新 GET + 回填表单，状态卡与开关同帧一致），失败时开关回落到服务端已保存状态并复用既有错误文案；尚未配置密钥（无数据库行）时开关只改本地草稿、不发请求，并提示「首次配置必须提供 API 密钥」。
+定案见开发日志第一百九十三条与 [ADR-068](adr/ADR-068.md) §7：`/settings → AI 辅助转换` 的**主开关拨动立即落库**，不再要求点「保存配置」。接口未变，仍是既有 `PUT /api/v1/admin/ai-assist` 的**整体替换**语义（路由 116 条、迁移 42 个均未变）：请求体以**服务端已保存**的 `endpoint / model / timeoutMs / maxTokens` 为基准、`apiKey` 传 `null`（不改密钥），因此表单里未保存的编辑不会被开关顺手提交；成功后用 PUT 响应直接更新前端缓存（不再重新 GET + 回填表单，状态卡与开关同帧一致），失败时开关回落到服务端已保存状态并复用既有错误文案；尚未配置密钥（无数据库行）时开关只改本地草稿、不发请求，并提示「首次配置必须提供 API 密钥」。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6542,4 +6544,4 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | AI-ASSIST-TOGGLE-002 | Web 单元 | 失败回退与首次配置拦截 | 保存失败（非 `ApiError`）时展示「AI 辅助转换配置服务暂时不可用，请重试。」、开关回到已保存的选中态；`keyConfigured=false` 时拨动开关不调用 `updateAiAssistSettings`，改由 API 密钥字段提示「首次配置必须提供 API 密钥」 | 本地通过（2026-10-15） |
 | AI-ASSIST-TOGGLE-003 | 浏览器 E2E（生产构建 + stub 上游 + `app_ci`） | 拨动即落库、刷新仍生效 | `apps/e2e/tests/settings-ai-assist.spec.ts` **3 例通过（17.2 秒）**：新增「主开关拨动即保存：刷新后仍为关闭，随后恢复启用供后续用例使用」——不点「保存配置」直接拨开关 → 出现「已保存：AI 辅助转换已关闭」→ `page.reload()` 后开关仍为关闭、状态卡显示「当前未启用」→ 再拨回开启（「已保存：AI 辅助转换已启用」）供后续成员导入用例使用；既有 2 例（保存配置并测试连接、在线配置对成员生效）继续通过 | 本地通过（2026-10-15） |
 
-未运行 / 已知偏差（本批）：① 全量 Playwright 已跑：`pnpm test:e2e` **86 例通过（6.7 分钟）**，本批新增用例已并入整批（此前的定向单跑为 `settings-ai-assist.spec.ts` 3 例通过）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ dev 栈只做只读核对（开关尺寸 / 可访问名 / 状态卡位置），未改动演示库的 AI 配置状态；⑤ `deps:audit` 仍是第一百八十四条记录的 1 条 `mammoth > argparse > sprintf-js` moderate（低于 `--audit-level=high` 阈值，与本批无关）。
+未运行 / 已知偏差（本批）：① 全量 Playwright 已跑：`pnpm test:e2e` **86 例通过（6.7 分钟）**，本批新增用例已并入整批（此前的定向单跑为 `settings-ai-assist.spec.ts` 3 例通过）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ dev 栈只做只读核对（开关尺寸 / 可访问名 / 状态卡位置），未改动演示库的 AI 配置状态；⑤ `deps:audit` 仍是第一百九十二条记录的 1 条 `mammoth > argparse > sprintf-js` moderate（低于 `--audit-level=high` 阈值，与本批无关）。

@@ -8,7 +8,7 @@ import {
 } from "@generated/api";
 
 /**
- * ADR-075 迭代总结 AI 改写数据层：POST /record-summaries/assist。
+ * ADR-076 迭代总结 AI 改写数据层：POST /record-summaries/assist。
  *
  * 纯校验接口（无 CSRF、无幂等、无持久化副作用）：只把用户自己已经看到的总结
  * 正文按一句话要求交给服务端改写。与 ADR-067 的文档导入辅助转换同族——请求体
@@ -51,7 +51,7 @@ const SUMMARY_ASSIST_REASON_MESSAGES: Readonly<Record<string, string>> = {
   "invalid-response": "AI 服务返回了无法识别的内容，请稍后重试。",
 };
 
-/** ADR-075 固定错误码 → 固定中文提示；上游细节只通过 reason 归类，不下发原文。 */
+/** ADR-076 固定错误码 → 固定中文提示；上游细节只通过 reason 归类，不下发原文。 */
 export function describeRecordSummaryAssistError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.code) {

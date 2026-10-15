@@ -6,7 +6,7 @@ import {
   summaryAssistDocumentToText,
 } from "./record-summary-assist-document";
 
-// ADR-075 正文模型：模型返回的是整段 Markdown，弹窗要能逐段编辑并把编辑结果原样
+// ADR-076 正文模型：模型返回的是整段 Markdown，弹窗要能逐段编辑并把编辑结果原样
 // 复制出去。这里锁三件事——段落切分（标题/列表项/段落）、渲染分组（连续列表项合成
 // 一个 ul）、以及「编辑后的正文」与「复制正文」共用同一份文本口径。
 

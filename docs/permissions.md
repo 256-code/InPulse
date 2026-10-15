@@ -25,7 +25,7 @@
 | `login` | 仅有效 `PREAUTH` + CSRF 允许 | 409 | 409 | 401 | 只消费匿名预认证 Session 与其 CSRF；已有认证 Session 必须先登出/清 Cookie，再签发新预认证 CSRF；管理员密码验证成功后直接签发完整认证 Session 与新 CSRF，不再有 MFA 挑战步骤（[ADR-031](adr/ADR-031.md)） |
 | `logout` | 204 | 204 | 204 | 204 | 有效 Session 时要求其 CSRF 并条件撤销；Session 无效、已撤销或首次响应丢失后的重试仅在同源 Origin/Referer 与 Fetch Metadata 通过时清 Cookie 并返回 204，不执行状态写 |
 | `startSsoLogin` | 允许（302 到授权端点） | 允许（302） | 允许（302） | 允许（按匿名；302） | 每次调用生成新的 state、nonce 与 PKCE verifier 并只保存 Hash，同时下发短期 `__Host-sso-state` Cookie 绑定发起浏览器；`returnTo` 必须是站内相对路径，非法值回落默认路径；SSO 未配置时 302 回 `/login?local=1&sso=disabled`；302 只用于认证导航，本接口不签发本地会话（[ADR-032](adr/ADR-032.md)） |
-| `completeSsoLogin` | 允许（302 回应用页；成功即签发本地会话） | 允许（302，按重新登录处理） | 允许（302） | 拒绝（302 回登录页携带错误码，不恢复身份） | 必须同时匹配 URL 的 state 与 `__Host-sso-state` Cookie，并在同一事务内一次性消费；缺失、过期、重放或并发消费失败、token 交换失败、id_token 验签或 iss/aud/exp/nonce 校验失败、账号同名但邮箱不一致、账号已停用一律 302 回登录页并审计；成功时签发与口令登录同构的本地会话与 CSRF；Casdoor 的 `isAdmin` 等其余 claims 不得用于 InPulse 权限判定（[ADR-032](adr/ADR-032.md)） |
+| `completeSsoLogin` | 允许（302 回应用页；成功即签发本地会话） | 允许（302，按重新登录处理） | 允许（302） | 拒绝（302 回登录页携带错误码，不恢复身份） | 必须同时匹配 URL 的 state 与 `__Host-sso-state` Cookie，并在同一事务内一次性消费；缺失、过期、重放或并发消费失败、token 交换失败、id_token 验签或 iss/aud/exp/nonce 校验失败、账号同名但邮箱不一致、账号已停用一律 302 回登录页并审计；JIT 开通仅在开通事务内经 `pg_advisory_xact_lock` 串行化判定平台此前没有任何账号（`app.users` 无行）时授予 `is_admin=true`（[ADR-075](adr/ADR-075.md)），其余情况 `is_admin=false`；成功时签发与口令登录同构的本地会话与 CSRF；Casdoor 的 `isAdmin` 等其余 claims 不得用于 InPulse 权限判定（[ADR-032](adr/ADR-032.md)） |
 | `createWecomBindingCode` | 401 | 允许 | 允许 | 401（按无效 Session） | 要求有效认证 Session、同源与当前 CSRF；每次调用覆盖签发新码并立即作废旧码，明文码只返回一次、服务端只存 SHA-256 Hash，10 分钟有效、一次性消费；同码重复兑换一律拒绝（[ADR-069](adr/ADR-069.md)） |
 
 用户修改、管理员用户管理及其他不签发或消费一次性安全材料的写操作不在本表，仍按普通业务命令使用 `idempotencyRequired`；管理员高风险操作只要求当前有效的完整管理员 Session（[ADR-031](adr/ADR-031.md)）。
@@ -300,10 +300,10 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | 新增管理入口 | 右栏管理员可见「配置」链接，整页跳转到 [ADR-068](adr/ADR-068.md) 已有的管理页（不新增接口） |
 | 未匹配名字的处理 | 候选与成员目录只在已登录用户自己的会话内展示；点候选只生成补充说明，最终仍由服务端解析器定案 |
 
-## ADR-075 生成总结的 AI 改写接口（2026-10-14）
+## ADR-076 生成总结的 AI 改写接口（2026-10-14）
 
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
 | `assistRecordSummary` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 只读校验（不写任何持久化状态）：会话认证、无 CSRF、无幂等；`requirement` 1～500 字符、`facts` 1～20000 字符；调用管理员配置的 OpenAI 兼容端点，按前端给出的当前范围事实改写总结；未启用或配置非法 503 `AI_ASSIST_DISABLED`，上游鉴权 / 限流 / 超时 / 网络 / 上下文超限 / 响应非法 503 `AI_ASSIST_UPSTREAM_FAILED`（`details.reason` 为固定枚举）；不开启数据库事务、无 SQL 读写、无审计 |
 
-本接口只服务「把当前已选范围的确定性正文改写成一份总结」，并按 [ADR-019](adr/ADR-019.md) 纯校验 allowlist 登记；它**不接受**项目 / 时间段 / 成员等筛选参数，范围仍由前端选择器决定（见 [ADR-075](adr/ADR-075.md) §2.2 与 §5）。路由总数 115 → 116，`permissions:check` 116 条操作 / 116 条路由通过（2026-10-14 实测）。真实 PostgreSQL 集成用例见 `apps/api/test/record-summary-assist.integration.test.ts`（7 例）。
+本接口只服务「把当前已选范围的确定性正文改写成一份总结」，并按 [ADR-019](adr/ADR-019.md) 纯校验 allowlist 登记；它**不接受**项目 / 时间段 / 成员等筛选参数，范围仍由前端选择器决定（见 [ADR-076](adr/ADR-076.md) §2.2 与 §5）。路由总数 115 → 116，`permissions:check` 116 条操作 / 116 条路由通过（2026-10-14 实测）。真实 PostgreSQL 集成用例见 `apps/api/test/record-summary-assist.integration.test.ts`（7 例）。

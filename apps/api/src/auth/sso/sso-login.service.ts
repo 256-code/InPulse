@@ -28,7 +28,10 @@ import {
 } from "../csrf.http.js";
 import { PostgresSsoLoginAttemptRepository } from "./sso-login-attempt.repository.js";
 import type { SsoIdTokenClaims, SsoOidcClient } from "./sso-oidc.client.js";
-import { PostgresSsoUserRepository } from "./sso-user.repository.js";
+import {
+  PostgresSsoUserRepository,
+  type SsoUserRecord,
+} from "./sso-user.repository.js";
 import type { SsoConfig } from "./sso.config.js";
 import { SsoLoginError, type SsoLoginReason } from "./sso.error.js";
 import { DEFAULT_SSO_RETURN_TO, normalizeReturnTo } from "./sso-return-to.js";
@@ -289,23 +292,23 @@ export class SsoLoginService extends SsoGateway {
           absoluteMaxAgeSeconds: this.ttl.absoluteMaxAgeSeconds,
         },
       );
-      await this.appendLoginAudit(tx, user.id, mapping.outcome, input);
+      await this.appendLoginAudit(tx, user, mapping.outcome, input);
       return issued;
     });
   }
 
   private async appendLoginAudit(
     tx: TransactionContext,
-    userId: number,
+    user: SsoUserRecord,
     outcome: string,
     input: SsoCompleteInput,
   ): Promise<void> {
     const meta = {
       projectId: null,
       actorType: "USER" as const,
-      actorId: userId,
+      actorId: user.id,
       targetType: "USER",
-      targetId: String(userId),
+      targetId: String(user.id),
       requestId: input.requestId,
       ipAddress: input.clientIp,
       userAgent: input.userAgent,
@@ -314,7 +317,8 @@ export class SsoLoginService extends SsoGateway {
       await this.audit.append(tx, {
         ...meta,
         action: "auth.sso_account_provisioned",
-        eventPayload: {},
+        // ADR-075：仅表达本次开通是否授予首管理员，不写入其他信息。
+        eventPayload: { grantedAdmin: user.isAdmin },
       });
     }
     if (outcome === "linked") {

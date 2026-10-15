@@ -32,6 +32,12 @@ export default defineConfig({
         ),
       },
       {
+        find: /^@inpulse\/database\/migrate$/,
+        replacement: fileURLToPath(
+          new URL("../../database/src/migrate.ts", import.meta.url),
+        ),
+      },
+      {
         find: /^@inpulse\/database$/,
         replacement: fileURLToPath(
           new URL("../../database/schema/index.ts", import.meta.url),
