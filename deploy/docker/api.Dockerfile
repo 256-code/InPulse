@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # 生产 API 镜像（技术设计 v1.2.2 §11.1）。
-# builder 固定安装 frozen lockfile 并构建 api-contract/database/api，再通过
+# builder 固定安装 frozen lockfile 并构建 canonical-json/api-contract/database/api，再通过
 # `pnpm deploy --legacy --filter @inpulse/api --prod` 生成仅含生产依赖的独立运行树。
 # 所有 `FROM` 均按 ADR-017 固定 `repository:tag@sha256:<64hex>`。
 FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS builder
@@ -19,6 +19,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/e2e/package.json apps/e2e/
 COPY apps/web/package.json apps/web/
 COPY packages/api-contract/package.json packages/api-contract/
+COPY packages/canonical-json/package.json packages/canonical-json/
 COPY packages/eslint-config/package.json packages/eslint-config/
 
 RUN pnpm install --frozen-lockfile
@@ -28,7 +29,8 @@ COPY . .
 # `--config.node-linker=hoisted`：默认（isolated）的 legacy deploy 会把 workspace
 # 包以符号链接指向 /workspace，runtime 阶段不存在该目录，镜像内模块解析会失败；
 # hoisted 布局把全部依赖（含 workspace 包）复制进 /out，运行树完全自包含。
-RUN pnpm --filter @inpulse/api-contract build \
+RUN pnpm --filter @inpulse/canonical-json build \
+ && pnpm --filter @inpulse/api-contract build \
  && pnpm --filter @inpulse/database build \
  && pnpm --filter @inpulse/api build \
  && pnpm deploy --legacy --filter @inpulse/api --prod --config.node-linker=hoisted /out

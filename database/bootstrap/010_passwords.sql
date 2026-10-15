@@ -14,19 +14,24 @@ DECLARE
   archive_password TEXT;
 BEGIN
   migrator_password := btrim(
-    pg_read_file('/run/secrets/db_migrator_password')
+    pg_read_file('/run/secrets/db_migrator_password'),
+    E' \r\n\t'
   );
   runtime_password := btrim(
-    pg_read_file('/run/secrets/db_runtime_password')
+    pg_read_file('/run/secrets/db_runtime_password'),
+    E' \r\n\t'
   );
   backup_password := btrim(
-    pg_read_file('/run/secrets/db_backup_password')
+    pg_read_file('/run/secrets/db_backup_password'),
+    E' \r\n\t'
   );
   reader_password := btrim(
-    pg_read_file('/run/secrets/db_audit_reader_password')
+    pg_read_file('/run/secrets/db_audit_reader_password'),
+    E' \r\n\t'
   );
   archive_password := btrim(
-    pg_read_file('/run/secrets/db_audit_archive_password')
+    pg_read_file('/run/secrets/db_audit_archive_password'),
+    E' \r\n\t'
   );
 
   IF length(migrator_password) < 32

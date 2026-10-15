@@ -215,6 +215,8 @@ node scripts/dev-start.mjs --lan          # 让同一局域网的设备以 HTTPS
 配置非法或缺失时 API 按 fail closed 以本地登录模式启动，点击统一身份认证入口回落到 `/login?local=1&sso=disabled`；`/login?local=1` 仍作为管理员应急口令入口可用。
 决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)与[登录入口 ADR](./docs/adr/ADR-036.md)。
 
+测试环境（单机 Docker Compose + 本地 registry）的一键更新、迁移与回滚步骤见[测试 VM 更新手册](./deploy/test-vm/README.md)。
+
 ## 文档导航
 
 - [系统设计文档 V1.0.2](./系统设计文档v1.0.2.md)：范围、技术选型、模块划分与安全机制；
