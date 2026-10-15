@@ -11,4 +11,6 @@ export const pureValidationOperationIds = [
   "assistDocumentImport",
   // ADR-068：测试连接只发最小探测请求，不写任何持久化状态。
   "testAiAssistSettings",
+  // ADR-074：迭代总结 AI 改写只返回文本，不写任何持久化状态。
+  "assistRecordSummary",
 ] as const;

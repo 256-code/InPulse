@@ -230,27 +230,59 @@ export function buildSummaryDetailMarkdown(
 }
 
 /** 与「复制正文」一致的纯文本形式（Markdown 小节标题 + 列表）。 */
-export function summaryDocumentToText(document: SummaryDocument): string {
-  const lines: string[] = [document.title, document.scopeLine, ""];
-  for (const block of document.blocks) {
+/** 本地确定性正文的就地编辑键：与渲染侧共用，复制时按键取改动。 */
+export function localEditKey(...parts: readonly string[]): string {
+  return `local:${parts.join(":")}`;
+}
+
+/** 带就地改动的正文序列化：未改动的段仍取模型原文，scopeLine 不可改、不参与。 */
+export function summaryDocumentToTextWithEdits(
+  document: SummaryDocument,
+  edited: Readonly<Record<string, string>>,
+): string {
+  const get = (key: string, orig: string): string => edited[key] ?? orig;
+  const lines: string[] = [
+    get(localEditKey("title"), document.title),
+    document.scopeLine,
+    "",
+  ];
+  document.blocks.forEach((block, index) => {
     if (block.kind === "overview") {
-      lines.push("## 整体概览", block.text, "");
-      continue;
+      lines.push(
+        "## 整体概览",
+        get(localEditKey(String(index), "text"), block.text),
+        "",
+      );
+      return;
     }
     if (block.kind === "section") {
       lines.push(`## ${block.heading}`);
-      for (const bullet of block.bullets) {
-        lines.push(`- **${bullet.label}**：${bullet.text}`);
-      }
+      block.bullets.forEach((bullet, bulletIndex) => {
+        lines.push(
+          `- **${bullet.label}**：${get(
+            localEditKey(String(index), "b", String(bulletIndex)),
+            bullet.text,
+          )}`,
+        );
+      });
       lines.push("");
-      continue;
+      return;
     }
-    lines.push(`## ${block.heading}`, block.lead);
-    for (const item of block.items) {
-      lines.push(`- ${item}`);
-    }
+    lines.push(
+      `## ${block.heading}`,
+      get(localEditKey(String(index), "lead"), block.lead),
+    );
+    block.items.forEach((item, itemIndex) => {
+      lines.push(
+        `- ${get(localEditKey(String(index), "item", String(itemIndex)), item)}`,
+      );
+    });
     lines.push("");
-  }
-  lines.push(document.note);
+  });
+  lines.push(get(localEditKey("note"), document.note));
   return lines.join("\n");
+}
+
+export function summaryDocumentToText(document: SummaryDocument): string {
+  return summaryDocumentToTextWithEdits(document, {});
 }

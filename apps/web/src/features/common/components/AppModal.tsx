@@ -64,6 +64,11 @@ export interface AppModalProps extends Omit<
    */
   readonly body?: boolean;
   /**
+   * 标题栏右侧、关闭按钮左边的操作位（ADR-074 的「AI 助手」入口）。
+   * 不传时不占位；传入的节点自己负责样式与无障碍标签。
+   */
+  readonly headerActions?: ReactNode;
+  /**
    * 弹层底部的操作区。设计稿里它是盒子的直接子级 `.calm-action-footer`，
    * 所以不接受 antd 的函数式 `footer`，也不再走 antd 的原生 footer。
    */
@@ -173,6 +178,7 @@ export function AppModal({
   eyebrow,
   closeLabel = "关闭",
   body = false,
+  headerActions,
   footer,
   title,
   closable,
@@ -187,6 +193,12 @@ export function AppModal({
   ...props
 }: AppModalProps) {
   const boxRef = useRef<HTMLDivElement>(null);
+  /**
+   * 本次鼠标操作是否「按下与抬起都落在盒子自身留白」。拖选跨子元素松手时浏览器
+   * 会把 click 的 target 合成到公共祖先（也就是盒子），单看 click 无法与真点留白
+   * 区分，故用按下/抬起两点判定。
+   */
+  const boxPaddingPress = useRef(false);
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
   const stackIdRef = useRef<symbol | null>(null);
@@ -280,9 +292,24 @@ export function AppModal({
           role="dialog"
           aria-modal="true"
           aria-label={labelOf(label, eyebrow, title)}
+          onMouseDown={(event) => {
+            boxPaddingPress.current = event.target === boxRef.current;
+          }}
+          onMouseUp={(event) => {
+            boxPaddingPress.current =
+              boxPaddingPress.current && event.target === boxRef.current;
+          }}
           onClick={(event) => {
-            // 设计稿里点击盒子自身的留白（不是子元素）也会关闭。
-            if (canDismiss && event.target === boxRef.current) {
+            // 设计稿里点击盒子自身的留白（不是子元素）也会关闭；但拖选跨子元素
+            // （如在浮层输入框里选中一句话后在正文松手）时浏览器会把 click 的
+            // target 合成到盒子，按下点其实在子元素上，这种合成 click 不关闭。
+            const pressedOnPadding = boxPaddingPress.current;
+            boxPaddingPress.current = false;
+            if (
+              canDismiss &&
+              pressedOnPadding &&
+              event.target === boxRef.current
+            ) {
               dismiss(event);
             }
           }}
@@ -305,15 +332,20 @@ export function AppModal({
                   {title === undefined ? null : <h2>{title}</h2>}
                 </div>
               </div>
-              {closable === false ? null : (
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={closeLabel}
-                  onClick={dismiss}
-                >
-                  <InpulseIcon name="x" size={19} />
-                </button>
+              {headerActions === undefined && closable === false ? null : (
+                <div className="modal-head-actions">
+                  {headerActions}
+                  {closable === false ? null : (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={closeLabel}
+                      onClick={dismiss}
+                    >
+                      <InpulseIcon name="x" size={19} />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ) : null}

@@ -1390,6 +1390,17 @@ export type RecordPublicationReplayContext = {
   readonly leftoverItemIds: readonly number[];
 };
 
+export type RecordSummaryAssistRequest = {
+  readonly requirement: string;
+  readonly facts: string;
+};
+
+export type RecordSummaryAssistResponse = {
+  readonly markdown: string;
+  readonly model: string;
+  readonly truncated: boolean;
+};
+
 export type RecordSummaryGap = {
   readonly taskId: number;
   readonly taskCode: string;

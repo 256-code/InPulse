@@ -14825,6 +14825,99 @@
         }
       }
     },
+    "/record-summaries/assist": {
+      "post": {
+        "operationId": "assistRecordSummary",
+        "summary": "按用户一句话要求改写当前筛选范围的总结正文（给谁看 / 突出什么 / 篇幅多长），返回改写后的正文与截断标记；不写任何持久化状态，请求里的正文只回给发送者本人。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordSummaryAssistResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或 Session 失效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段校验错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未预期错误，不向客户端泄露堆栈",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务未就绪（就绪探针未通过），或按 ADR-067 可选 AI 服务未启用 / 配置非法 / 上游故障",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-inpulse-policy": {
+          "authPolicy": "session",
+          "csrfPolicy": "none",
+          "idempotencyPolicy": "none",
+          "idempotencyExceptionAdr": "none",
+          "idempotencyContractVersion": "none",
+          "idempotencyFingerprintVersion": "none",
+          "behaviorHeaders": "none",
+          "idempotencyReplayPolicy": "none",
+          "replayAuthorizationPolicy": "none",
+          "securityFlowPolicy": "none",
+          "versionPolicy": "none",
+          "concurrencyPolicy": "none",
+          "auditAction": "none"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordSummaryAssistRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/search": {
       "get": {
         "operationId": "getSearch",
@@ -23542,6 +23635,55 @@
           "taskId",
           "impactFeatureIds",
           "leftoverItemIds"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryAssistRequest": {
+        "type": "object",
+        "properties": {
+          "requirement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "用户用一句话写的要求（给谁看、突出什么、篇幅多长），不是多轮对话"
+          },
+          "facts": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "当前筛选范围下已生成的事实正文全文（服务端不再查库，只改写这段文本）"
+          }
+        },
+        "required": [
+          "requirement",
+          "facts"
+        ],
+        "additionalProperties": false
+      },
+      "RecordSummaryAssistResponse": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000,
+            "description": "改写后的正文全文，由用户在弹窗里逐段确认或手动修改"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "实际调用并返回结果的模型标识"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "上游因长度上限截断（finish_reason: length），正文可能不完整"
+          }
+        },
+        "required": [
+          "markdown",
+          "model",
+          "truncated"
         ],
         "additionalProperties": false
       },

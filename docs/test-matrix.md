@@ -6502,3 +6502,20 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | TRANSITION-BUFFERED-REVEAL-GATE-002 | 门禁 | 整链回归 | `pnpm check` **除 `deps:audit` 外全部通过**（lint / format:check / typecheck / test:unit 各 workspace（web 837 例、api 499 例、contract 102 例、ops 60 例、database 15 例、canonical-json 5 例）/ db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test / check:deps / check:frontend:boundaries / permissions:check 110 条操作 110 条路由）；`deps:audit` 因 `registry.npmjs.org` ECONNRESET → `fetch failed` 未完成（单独重试同样失败，本机网络问题、与改动无关），`check:secrets` 与 `check:docs` 在文档同步后单独跑通过 | 部分通过（audit 未运行，2026-10-14） |
 
 未运行 / 已知偏差（本批）：① `CalmSelect` 的 `animated` 动画只在 enter/appear 的 active 帧接管（窗口 150ms），本次抓取工具单次点击往返 263ms，未复测到 active 帧；机制与既有 43 处同构，本批只补 2 个 prop。② 弹窗**关闭**仍是瞬时（本批只补「出现」）。③ 仍未接预取的入口：任务中心 → 任务详情弹窗（`TaskDetailOverlay` 为 lazy，靠 `Suspense fallback={null}` 不闪空壳、只慢一拍）、弹窗内深链（`?taskId=`）与页面内按钮。④ 全量 Playwright 未跑（31 个 spec 里只定向跑 6 个、21 例）。⑤ 生产镜像构建与 Trivy 扫描未执行。⑥ GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+
+## 生成总结内嵌 AI 改写：一句话要求 → 生成 → 生成后逐段手改（ADR-074，2026-10-14 本地落库）
+
+定案见开发日志第一百八十一条与 [ADR-074](adr/ADR-074.md)：用户明确「不准备用对话的模式就仅仅是提要求」，所以入口是**标题栏右上角「✦ AI 助手」按钮 + 按需拉出的浮层**（不是聊天记录），生成后浮层收起、正文逐段可手改（改过的段落橙点、悬停「回退这句」、底栏「已手动改 N 处」+「撤销手动修改」）。事实由前端当前范围的确定性正文（`summaryDocumentToText`）给出，服务端只做一次出站改写、不查库不写库不写审计、不解析筛选意图。新增 1 条路由（115 → 116），无数据库迁移（仍 42 个）、无新增依赖、无权限变化、无契约模板改动。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SUMMARY-AI-001 | API 集成（真实 PostgreSQL + 本机回环 stub 上游） | 全链路、提示词与「不写库」 | `record-summary-assist.integration.test.ts` **7 例通过**：200 全链路 + 提示词断言（事实唯一来源、不许改数字 / 人名、保留分节）、`truncated`、匿名 401、422 三种、上游 429 → rate-limited、500 → invalid-response、未启用 503；并断言不写任何业务表 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-002 | API 单元 | 出站请求构造与日志口径 | `ai-assist.client.test.ts` 覆盖新增的 `generateSummaryDraft`：messages 只含 system + 事实 / 要求，日志按 `kind: "summary"` 记录且不含正文 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-003 | Web 单元 | 浮层不是对话、传参正确 | `RecordSummaryModal.test.tsx`：点「✦ AI 助手」拉出 `role="dialog"` 浮层（无对话气泡 / 无轮次概念）；点「生成总结」时把当前范围事实与 `requirement` 传给 `assistRecordSummary` | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-004 | Web 单元 | 逐段手改 + 橙点 + 单句回退 + 全量撤销 | 改一段 → 该段 `data-edited="true"`、底栏出现「已手动改 1 处」；「回退这句」恢复该段原文并减计数；「撤销手动修改」清零且按钮转 `disabled` | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-005 | Web 单元 | 复制 / 导出取编辑后正文 | 编辑后复制得到编辑后文本（`summaryAssistDocumentToText` 口径），不是 AI 原始返回；未编辑时两者一致 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-006 | Web 单元 | 未启用 / 上游失败的提示 | 返回 503 `AI_ASSIST_DISABLED` 时浮层内以 `role="alert"` 显示固定文案，正文与已手动改动不被清空 | 本地通过（2026-10-14） |
+| RECORD-SUMMARY-AI-007 | 门禁 + 浏览器实测 | 整链回归与真实上游 | `contract:validate` 116 条、`permissions:check` 116 条操作 / 116 条路由、`contract:drift` 无漂移；`pnpm test:web` **108 文件 865 例**、api 集成 **61 文件 594 例**、database 27 例、ops 7 例、契约单测 102 例；dev 栈 + 演示库实机跑通真实上游（约 33 秒出稿、正文切 79 段可编辑、数字 / 人名 / 分节保留、编辑与回退生效，只读核对未导入数据） | 本地通过（2026-10-14） |
+
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（本批前端改动只在 dev 栈手动实机核对，未新增 E2E 用例）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ 首跑 api 集成时 `search-api.integration.test.ts` 的「单字查询」用例在并行下偶发 `expected 0 to be greater than 0`（该文件本批未改动、与本次改动无关），隔离运行 10/10、整批复跑 61 文件 594 例全绿；⑤ `deps:audit` 见开发日志第一百八十一条的如实记录。

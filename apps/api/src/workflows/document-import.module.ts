@@ -21,6 +21,8 @@ import { DocumentImportAssistController } from "./document-import-assist.control
 import { DocumentImportController } from "./document-import.controller.js";
 import { AiAssistSettingsHttpService } from "./ai-assist-settings-http.service.js";
 import { DocumentImportHttpService } from "./document-import-http.service.js";
+import { RecordSummaryAssistController } from "./record-summary-assist.controller.js";
+import { RecordSummaryAssistHttpService } from "./record-summary-assist-http.service.js";
 import { DocumentImportWorkflow } from "./document-import.workflow.js";
 import { ProjectImportController } from "./project-import.controller.js";
 
@@ -29,6 +31,8 @@ import { ProjectImportController } from "./project-import.controller.js";
  * 与读端口，在单一事务内按固定模板创建/复用模块与功能并创建任务。
  * ADR-067 / ADR-068：模块同时承载 AI 辅助转换（运行时配置解析）与管理员
  * 在线配置（加密保存、测试连接）。
+ * ADR-074：迭代总结 AI 改写复用同一份运行时配置与出站适配器（配置只有一份，
+ * 不为同一份配置再建一个解析入口），因此它的控制器也挂在本模块下。
  */
 @Module({
   imports: [
@@ -47,6 +51,7 @@ import { ProjectImportController } from "./project-import.controller.js";
   providers: [
     DocumentImportWorkflow,
     DocumentImportHttpService,
+    RecordSummaryAssistHttpService,
     DocumentImportRunRepository,
     // ADR-068：配置每次调用实时解析（数据库优先，环境变量急停与遗留回退）。
     AiAssistSettingsRepository,
@@ -59,6 +64,7 @@ import { ProjectImportController } from "./project-import.controller.js";
     DocumentImportController,
     ProjectImportController,
     DocumentImportAssistController,
+    RecordSummaryAssistController,
     AiAssistSettingsController,
   ],
 })

@@ -5,6 +5,7 @@ import {
   buildAiAssistMessages,
   type DocumentImportAssistMode,
 } from "./ai-assist.prompt.js";
+import { buildRecordSummaryAssistMessages } from "./record-summary-assist.prompt.js";
 
 /** ADR-067 的固定上游失败分类：仅进入 details.reason，不泄露上游细节。 */
 export type AiAssistFailureReason =
@@ -21,6 +22,16 @@ export class AiAssistUpstreamError extends Error {
     super(`AI assist upstream failure: ${reason}`);
     this.name = "AiAssistUpstreamError";
   }
+}
+
+/**
+ * 出站调用的日志标签（ADR-067 2.5 / ADR-074）：只带「调用种类 + 输入规模」，
+ * 不带任何正文，因此可以在同一份日志格式里同时容纳文档草稿与总结改写。
+ */
+interface AiAssistCallLabel {
+  readonly kind: "draft" | "summary";
+  readonly mode: DocumentImportAssistMode | undefined;
+  readonly inputChars: number;
 }
 
 export interface AiAssistDraft {
@@ -65,6 +76,11 @@ export class DocumentImportAiAssistClient {
     input: AiAssistDraftRequest,
   ): Promise<AiAssistDraft> {
     const startedAt = Date.now();
+    const label: AiAssistCallLabel = {
+      kind: "draft",
+      mode: input.mode,
+      inputChars: input.text.length,
+    };
     const response = await this.callUpstream(
       config,
       {
@@ -75,7 +91,7 @@ export class DocumentImportAiAssistClient {
         stream: false,
       },
       startedAt,
-      input,
+      label,
     );
     let draft: AiAssistDraft;
     try {
@@ -84,7 +100,7 @@ export class DocumentImportAiAssistClient {
       // 2xx 但结构不对：把上游状态码记进日志，才分得清「上游报错」和「上游换了返回形状」。
       if (error instanceof AiAssistUpstreamError) {
         this.logCall(
-          input,
+          label,
           config,
           "failed",
           startedAt,
@@ -94,7 +110,54 @@ export class DocumentImportAiAssistClient {
       }
       throw error;
     }
-    this.logCall(input, config, "ok", startedAt, undefined, response.status);
+    this.logCall(label, config, "ok", startedAt, undefined, response.status);
+    return draft;
+  }
+
+  /**
+   * ADR-074 迭代总结 AI 改写：把用户已经看到的事实正文按一句话要求改写。
+   * 与 ADR-067 共用同一份运行时配置、同一套失败分类与截断判定，只有提示词与
+   * 日志标签不同（仍然不记录正文与密钥）。
+   */
+  async generateSummaryDraft(
+    config: AiAssistConfig,
+    input: { readonly requirement: string; readonly facts: string },
+  ): Promise<AiAssistDraft> {
+    const label: AiAssistCallLabel = {
+      kind: "summary",
+      mode: undefined,
+      inputChars: input.facts.length + input.requirement.length,
+    };
+    const startedAt = Date.now();
+    const response = await this.callUpstream(
+      config,
+      {
+        model: config.model,
+        messages: buildRecordSummaryAssistMessages(input),
+        max_tokens: config.maxTokens,
+        temperature: 0.2,
+        stream: false,
+      },
+      startedAt,
+      label,
+    );
+    let draft: AiAssistDraft;
+    try {
+      draft = await this.parseSuccessResponse(response, config);
+    } catch (error) {
+      if (error instanceof AiAssistUpstreamError) {
+        this.logCall(
+          label,
+          config,
+          "failed",
+          startedAt,
+          error.reason,
+          response.status,
+        );
+      }
+      throw error;
+    }
+    this.logCall(label, config, "ok", startedAt, undefined, response.status);
     return draft;
   }
 
@@ -174,9 +237,7 @@ export class DocumentImportAiAssistClient {
     config: AiAssistConfig,
     body: Readonly<Record<string, unknown>>,
     startedAt: number,
-    input:
-      | { readonly mode: DocumentImportAssistMode; readonly text: string }
-      | undefined,
+    label: AiAssistCallLabel | undefined,
   ): Promise<Response> {
     let response: Response;
     try {
@@ -193,12 +254,12 @@ export class DocumentImportAiAssistClient {
       const reason: AiAssistFailureReason = isAbortLikeError(error)
         ? "timeout"
         : "network";
-      this.logCall(input, config, "failed", startedAt, reason);
+      this.logCall(label, config, "failed", startedAt, reason);
       throw new AiAssistUpstreamError(reason);
     }
     if (!response.ok) {
       const reason = await this.classifyErrorResponse(response);
-      this.logCall(input, config, "failed", startedAt, reason, response.status);
+      this.logCall(label, config, "failed", startedAt, reason, response.status);
       throw new AiAssistUpstreamError(reason);
     }
     return response;
@@ -293,7 +354,7 @@ export class DocumentImportAiAssistClient {
   }
 
   private logCall(
-    input: AiAssistDraftRequest | undefined,
+    label: AiAssistCallLabel | undefined,
     config: AiAssistConfig,
     status: "ok" | "failed",
     startedAt: number,
@@ -303,10 +364,13 @@ export class DocumentImportAiAssistClient {
     // 只记录调用元数据，不记录正文与密钥（ADR-067 2.5 / ADR-068 2.3）。
     // 失败时带上上游 HTTP 状态码：不然「上游报错」和「上游换了返回形状」在日志里长得一样。
     const line = JSON.stringify({
-      kind: input === undefined ? "probe" : "draft",
-      mode: input?.mode ?? "PROBE",
+      kind: label?.kind ?? "probe",
+      mode:
+        label === undefined
+          ? "PROBE"
+          : (label.mode ?? label.kind.toUpperCase()),
       model: config.model,
-      inputChars: input?.text.length ?? 0,
+      inputChars: label?.inputChars ?? 0,
       status,
       reason: reason ?? "none",
       upstreamStatus,
