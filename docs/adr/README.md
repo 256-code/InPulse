@@ -88,6 +88,7 @@
 | [ADR-072](ADR-072.md) | Accepted | 整项目（模式 B）文档导入的初始成员名单必填且必须含创建者与全部任务负责人（修订 ADR-064 的成员语义：「负责人自动并入成员」退化为兜底，名单里没有创建者 / 少写负责人转为预览 422 `MEMBER_CREATOR_MISSING` / `ASSIGNEE_NOT_INITIAL_MEMBER`、空名单 `MEMBER_REQUIRED`），判据是解析后的账号而非字面；AI 整项目提示词带上本次导入人姓名，工作台用同一口径做本地预检（只报本地能确定的三项），模板说明行同步；无新增路由 / 迁移 / 依赖 / 权限变化 |
 | [ADR-073](ADR-073.md) | Accepted | 整项目导入（模式 B）的创建者默认算初始成员并在工作台显示为锁定标签（修订 ADR-072：删除 `MEMBER_CREATOR_MISSING`、AI 提示词去掉 `creatorName`、契约模板说明行 / 工作台必填要素 / 右栏追问三处同口径；工作台只在整项目导入渲染一枚带锁图标、无删除按钮的标签，且不改文档正文，「预览文档」仍是一字不改的原版）；无新增路由 / 迁移 / 依赖 / 权限变化 |
 | [ADR-074](ADR-074.md) | Accepted | api 容器增加仅出站 `egress` 网络（Casdoor SSO 与 AI 辅助的外联前提，测试环境拓扑并入仓库基线） |
+| [ADR-075](ADR-075.md) | Accepted | 空库首个 SSO 登录账号自动成为系统管理员（修订 ADR-032 决策 5 的 JIT 默认权限：判定以 `app.users` 是否有行为准、事务级 advisory lock 串行化、审计 payload 增加 `grantedAdmin`）；无新增路由 / 迁移 / 依赖 / 权限矩阵变化 |
 
 ## 关联基线
 

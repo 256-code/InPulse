@@ -48,6 +48,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-09-18 登录页默认入口调整（用户要求，[ADR-036](./docs/adr/ADR-036.md) 修订 ADR-032 决策 7）：`/login` 默认展示既有本地口令表单，不再自动整页跳转统一身份认证；登录框下方新增「或以统一身份认证登录」分隔文案与单点登录图标，点击后整页跳转 `GET /api/v1/auth/sso/start`（302 导航与 fail closed 回落不变：未启用时回落到 `/login?local=1&sso=disabled` 并提示、隐藏入口）。`?sso_error=` 回落保留本地表单与可重试的 SSO 入口；退出登录与「前往登录」回到 `/login`。服务端路由、契约与权限矩阵无改动。
 
+> 2026-10-15 空库首个 SSO 账号自动成为系统管理员（用户要求，[ADR-075](./docs/adr/ADR-075.md) 修订 ADR-032 决策 5）：平台此前没有任何账号（`app.users` 无行）时，第一个完成单点登录并 JIT 开通的账号自动获得 `is_admin=true`；此后任何情况（含仅剩停用账号）维持 `is_admin=false`。判定与 INSERT 由固定键 `pg_advisory_xact_lock` 在同一事务内串行化，并发首登只有先提交者成为管理员；审计 `auth.sso_account_provisioned` payload 增加 `grantedAdmin`。已绑定映射、Casdoor claim 映射、会话、路由、契约、迁移与权限矩阵均无改动；离线预置管理员仍可行且优先于 SSO 首登。验证：新增 `apps/api/test/sso-first-admin.integration.test.ts` 3 例（真实 PostgreSQL 临时库全量迁移 + 桩 IdP）定向通过；未提交、未推送。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；五个生产容器镜像（API/Migration/Web/DB-bootstrap/Ops）的构建与 Trivy 扫描已在 main CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际通过，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E（`/audit` 审计页已补齐，见[测试矩阵](./docs/test-matrix.md)）、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份的真实全新主机恢复演练与启用仍未落库，补齐前请勿假设这些检查已执行。
 
 当前可运行的根级命令（§12.4 顺序）：

@@ -1,12 +1,5 @@
 import "reflect-metadata";
-import {
-  createHmac,
-  generateKeyPairSync,
-  randomBytes,
-  randomUUID,
-  sign,
-  type KeyObject,
-} from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -30,11 +23,9 @@ import { PostgresUserCredentialRepository } from "../src/auth/user-credential.re
 import { PostgresUserSessionRepository } from "../src/auth/user-session.repository.js";
 import { PostgresUnitOfWork } from "../src/database/unit-of-work.js";
 import { testUrls } from "./database.helpers.js";
+import { createStubIdp, type StubIdp } from "./sso-stub-idp.js";
 
 const ISSUER = "https://authtest.libiaorobot.com";
-const AUTHORIZE_ENDPOINT = `${ISSUER}/login/oauth/authorize`;
-const TOKEN_ENDPOINT = `${ISSUER}/api/login/oauth/access_token`;
-const JWKS_URI = `${ISSUER}/.well-known/jwks`;
 /** 每个用例使用独立 subject：sso_subject 上有唯一索引，禁止跨账号复用。 */
 function uniqueSubject(): string {
   return `sub_${randomUUID().replaceAll("-", "")}`;
@@ -54,118 +45,6 @@ const config: SsoConfig = {
   discoveryTtlSeconds: 600,
   requestTimeoutMs: 2000,
 };
-
-interface KeyMaterial {
-  readonly privateKey: KeyObject;
-  readonly jwk: Record<string, unknown>;
-}
-
-interface StubIdp {
-  readonly fetchImpl: typeof fetch;
-  readonly jwksCalls: () => number;
-  setClaims(claims: {
-    readonly nonce: string;
-    readonly subject?: string;
-    readonly loginName: string;
-    readonly displayName?: string;
-    readonly email?: string | null;
-  }): void;
-}
-
-function createKey(kid: string): KeyMaterial {
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", {
-    modulusLength: 2048,
-  });
-  const jwk = publicKey.export({ format: "jwk" }) as Record<string, unknown>;
-  return { privateKey, jwk: { ...jwk, kid, use: "sig", alg: "RS256" } };
-}
-
-function base64Url(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function createStubIdp(): StubIdp {
-  const key = createKey("key-1");
-  let jwksCalls = 0;
-  let current:
-    | {
-        readonly nonce: string;
-        readonly subject?: string;
-        readonly loginName: string;
-        readonly displayName?: string;
-        readonly email?: string | null;
-      }
-    | undefined;
-
-  const fetchImpl = (async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input.toString();
-    if (url === `${ISSUER}/.well-known/openid-configuration`) {
-      return jsonResponse({
-        issuer: ISSUER,
-        authorization_endpoint: AUTHORIZE_ENDPOINT,
-        token_endpoint: TOKEN_ENDPOINT,
-        jwks_uri: JWKS_URI,
-      });
-    }
-    if (url === JWKS_URI) {
-      jwksCalls += 1;
-      return jsonResponse({ keys: [key.jwk] });
-    }
-    if (url === TOKEN_ENDPOINT && init?.method === "POST") {
-      if (current === undefined) {
-        return jsonResponse({ error: "invalid_request" }, 400);
-      }
-      const now = Math.floor(Date.now() / 1000);
-      const payload: Record<string, unknown> = {
-        iss: ISSUER,
-        aud: config.clientId,
-        sub: current.subject ?? uniqueSubject(),
-        name: current.loginName,
-        nonce: current.nonce,
-        iat: now,
-        exp: now + 300,
-        // Casdoor 还可能返回 isAdmin 等 claim；InPulse 必须忽略它们。
-        isAdmin: true,
-      };
-      if (current.displayName !== undefined) {
-        payload["displayName"] = current.displayName;
-      }
-      if (current.email !== undefined && current.email !== null) {
-        payload["email"] = current.email;
-      }
-      const headerPart = base64Url({ alg: "RS256", typ: "JWT", kid: "key-1" });
-      const payloadPart = base64Url(payload);
-      const signature = sign(
-        "RSA-SHA256",
-        Buffer.from(`${headerPart}.${payloadPart}`, "utf8"),
-        key.privateKey,
-      ).toString("base64url");
-      return jsonResponse({
-        access_token: "stub-access-token",
-        id_token: `${headerPart}.${payloadPart}.${signature}`,
-      });
-    }
-    return jsonResponse({}, 404);
-  }) as typeof fetch;
-
-  return {
-    fetchImpl,
-    jwksCalls: () => jwksCalls,
-    setClaims: (claims) => {
-      current = claims;
-    },
-  };
-}
 
 let client: DatabaseClient | undefined;
 let reader: DatabaseClient | undefined;
@@ -355,7 +234,11 @@ beforeAll(async () => {
     1,
   );
   tokens = new SessionTokenService(keyring);
-  idp = createStubIdp();
+  idp = createStubIdp({
+    issuer: ISSUER,
+    clientId: config.clientId,
+    fallbackSubject: uniqueSubject,
+  });
   service = new SsoLoginService(
     unitOfWork,
     new PostgresSsoLoginAttemptRepository(),
@@ -390,6 +273,12 @@ afterAll(async () => {
 
 describe("SSO 登录纵切片（真实 PostgreSQL + 桩 IdP）", () => {
   test("首次登录 JIT 开通账号并签发 2 小时空闲会话", async () => {
+    // 平台已有账号（本用例前置一个无关账号）：JIT 开通的默认权限是非管理员；
+    // 空库首个账号自动成为管理员的路径由 sso-first-admin.integration.test.ts 覆盖。
+    await createLocalUser({
+      loginName: uniqueLoginName("sso_baseline"),
+      email: null,
+    });
     const loginName = uniqueLoginName("sso_jit");
     const email = uniqueEmail();
     const subject = uniqueSubject();
@@ -444,6 +333,18 @@ describe("SSO 登录纵切片（真实 PostgreSQL + 桩 IdP）", () => {
       "auth.sso_account_provisioned",
       "auth.sso_login",
     ]);
+
+    const provisioned = (await reader!.sql`
+      SELECT event_payload AS "payload"
+        FROM app.audit_logs
+       WHERE chain_id = ${"SYSTEM"}
+         AND actor_id = ${user.id}
+         AND action = ${"auth.sso_account_provisioned"}
+    `) as unknown as readonly {
+      readonly payload: { readonly grantedAdmin?: boolean };
+    }[];
+    expect(provisioned).toHaveLength(1);
+    expect(provisioned[0]?.payload.grantedAdmin).toBe(false);
 
     const attempts = (await client!.sql`
       SELECT consumed_at AS "consumedAt"

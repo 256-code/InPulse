@@ -62,8 +62,12 @@ function normalize(value: string | null): string | undefined {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+/** 「平台没有任何账号」判定窗口的事务级 advisory lock 两段式键（0x496E506C 即 "InPl"）。 */
+const FIRST_ACCOUNT_ADMIN_LOCK_CLASS = 0x496e506c;
+const FIRST_ACCOUNT_ADMIN_LOCK_KEY = 1;
+
 /**
- * SSO 用户映射与 JIT 开通（ADR-032）。查找顺序固定为：
+ * SSO 用户映射与 JIT 开通（ADR-032；首个账号的管理员授予由 ADR-075 修订）。查找顺序固定为：
  * sso_subject 命中 -> 登录名命中且未绑定且邮箱一致时自动绑定 -> 自动开通；
  * 邮箱不一致或 subject 已绑定其他账号时一律拒绝，防止同名或换绑接管账号。
  * 所有写入都在调用方事务内完成，数据库唯一索引是最终防线。
@@ -204,6 +208,18 @@ export class PostgresSsoUserRepository {
     tx: TransactionContext,
     claims: SsoIdentityClaims,
   ): Promise<SsoUserRecord> {
+    // ADR-075：先用事务级 advisory lock 串行化「空库判定 -> 开通」窗口：
+    // 并发首登只有先提交的事务能成为管理员，后到者在锁释放后重新判定。
+    await tx.sql`
+      SELECT pg_advisory_xact_lock(
+        ${FIRST_ACCOUNT_ADMIN_LOCK_CLASS}::int4,
+        ${FIRST_ACCOUNT_ADMIN_LOCK_KEY}::int4
+      )
+    `;
+    const emptiness = (await tx.sql`
+      SELECT NOT EXISTS (SELECT 1 FROM app.users) AS "firstAccount"
+    `) as unknown as readonly { readonly firstAccount: boolean }[];
+    const isFirstAccount = emptiness[0]?.firstAccount === true;
     const rows = (await tx.sql`
       INSERT INTO app.users (
         login_name,
@@ -220,7 +236,7 @@ export class PostgresSsoUserRepository {
         ${claims.email},
         ${claims.subject},
         NULL,
-        false,
+        ${isFirstAccount},
         'ACTIVE'
       )
       RETURNING id,

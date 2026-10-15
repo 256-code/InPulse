@@ -7,19 +7,19 @@ Compose + 本地 registry 的测试环境，不是生产发布流程：生产镜
 
 ## 测试环境现状
 
-| 项目         | 值                                                                                     |
-| ------------ | -------------------------------------------------------------------------------------- |
-| VM           | `10.1.104.45`（Ubuntu + Docker + Compose v2；SSH 账户 `libiao`，docker 命令需 sudo）      |
-| 访问入口     | `https://test-inpulse.libiaorobot.com/`（DNS 指向同一台 VM，也可直接用 IP）                 |
-| 部署目录     | `/home/libiao/inpulse-deploy`（`compose.yaml`、`.env.deploy`、`secrets/`）                 |
-| 镜像目录     | `/home/libiao/inpulse-images`                                                             |
-| 本地 registry | `127.0.0.1:5000`（容器 `inpulse-registry`，镜像 `registry:2`）                              |
-| 运行服务     | `db`（PostgreSQL 18 + PGroonga）、`migrate`（一次性）、`api`、`web`（Nginx）                |
-| 对外端口     | 22、80（308 跳转到 443）、443                                                              |
-| SSO          | Casdoor 测试环境 `https://authtest.libiaorobot.com`                                          |
-| TLS          | 自签证书（SAN 覆盖域名与 IP），文件为 `secrets/tls_cert.pem`、`secrets/tls_key.pem`          |
-| 部署目录补充 | `backups/`（同步前的 pg_dump）、`compose.yaml.bak-*`、`.env.deploy.bak-*`（回滚用）          |
-| 当前版本     | 5 个镜像统一为 `0.1.0-20261015-277fb89`，`BACKUP_GIT_SHA=277fb89`（2026-10-15 全量同步）      |
+| 项目          | 值                                                                                                             |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| VM            | `10.1.104.45`（Ubuntu + Docker + Compose v2；SSH 账户 `libiao`，docker 命令需 sudo）                           |
+| 访问入口      | `https://test-inpulse.libiaorobot.com/`（DNS 指向同一台 VM；HTTPS 请用域名访问，用 IP 会出现证书不匹配告警）   |
+| 部署目录      | `/home/libiao/inpulse-deploy`（`compose.yaml`、`.env.deploy`、`secrets/`）                                     |
+| 镜像目录      | `/home/libiao/inpulse-images`                                                                                  |
+| 本地 registry | `127.0.0.1:5000`（容器 `inpulse-registry`，镜像 `registry:2`）                                                 |
+| 运行服务      | `db`（PostgreSQL 18 + PGroonga）、`migrate`（一次性）、`api`、`web`（Nginx）                                   |
+| 对外端口      | 22、80（308 跳转到 443）、443                                                                                  |
+| SSO           | Casdoor 测试环境 `https://authtest.libiaorobot.com`                                                            |
+| TLS           | 公司 ALLinSSL 下发 `*.libiaorobot.com` 通配符（DigiCert，2026-10-15 生效，自动续签；文件 `secrets/tls_*.pem`） |
+| 部署目录补充  | `backups/`（同步前的 pg_dump）、`compose.yaml.bak-*`、`.env.deploy.bak-*`（回滚用）                            |
+| 当前版本      | 5 个镜像统一为 `0.1.0-20261015-277fb89`，`BACKUP_GIT_SHA=277fb89`（2026-10-15 全量同步）                       |
 
 ## 一次性准备
 
@@ -172,6 +172,31 @@ sudo docker compose --env-file .env.deploy -f compose.yaml up -d
 `secrets.ai_assist_encryption_key` 合入 VM 侧 `compose.yaml`
 （备份 `compose.yaml.bak-20261015-113910`），`egress` 适配保留。
 
+## 证书下发（公司 ALLinSSL，2026-10-15 接入）
+
+公司用 ALLinSSL 统一管理 SSL 证书（`*.libiaorobot.com` 通配符、DNS 校验、自动续签），
+VM 按官方「SSH 下发」方式接入，不需要自行申请证书；2026-10-15 已首次下发生效
+（DigiCert RapidSSL 签发，主体 `*.libiaorobot.com`，有效期至 2026-12-01，到期前自动续签）：
+
+- 低权限账号 `allinssl`（不加入 sudo 组）只能覆盖
+  `/etc/ssl/libiaorobot.com.pem` 与 `/etc/ssl/libiaorobot.com.key` 两个文件；
+- 后置命令固定为 `sudo /usr/local/bin/allinssl-reload`（脚本 root 所有）：校验两个文件
+  非空 → 覆盖 `secrets/tls_cert.pem` / `secrets/tls_key.pem`（原地写、保 inode，
+  web 容器内立即可见）→ `chown 101:101`、`chmod 600` →
+  `docker exec inpulse-deploy-web-1 nginx -t && nginx -s reload`，无需重启容器；
+- 连接信息与账号密码见 `/home/libiao/inpulse-deploy/allinssl-ssh-info.txt`（600），
+  在 ALLinSSL「授权 API 管理 → SSH」按该文件添加主机；工作流部署节点填：证书路径
+  `/etc/ssl/libiaorobot.com.pem`、私钥路径 `/etc/ssl/libiaorobot.com.key`、后置命令
+  `sudo /usr/local/bin/allinssl-reload`，建议开启「重复部署跳过」；
+- 手动自测（任意能连到 VM 的机器）：
+
+  ```bash
+  ssh allinssl@10.1.104.45 'test -w /etc/ssl/libiaorobot.com.pem && test -w /etc/ssl/libiaorobot.com.key && sudo -n /usr/local/bin/allinssl-reload && echo OK'
+  ```
+
+- 注意：通配符只覆盖一级子域名（`test-inpulse.libiaorobot.com` 可以）；不要手删
+  `/etc/ssl` 下这两个文件（`allinssl` 无法重建，需重跑初始化）。
+
 ## 同步前给数据库做备份
 
 镜像能按 `.env.deploy.bak-*` 回滚，但迁移**只能向前**：新镜像跑过的迁移不会因为回滚
@@ -275,10 +300,15 @@ curl.exe -k -I https://test-inpulse.libiaorobot.com/api/v1/auth/sso/start
 - SSO 回跳 `/login?sso_error=internal`：多为 api 出不了网（检查 api 是否挂在 `egress`
   网络），或 `SSO_ISSUER` 与 discovery 返回的 issuer 不一致。可在容器内直接验证：
   `sudo docker exec inpulse-deploy-api-1 node -e "fetch(process.env.SSO_ISSUER + '/.well-known/openid-configuration').then(r => console.log(r.status))"`。
-- 浏览器证书警告：测试 VM 用自签证书，在自己电脑导入 `secrets/tls_cert.pem` 即可；
-  要让所有人免警告，需要公司签发的 `test-inpulse.libiaorobot.com` 证书替换
-  `secrets/tls_cert.pem` 与 `secrets/tls_key.pem`，再执行
-  `sudo docker exec inpulse-deploy-web-1 nginx -s reload`。
+- 浏览器证书警告：证书由公司 ALLinSSL 统一下发并自动续签（`*.libiaorobot.com`，
+  2026-10-15 首次下发生效），正常情况无需任何导入。排查顺序：① 确认访问的是
+  域名 `https://test-inpulse.libiaorobot.com/` 而不是 IP（证书不含 IP，用
+  `https://10.1.104.45/` 必然告警）；② 换**无痕窗口**重开：正常则问题在那台电脑的
+  浏览器扩展（注入 http 资源会被拦成「连接不安全」，而证书仍显示有效；2026-10-15
+  已实测同事案例为无痕正常、扩展导致），逐个禁用扩展排查；③ 以上排除后确认
+  ALLinSSL 工作流「部署成功」且 `openssl s_client -connect
+  test-inpulse.libiaorobot.com:443 -servername test-inpulse.libiaorobot.com`
+  主体为 `*.libiaorobot.com`。
 - 首个管理员：SSO 首次登录按 JIT 建号（`is_admin=false`、无项目成员关系），
   需要人工在数据库里提升；管理员权限定义见 `docs/permissions.md`。
 
