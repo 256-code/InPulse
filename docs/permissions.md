@@ -300,10 +300,10 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | 新增管理入口 | 右栏管理员可见「配置」链接，整页跳转到 [ADR-068](adr/ADR-068.md) 已有的管理页（不新增接口） |
 | 未匹配名字的处理 | 候选与成员目录只在已登录用户自己的会话内展示；点候选只生成补充说明，最终仍由服务端解析器定案 |
 
-## ADR-074 生成总结的 AI 改写接口（2026-10-14）
+## ADR-075 生成总结的 AI 改写接口（2026-10-14）
 
 | operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
 |---|---|---|---|---|---|---|---|
 | `assistRecordSummary` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 只读校验（不写任何持久化状态）：会话认证、无 CSRF、无幂等；`requirement` 1～500 字符、`facts` 1～20000 字符；调用管理员配置的 OpenAI 兼容端点，按前端给出的当前范围事实改写总结；未启用或配置非法 503 `AI_ASSIST_DISABLED`，上游鉴权 / 限流 / 超时 / 网络 / 上下文超限 / 响应非法 503 `AI_ASSIST_UPSTREAM_FAILED`（`details.reason` 为固定枚举）；不开启数据库事务、无 SQL 读写、无审计 |
 
-本接口只服务「把当前已选范围的确定性正文改写成一份总结」，并按 [ADR-019](adr/ADR-019.md) 纯校验 allowlist 登记；它**不接受**项目 / 时间段 / 成员等筛选参数，范围仍由前端选择器决定（见 [ADR-074](adr/ADR-074.md) §2.2 与 §5）。路由总数 115 → 116，`permissions:check` 116 条操作 / 116 条路由通过（2026-10-14 实测）。真实 PostgreSQL 集成用例见 `apps/api/test/record-summary-assist.integration.test.ts`（7 例）。
+本接口只服务「把当前已选范围的确定性正文改写成一份总结」，并按 [ADR-019](adr/ADR-019.md) 纯校验 allowlist 登记；它**不接受**项目 / 时间段 / 成员等筛选参数，范围仍由前端选择器决定（见 [ADR-075](adr/ADR-075.md) §2.2 与 §5）。路由总数 115 → 116，`permissions:check` 116 条操作 / 116 条路由通过（2026-10-14 实测）。真实 PostgreSQL 集成用例见 `apps/api/test/record-summary-assist.integration.test.ts`（7 例）。

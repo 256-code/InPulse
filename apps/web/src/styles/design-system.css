@@ -1700,7 +1700,7 @@ td small {
   margin: 7px 0 0;
 }
 /*
- * 标题栏右侧操作位（ADR-074）：AppModal 的 headerActions 与关闭按钮同处一格，
+ * 标题栏右侧操作位（ADR-075）：AppModal 的 headerActions 与关闭按钮同处一格，
  * 自带 8px 间距；position: relative 让浮层（如「AI 助手」要求面板）能贴着按钮
  * 向下拉出，不必再加一层定位容器或新的弹层。
  */

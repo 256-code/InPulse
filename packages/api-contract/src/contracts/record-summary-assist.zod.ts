@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** ADR-074：要求是「一句话」，不是对话，所以上限按一句话给。 */
+/** ADR-075：要求是「一句话」，不是对话，所以上限按一句话给。 */
 export const RECORD_SUMMARY_ASSIST_MAX_REQUIREMENT_LENGTH = 500;
 /**
  * 事实正文上限：由前端按当前筛选范围用既有确定性生成器（record-summary-document.ts）
@@ -14,7 +14,7 @@ export const RECORD_SUMMARY_ASSIST_MAX_FACTS_LENGTH = 20_000;
 export const RECORD_SUMMARY_ASSIST_MAX_MARKDOWN_LENGTH = 200_000;
 
 /**
- * ADR-074 迭代总结 AI 改写：把「当前范围的事实正文」按用户一句话要求改写。
+ * ADR-075 迭代总结 AI 改写：把「当前范围的事实正文」按用户一句话要求改写。
  * 纯校验接口：不写任何持久化状态；facts 只回给发送者本人，不产生任何新的读权限。
  */
 export const recordSummaryAssistRequestSchema = z

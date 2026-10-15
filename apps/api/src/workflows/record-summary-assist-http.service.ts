@@ -19,7 +19,7 @@ const RECORD_SUMMARY_ASSIST_SESSION_REQUIRED =
   "RECORD_SUMMARY_ASSIST_SESSION_REQUIRED";
 
 /**
- * ADR-074 迭代总结 AI 改写 HTTP 编排：身份解析走只读短事务，上游调用在事务外
+ * ADR-075 迭代总结 AI 改写 HTTP 编排：身份解析走只读短事务，上游调用在事务外
  * 执行（绝不在数据库事务内发起网络请求）。
  *
  * 不查库、不写库：事实正文由前端按当前筛选范围用既有确定性生成器产出后随请求

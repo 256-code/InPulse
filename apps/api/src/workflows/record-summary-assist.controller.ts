@@ -5,7 +5,7 @@ import type { HttpHeaderBag } from "../auth/csrf.http.js";
 import { ContractBody, Operation } from "../http/contract.decorators.js";
 import { RecordSummaryAssistHttpService } from "./record-summary-assist-http.service.js";
 
-/** ADR-074 迭代总结 AI 改写：仅已登录用户；纯校验接口，不写任何持久化状态。 */
+/** ADR-075 迭代总结 AI 改写：仅已登录用户；纯校验接口，不写任何持久化状态。 */
 @Controller("record-summaries")
 export class RecordSummaryAssistController {
   constructor(

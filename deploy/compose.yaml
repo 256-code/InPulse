@@ -85,7 +85,8 @@ services:
     user: "10001:10001"
     command: ["node", "dist/src/migrate.js"]
     read_only: true
-    tmpfs: [/tmp:size=64m, noexec, nosuid, nodev]
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
     environment:
       NODE_ENV: production
       DB_HOST: db
@@ -93,6 +94,7 @@ services:
       DB_NAME: app
       MIGRATION_DB_USER: app_migrator
       MIGRATION_DB_PASSWORD_FILE: /run/secrets/db_migrator_password
+      DB_SSLMODE: "${DB_SSLMODE:-require}"
     depends_on:
       db:
         condition: service_healthy
@@ -117,7 +119,8 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    tmpfs: [/tmp:size=128m, noexec, nosuid, nodev]
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid,nodev
     environment:
       NODE_ENV: production
       DB_HOST: db
@@ -125,6 +128,7 @@ services:
       DB_NAME: app
       DB_USER: app_runtime
       RUNTIME_DB_PASSWORD_FILE: /run/secrets/db_runtime_password
+      DB_SSLMODE: "${DB_SSLMODE:-require}"
       # F-08 原始审计读取使用独立 audit_reader 只读连接；主机/端口/库名复用
       # DB_HOST/DB_PORT/DB_NAME，连接池在第一次审计读取时惰性建立。
       AUDIT_DB_USER: audit_reader
@@ -144,11 +148,12 @@ services:
       SSO_REDIRECT_URI: "${SSO_REDIRECT_URI}"
       # 本地会话空闲有效期（秒），ADR-038 起默认 7200；口令与 SSO 两条签发路径共用。
       SESSION_IDLE_MAX_AGE_SECONDS: "${SESSION_IDLE_MAX_AGE_SECONDS}"
-      # 反向代理信任链：api 只接入 internal 的 backend 网络，唯一入站来源是
-      # web(Nginx)。必须与 backend 的静态子网一致，否则 Express 只信任回环地址，
-      # req.ip 会退化为 Nginx 容器地址（审计 ip_address、登录/SSO 的 IP 限流
-      # 全部失真）；非法值会使 API 启动失败（apps/api/src/trusted-proxy.ts
-      # fail closed）。与本文件 networks.backend 的 ipam 子网保持一致。
+      # 反向代理信任链：api 接入 internal 的 backend（入站唯一来源是 web(Nginx)）
+      # 与仅出站的 egress（ADR-074）。TRUSTED_PROXY_CIDRS 必须与 backend 的静态
+      # 子网一致，否则 Express 只信任回环地址，req.ip 会退化为 Nginx 容器地址
+      # （审计 ip_address、登录/SSO 的 IP 限流全部失真）；非法值会使 API 启动
+      # 失败（apps/api/src/trusted-proxy.ts fail closed）。与本文件
+      # networks.backend 的 ipam 子网保持一致。
       TRUSTED_PROXY_CIDRS: "172.30.0.0/24"
       # ADR-067 AI 辅助转换：默认关闭（AI_ASSIST_ENABLED 非真值即整体关闭）。
       # 启用时密钥只经 Secret 文件提供（/run/secrets/ai_assist_api_key 只读挂载），
@@ -210,7 +215,7 @@ services:
         uid: "10001"
         gid: "10001"
         mode: "0400"
-    networks: [backend]
+    networks: [backend, egress]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     cpus: "1.5"
@@ -282,7 +287,8 @@ services:
     profiles: [operations]
     user: "10002:10002"
     read_only: true
-    tmpfs: [/tmp:size=512m, noexec, nosuid, nodev]
+    tmpfs:
+      - /tmp:size=512m,noexec,nosuid,nodev
     # 默认执行一次完整加密逻辑备份；验证/批量解密用
     # `run --rm backup node dist/backup-cli.js verify --file <pkg>` 覆盖命令。
     command: ["node", "dist/backup-cli.js", "backup"]
@@ -293,6 +299,7 @@ services:
       DB_NAME: app
       DB_USER: app_backup
       DB_PASSWORD_FILE: /run/secrets/db_backup_password
+      DB_SSLMODE: "${DB_SSLMODE:-require}"
       BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup_encryption_key
       OFFSITE_CREDENTIALS_FILE: /run/secrets/offsite_credentials
       BACKUP_LOCAL_DIR: /backup
@@ -332,7 +339,8 @@ services:
     profiles: [operations]
     user: "10002:10002"
     read_only: true
-    tmpfs: [/tmp:size=256m, noexec, nosuid, nodev]
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid,nodev
     # 默认执行每小时检查点；宿主调度以 `run --rm audit-archive <cmd>` 覆盖为
     # checkpoint / export / both（见 deploy/backup/audit-archivectl.sh）。
     command: ["node", "dist/cli.js", "checkpoint"]
@@ -343,6 +351,7 @@ services:
       DB_NAME: app
       DB_USER: audit_archive_writer
       DB_PASSWORD_FILE: /run/secrets/db_audit_archive_password
+      DB_SSLMODE: "${DB_SSLMODE:-require}"
       WORM_CREDENTIALS_FILE: /run/secrets/audit_worm_credentials
       ARCHIVE_SIGNING_KEY_FILE: /run/secrets/audit_archive_signing_key
     secrets:
@@ -380,6 +389,10 @@ networks:
       config:
         - subnet: 172.30.0.0/24
   edge:
+  # 仅 api 使用的出站网络（ADR-074）：SSO discovery/token/JWKS 与 AI 辅助外联
+  # 需要访问外部 HTTPS 端点。不与 web/backup/audit-archive 共享，保证 web 解析
+  # api 只得到 backend 地址，维持 TRUSTED_PROXY_CIDRS=172.30.0.0/24 的信任链语义。
+  egress:
 
 volumes:
   pg_data:

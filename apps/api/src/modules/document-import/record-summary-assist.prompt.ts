@@ -1,7 +1,7 @@
 import type { AiAssistMessage } from "./ai-assist.prompt.js";
 
 /**
- * ADR-074 迭代总结 AI 改写的提示词。与 ADR-067 的 `ai-assist.prompt.ts` 并列：
+ * ADR-075 迭代总结 AI 改写的提示词。与 ADR-067 的 `ai-assist.prompt.ts` 并列：
  * 两者共用同一份运行时配置与出站适配器，只有提示词不同。
  */
 export interface RecordSummaryAssistPromptInput {

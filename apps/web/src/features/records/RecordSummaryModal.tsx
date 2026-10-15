@@ -56,7 +56,7 @@ const RANGE_PRESETS: readonly {
   { value: "custom", label: "自定义" },
 ];
 
-/** ADR-074 AI 助手浮层的快捷要求：一句话，点一下拼进输入框，不覆盖已写内容。 */
+/** ADR-075 AI 助手浮层的快捷要求：一句话，点一下拼进输入框，不覆盖已写内容。 */
 const AI_REQUIREMENT_SUGGESTIONS: readonly string[] = [
   "给领导看，先给结论",
   "突出遗留风险",
@@ -182,7 +182,7 @@ export function RecordSummaryModal({
     "idle",
   );
   /**
-   * ADR-074：AI 改写的产物只活在客户端状态里（服务端纯校验、不落库）。
+   * ADR-075：AI 改写的产物只活在客户端状态里（服务端纯校验、不落库）。
    * aiDocument 为 null 表示正文仍是本地确定性生成的那一份；有值时可逐段编辑。
    */
   const [aiOpen, setAiOpen] = useState(false);
@@ -237,7 +237,7 @@ export function RecordSummaryModal({
 
   /**
    * 交给 AI 的事实正文：与「复制正文」同一份确定性文本，服务端不再查库，
-   * 只改写这段（ADR-074）。因此事实变了就必须丢弃已生成的正文。
+   * 只改写这段（ADR-075）。因此事实变了就必须丢弃已生成的正文。
    */
   const facts = useMemo(
     () => (document === null ? "" : summaryDocumentToText(document)),

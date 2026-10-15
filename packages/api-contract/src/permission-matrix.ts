@@ -831,7 +831,7 @@ export const permissionMatrix = [
       系统管理员: { kind: "allow" },
     },
   },
-  // ADR-074：迭代总结 AI 改写面向任何已登录用户（与 F-33 取数、AI 辅助转换
+  // ADR-075：迭代总结 AI 改写面向任何已登录用户（与 F-33 取数、AI 辅助转换
   // 一致的可见性），服务端不查库、不接触项目数据；未启用或上游故障统一 503。
   {
     operationId: "assistRecordSummary",

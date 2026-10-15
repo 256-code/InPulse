@@ -64,7 +64,7 @@ export interface AppModalProps extends Omit<
    */
   readonly body?: boolean;
   /**
-   * 标题栏右侧、关闭按钮左边的操作位（ADR-074 的「AI 助手」入口）。
+   * 标题栏右侧、关闭按钮左边的操作位（ADR-075 的「AI 助手」入口）。
    * 不传时不占位；传入的节点自己负责样式与无障碍标签。
    */
   readonly headerActions?: ReactNode;
