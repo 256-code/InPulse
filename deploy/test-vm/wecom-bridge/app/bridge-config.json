@@ -1,0 +1,15 @@
+{
+  "databaseUrl": "",
+  "recipients": {
+    "6": "wosuIHCwAAvTuCkG701QzO7xdUMMiBnw",
+    "7": "wosuIHCwAAh1SRfNoEO7dOWOrOfG590Q"
+  },
+  "forwardTypes": [
+    "*"
+  ],
+  "commandFile": "/state/commands.txt",
+  "stateFile": "/state/bridge-state.json",
+  "pollIntervalMs": 3000,
+  "startFromId": 22145,
+  "cardActionUrl": "https://test-inpulse.libiaorobot.com/"
+}

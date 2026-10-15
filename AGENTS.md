@@ -1115,3 +1115,13 @@
 - 审计 `auth.sso_account_provisioned` payload 增加 `grantedAdmin: true|false`；离线预置管理员仍可行，且预置后 SSO 不再授予。
 - 无新增路由、数据库迁移、依赖与权限矩阵结构变化；测试见 `apps/api/test/sso-first-admin.integration.test.ts`（临时库全量迁移 + 桩 IdP）。
 - 开发日志等历史记录中更早批次的「JIT 开通一律 `is_admin=false`」为各自当时的事实；与 ADR-075 冲突时以 ADR-075 与本节的现行规则为准。
+
+## 2026-10-15 本地先行、测试 VM 跟随（同步纪律）
+
+用户要求：**一切改动先在本地工作区完成并通过门禁，再同步到测试 VM；不允许在 VM 上直接改代码、脚本或配置**。约定如下：
+
+- 应用与部署编排（镜像、`deploy/compose.yaml`、`.env.deploy`）：本地改完后跑 `deploy/test-vm/update.ps1` 同步；细则见 `deploy/test-vm/README.md`。
+- 测试 VM 企业微信桥接：唯一源是 `deploy/test-vm/wecom-bridge/`（本批已从 VM 侧归档进仓库），用 `deploy/test-vm/update-bridge.ps1` 同步：上传 → 远端 sha256 校验 → 备份源码 → 远端构建镜像 → 按固定安全参数重建容器并等「订阅成功」；同内容同 Tag（`0.1.0-<日期>-bridge<内容哈希前 7 位>`）。`-SkipRestart` 只更新镜像；`-RollbackTo <旧 Tag>` 用历史镜像重建容器回滚。
+- 数据同步走 `deploy/test-vm/README.md` 的 pg_dump/pg_restore 手册流程，不引入双向或定时同步。
+- VM 侧只在排障时允许临时热修；热修后必须立即把改动回灌本地（以本地为唯一源重建），并在开发日志写明，不得把 VM 临时状态当作正式状态。
+- 2026-10-15 核对事实：桥接源码在本地 staging 与 VM `/home/libiao/inpulse-deploy/wecom-bridge/` 两侧哈希一致；此前「不同步」的根源是源码未进仓库、更新靠手工复制。本批归档 15 个文件（`README.md` 只在仓库、不上传 VM；`node_modules` 不入库）并新增同步脚本。

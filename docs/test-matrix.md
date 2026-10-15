@@ -6504,3 +6504,25 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | TRANSITION-BUFFERED-REVEAL-GATE-002 | 门禁 | 整链回归 | `pnpm check` **除 `deps:audit` 外全部通过**（lint / format:check / typecheck / test:unit 各 workspace（web 837 例、api 499 例、contract 102 例、ops 60 例、database 15 例、canonical-json 5 例）/ db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test / check:deps / check:frontend:boundaries / permissions:check 110 条操作 110 条路由）；`deps:audit` 因 `registry.npmjs.org` ECONNRESET → `fetch failed` 未完成（单独重试同样失败，本机网络问题、与改动无关），`check:secrets` 与 `check:docs` 在文档同步后单独跑通过 | 部分通过（audit 未运行，2026-10-14） |
 
 未运行 / 已知偏差（本批）：① `CalmSelect` 的 `animated` 动画只在 enter/appear 的 active 帧接管（窗口 150ms），本次抓取工具单次点击往返 263ms，未复测到 active 帧；机制与既有 43 处同构，本批只补 2 个 prop。② 弹窗**关闭**仍是瞬时（本批只补「出现」）。③ 仍未接预取的入口：任务中心 → 任务详情弹窗（`TaskDetailOverlay` 为 lazy，靠 `Suspense fallback={null}` 不闪空壳、只慢一拍）、弹窗内深链（`?taskId=`）与页面内按钮。④ 全量 Playwright 未跑（31 个 spec 里只定向跑 6 个、21 例）。⑤ 生产镜像构建与 Trivy 扫描未执行。⑥ GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 项目企微群绑定（ADR-076，第一批）
+
+需求原话要点：「机器人能做到项目和群聊绑定吗，就是项目里面有变动或者任务派发就发送到对应项目群聊里」「项目组长 + 系统管理员生成绑定码/解绑，先默认发『任务派发 + 全部 MEMBER 可见动态』，群推送与现有个人单聊并存，一个项目一个群、一个群一个项目」。本批落库迁移 `0044`（三张表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08）与三条项目级路由（115 → 118）；长连接桥接的 `chat_type:2` 投递改造为第二批、未实现，本批不产生任何群投递。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| WECOM-GROUP-API-001 | 真实 PostgreSQL 集成（真实 HTTP） | 三态与读取权限 | 匿名 GET 401；非成员 / 已移除成员 404；活跃成员与组长 200 且 `Cache-Control: no-store`；普通成员签发 403 `PROJECT_WECOM_GROUP_FORBIDDEN`、非成员签发 404、组长签发 201 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-002 | 真实 PostgreSQL 集成 | 签发与哈希 | 码匹配 `^[0-9A-HJKMNP-TV-Z]{4}(-...){3}$`；库内只有一行且 `code_hash` 与明文 SHA-256 逐字节相等；GET 转 PENDING 且 `codeExpiresAt` 一致；重新签发返回新码并立即作废旧码（旧码兑换 PWG01） | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-003 | 真实 PostgreSQL 集成 | 兑换与同群幂等 | 成员发送者兑换成功返回 `project_id` / `project_name` / `rebound=false`，GET 转 BOUND、`boundByName` 为发送者姓名；同码重复兑换 PWG02；重签后在同一群发送幂等成功、不产生新绑定行 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-004 | 真实 PostgreSQL 集成 | 换绑与群唯一性 | 同群绑定第二个项目 PWG05；换绑返回 `rebound=true`、旧行 REVOKED、新行 ACTIVE；释放后的群可被另一个项目绑定 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-005 | 真实 PostgreSQL 集成 | 兑换边界与管理员豁免 | 无个人绑定 PWG03；有个人绑定但非成员 PWG04；停用用户 PWG03（不产生绑定）；过期码 PWG06；无效码 PWG01；非法 `chatid` PWG07；系统管理员非成员也可完成绑定 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-006 | 真实 PostgreSQL 集成 | 解绑与幂等重放 | DELETE 204、绑定转 REVOKED、GET 回 UNBOUND；解绑同一事务作废待用码（兑换 PWG02）；`audit_logs` 出现 `project.wecomGroup.unbind`（actor / target 正确）；同 Key 重放 204 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-007 | 真实 PostgreSQL 集成 | 解绑门禁与重放复核 | 普通成员 403、非成员 404、缺 CSRF 头 422、格式合法未知 Token 401、缺 Idempotency-Key 400；组长被转移降级为普通成员后同 Key 重放 403（实时成员关系复核） | 本地通过（2026-10-15） |
+| WECOM-GROUP-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 对三张表 DELETE 42501、不能 `SET ROLE app_owner`；`app_backup` 只读（UPDATE 42501）；迁移内 `DO $$` 部署断言随 0044 通过；database 集成「已应用迁移清单」含 0044 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-001 | Web 单测 | 未绑定只读与引导 | 普通成员见三步引导（拉群 / @机器人 / 请组长或管理员生成）与只读提示，无「生成绑定码」按钮 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-002 | Web 单测 | 签发与倒计时 | 组长点「生成绑定码」只签发 CSRF（`x-csrf-token`、无幂等 Key），展示一次性明文码、剩余有效时间与「先让群里任意成员 @机器人」提示 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-003 | Web 单测 | 已绑定与解绑 | 展示绑定时间 / 操作人 / 桥接侧最近投递失败；Popconfirm 确认（`确认解绑`）后调用 DELETE（`x-csrf-token` + `pwg-unbind-` 前缀幂等 Key），成功后回到未绑定视图 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-004 | Web 单测 | 普通成员只读 | 已绑定状态普通成员看不到解绑与重新生成按钮 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-005 | Web 单测 | 待用码无明文 | 客户端没有明文时展示「已有一个待用绑定码」与有效期，组长可见「重新生成绑定码」 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-006 | Web 单测 | 复制 | 「复制机器人链接」与「复制绑定码」写入剪贴板（后者写入一次性明文码） | 本地通过（2026-10-15） |
+| WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 118 条操作 / 118 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |

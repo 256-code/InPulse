@@ -89,6 +89,7 @@
 | [ADR-073](ADR-073.md) | Accepted | 整项目导入（模式 B）的创建者默认算初始成员并在工作台显示为锁定标签（修订 ADR-072：删除 `MEMBER_CREATOR_MISSING`、AI 提示词去掉 `creatorName`、契约模板说明行 / 工作台必填要素 / 右栏追问三处同口径；工作台只在整项目导入渲染一枚带锁图标、无删除按钮的标签，且不改文档正文，「预览文档」仍是一字不改的原版）；无新增路由 / 迁移 / 依赖 / 权限变化 |
 | [ADR-074](ADR-074.md) | Accepted | api 容器增加仅出站 `egress` 网络（Casdoor SSO 与 AI 辅助的外联前提，测试环境拓扑并入仓库基线） |
 | [ADR-075](ADR-075.md) | Accepted | 空库首个 SSO 登录账号自动成为系统管理员（修订 ADR-032 决策 5 的 JIT 默认权限：判定以 `app.users` 是否有行为准、事务级 advisory lock 串行化、审计 payload 增加 `grantedAdmin`）；无新增路由 / 迁移 / 依赖 / 权限矩阵变化 |
+| [ADR-076](ADR-076.md) | Accepted | 企业微信项目群绑定（项目 ↔ 群，第一批）：新增 `getProjectWecomGroup` / `createProjectWecomGroupCode` / `deleteProjectWecomGroup` 三条项目级路由（115 → 118），组长 + 系统管理员签发一次性绑定码 / 解绑（`wecomGroupBinderRole`，ADR-039 例外清单扩展；签发加入 ADR-023 allowlist securityFlow 第七条）；迁移 `0044`（`app.project_wecom_binding_codes` + `app.project_wecom_groups` 一项目一群 / 一群一项目 + `app.wecom_group_deliveries` 投递去重表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08），群推送与个人单聊并存、默认投递「任务派发 + 全部 MEMBER 可见动态」；长连接桥接 `chat_type:2` 投递改造为第二批 |
 
 ## 关联基线
 

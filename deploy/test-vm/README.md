@@ -19,7 +19,9 @@ Compose + 本地 registry 的测试环境，不是生产发布流程：生产镜
 | SSO           | Casdoor 测试环境 `https://authtest.libiaorobot.com`                                                            |
 | TLS           | 公司 ALLinSSL 下发 `*.libiaorobot.com` 通配符（DigiCert，2026-10-15 生效，自动续签；文件 `secrets/tls_*.pem`） |
 | 部署目录补充  | `backups/`（同步前的 pg_dump）、`compose.yaml.bak-*`、`.env.deploy.bak-*`（回滚用）                            |
-| 当前版本      | 5 个镜像统一为 `0.1.0-20261015-277fb89`，`BACKUP_GIT_SHA=277fb89`（2026-10-15 全量同步）                       |
+| 企业微信桥接  | 独立容器 `inpulse-wecom-bridge`（非 compose 管理；源码 `deploy/test-vm/wecom-bridge/` 为本地唯一源，用 `deploy/test-vm/update-bridge.ps1` 同步；个人绑定码自助绑定与项目群绑定兑换均已实现，见「企业微信机器人桥接」） |
+| AI 辅助转换   | 已启用（`AI_ASSIST_ENABLED=1`）；API Key 待管理员在设置页重填（见「AI 辅助转换启用」） |
+| 当前版本      | 5 个镜像统一为 `0.1.0-20261015-6f23ab4`，`BACKUP_GIT_SHA=6f23ab4`（2026-10-15 最新同步） |
 
 ## 一次性准备
 
@@ -108,6 +110,7 @@ api 容器内访问 Casdoor discovery 返回 200（`egress` 生效）。
 | `database/bootstrap/*`              | `db-bootstrap`              | 只在数据卷为空、首次初始化数据库时生效     |
 | `apps/ops`、`deploy/backup/*`           | `ops`                         | 备份与审计归档                             |
 | `deploy/compose.yaml`、`.env.deploy`    | 不走镜像                    | 见下一节                                   |
+| `deploy/test-vm/wecom-bridge/*`      | 不走 compose 镜像             | 跑 `deploy/test-vm/update-bridge.ps1`，见「企业微信机器人桥接」 |
 
 ## compose.yaml / .env.deploy 改动怎么同步
 
@@ -139,13 +142,18 @@ git diff --no-index -- $env:TEMP\vm-compose.yaml deploy/compose.yaml
 ```
 
 2026-10-15 起 `egress` 已按 [ADR-074](../../docs/adr/ADR-074.md) 并入仓库
-`deploy/compose.yaml`，仓库与 VM 的 compose 无需再手工合并；若未来再次分叉
-（例如 VM 先行做了新适配），按本节流程比对合并。下列适配不能丢
+`deploy/compose.yaml`；同日 VM 侧新增企业微信接线（见「企业微信机器人桥接」），
+这是当前仓库与 VM 的 compose 唯一差异——仓库 `deploy/compose.yaml` 后续变更时，
+按本节流程比对合并并保留该差异。下列适配不能丢
 （`tmpfs` 写法与 `DB_SSLMODE` 已进仓库工作区）：
 
 - `api` 服务的 `networks: [backend, egress]` 与 `networks` 段的 `egress` 定义。
   `backend` 是 internal 网络、没有外网出口，api 靠 `egress` 访问 Casdoor 与 AI 端点；
   丢掉它 SSO 会回跳 `/login?sso_error=internal`。
+- `api` 服务的 `WECOM_ROBOT_ENCRYPTION_KEY_FILE` / `WECOM_ROBOT_ENCRYPTION_KEY_VERSION`
+  环境变量、`wecom_robot_encryption_key` 只读 Secret 挂载项，与顶层
+  `secrets.wecom_robot_encryption_key: file: ./secrets/wecom_robot_encryption_key`
+  （2026-10-15 加；丢它管理员「企业微信机器人」设置页会报 `ENCRYPTION_KEY_UNAVAILABLE`）。
 
 `.env.deploy` 侧要保留：`DB_SSLMODE=prefer`（VM 的 PostgreSQL 未启用服务端 TLS，
 postgres.js 在 `require` 下会直接连接失败）、指向 Casdoor 测试环境的 `SSO_*`
@@ -267,6 +275,67 @@ sudo docker exec -i inpulse-deploy-db-1 pg_restore --list < backups/<文件名>.
 `secrets/audit_hmac_keyring` 签发，跨环境的审计链全量校验/归档任务会报不匹配；
 `ai_assist_settings` 的密钥密文由本地主密钥加密，VM 当前 `AI_ASSIST_ENABLED=0`
 不读取——要在 VM 试用 AI 助手，在管理页重新填写一次即可。
+## 企业微信机器人桥接（2026-10-15 部署）
+
+测试 VM 的企业微信通知推送由一个**独立于 compose 栈**的桥接容器完成：轮询
+`app.notifications`，把新通知经企业微信智能机器人长连接（`aibot_send_msg`）推给
+已映射的成员。桥接源码已归档进本仓库 `deploy/test-vm/wecom-bridge/`（本地唯一源，
+用 `deploy/test-vm/update-bridge.ps1` 同步到 VM）；它属于测试环境 PoC，不进
+`deploy/compose.yaml`、不参与生产镜像与 CI 门禁。
+
+- 容器 `inpulse-wecom-bridge`：`--restart unless-stopped`、`10001:10001`、只读根 +
+  tmpfs；创建时接 `egress` 出网，再 `docker network connect` 到 `backend` 连库。
+  镜像 `inpulse-wecom-bridge:0.1.0-<日期>-bridge<内容哈希前 7 位>`（同内容同 Tag；
+  `FROM` 固定 api 镜像 `d7407c7`，复用其 node 24；pg/ws 与脚本一起打进镜像，已推入
+  本地 registry；历史 Tag 均保留可回滚）。
+- 部署目录 `/home/libiao/inpulse-deploy/wecom-bridge/`（`app/` 脚本与配置、
+  `bridge.env`、`state/` 状态）。机器人凭据从数据库 `app.wecom_robot_config` 读取并
+  用主密钥 `secrets/wecom_robot_encryption_key`（0400 / 10001:10001，与本地 keyring 同源）
+  解密；管理员在「成员与设置 → 企业微信机器人」保存的新凭据会被桥接自动感知并重连。
+  `app_runtime` 无 `audit_logs` 读权限，桥接查询已去掉该 join，操作人回落显示「系统」。
+- 收件人映射以数据库 `app.user_wecom_bindings`（`status = 'ACTIVE'`）为唯一来源——用户在
+  「账户菜单 → 绑定企业微信」里自助绑定/解绑即时生效（解绑后不再推送，即使
+  `bridge-config.json` 里残留旧映射）。`bridge-config.json` 的 `recipients` 只作为「数据库里
+  从未出现过该用户记录」时的过渡兜底，日常无需再手工维护。状态在
+  `state/bridge-state.json`（lastId），只推新通知、不补发历史。
+- **同一机器人同时只允许一条长连接**：VM 桥接与本地 PoC 不能同时在线，否则互相踢线。
+  本地要跑 PoC 时先停 VM 侧，用完再启动。
+
+常用命令（VM 上执行，需 sudo）：
+
+```bash
+sudo docker logs --tail 50 inpulse-wecom-bridge   # 日志：订阅 errcode / 推送 / 心跳
+sudo docker restart inpulse-wecom-bridge          # 重启（排查用；收件人映射改数据库即时生效）
+sudo docker stop inpulse-wecom-bridge             # 暂停（本地要用 PoC 时）
+sudo docker start inpulse-wecom-bridge            # 恢复
+```
+
+改脚本或重建镜像：**先改本地 `deploy/test-vm/wecom-bridge/`（唯一源，不要在 VM 上直接改）**，
+再在仓库根目录执行 `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/test-vm/update-bridge.ps1`：
+上传 -> 远端 sha256 校验 -> 备份源码 -> 构建并推 registry -> 按固定安全参数重建容器并等「订阅成功」。
+`-SkipRestart` 只更新镜像；`-RollbackTo <旧 Tag>` 用历史镜像重建容器回滚。
+
+绑定码自助绑定（2026-10-15 已实现，镜像 bridge3）：用户在「账户菜单 → 绑定企业微信」生成一次
+性绑定码（10 分钟有效），把它发送给企业微信里的 InPulse 机器人即可自动落库；桥接以 `app_runtime`
+角色调用 `app.redeem_wecom_binding_code`（SECURITY DEFINER，单事务消费），成功后回复「绑定成功」，
+失败按 WBC01/02/04/05/06 分类回复。`smoke-redeem.mjs`（镜像内 `/opt/wecom-bridge/`）
+可在临时容器自检兑换链路（全程事务、结束回滚，不产生历史数据残留）。
+
+项目群绑定兑换（2026-10-15 已实现，镜像 bridge4）：项目组长/系统管理员在「项目成员页 → 企业微信项目群」
+生成一次性项目绑定码（10 分钟有效；发送者需已完成个人绑定，系统管理员豁免成员校验）。在目标群里
+@机器人 发送该码（形如「@内部研发项目管理系统 XXXX-XXXX-XXXX-XXXX」）即完成群绑定；桥接从群消息文本中
+提取绑定码（容忍「@机器人 」前缀），调用 `app.redeem_project_wecom_binding_code`（SECURITY DEFINER，
+单事务消费），结果用 `chat_type:2` 主动推送回该群，失败按 PWG01～PWG08 分类回复；群里的非绑定码消息保持
+安静，不再触发私聊回声。`smoke-project-group-redeem.mjs`（镜像内 `/opt/wecom-bridge/`）自检 16 项
+（提取 / 首次绑定 / 幂等 / 换绑 / PWG01～PWG06）。**群消息投递**（任务派发与项目动态推送进项目群）仍属第二批，未部署。
+
+## AI 辅助转换启用（2026-10-15）
+
+`.env.deploy` 的 `AI_ASSIST_ENABLED` 已置 1 并重建 api（备份
+`.env.deploy.bak-20261015-145032`）。VM 侧 `secrets/ai_assist_encryption_key` 是
+2026-10-15 11:38 在 VM 上生成的主密钥（与本地不同），从本地同步来的 API Key 密文
+解不开——需要管理员在「系统设置 → AI 辅助转换」重填 API Key 并测试连接。
+
 ## 数据库迁移
 
 - `compose up -d` 时 `migrate` 先执行（`api` 依赖 `service_completed_successfully`）；
