@@ -194,8 +194,30 @@
 }
 
 .summary-footer-count {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
   color: var(--muted-foreground);
   font-size: 12px;
+}
+
+/* 编辑态出口（2026-10-15）：底栏右侧固定「查看明细 / 重新生成 / 复制正文」三枚按钮，
+   「撤销手动修改」降级成状态行末尾的浅链接——它只丢弃本地手动改动、不提交不落库，
+   用警示色按钮占底栏按钮位反而抢视线。 */
+.summary-revert-link.ant-btn {
+  height: auto;
+  padding: 0;
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-revert-link.ant-btn:hover:not(:disabled),
+.summary-revert-link.ant-btn:focus:not(:disabled) {
+  color: var(--primary);
+  text-decoration: underline;
+  background: transparent;
 }
 
 /* 明细行可展开（2026-09-29）：整个横向区域可点，首列箭头只做展开态的视觉提示；

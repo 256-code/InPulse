@@ -929,6 +929,8 @@ export function RecordSummaryModal({
         <div className="summary-scroll">{body}</div>
       </div>
       <div className="calm-action-footer">
+        {/* 左侧这行只报取数与编辑态出口（2026-10-15）：改过的段已由橙点标出，这里不再复述
+            「已手动改 N 处」；底栏右侧固定三枚按钮，撤销入口降级贴在这行末尾。 */}
         <span className="footer-leading summary-footer-count">
           {data === undefined
             ? summary.isError
@@ -936,9 +938,17 @@ export function RecordSummaryModal({
               : "正在取数"
             : `${detail ? "明细" : "已归纳"} ${String(
                 data.totals.recordCount,
-              )} 条迭代记录${
-                editedCount > 0 ? ` · 已手动改 ${String(editedCount)} 处` : ""
-              }`}
+              )} 条迭代记录`}
+          {editedCount === 0 ? null : (
+            <Button
+              type="link"
+              size="small"
+              className="summary-revert-link"
+              onClick={revertAll}
+            >
+              撤销手动修改
+            </Button>
+          )}
         </span>
         <Button
           onClick={() => setDetail((prev) => !prev)}
@@ -956,6 +966,7 @@ export function RecordSummaryModal({
         >
           重新生成
         </Button>
+        {/* 「复制正文」永远是底栏最后一个按钮（用户 2026-10-15 要求）：新增动作一律排在它左侧。 */}
         <Button
           type="primary"
           disabled={document === null}
@@ -969,9 +980,6 @@ export function RecordSummaryModal({
                 ? "复制明细 Markdown"
                 : "复制正文"}
         </Button>
-        {editedCount === 0 ? null : (
-          <Button onClick={revertAll}>撤销手动修改</Button>
-        )}
       </div>
     </AppModal>
   );

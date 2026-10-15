@@ -386,8 +386,13 @@ describe("RecordSummaryModal AI 助手", () => {
     secondNode.textContent = "改过的第二句";
     fireEvent.input(secondNode);
 
-    expect(screen.getByText(/已手动改 2 处/)).toBeVisible();
+    // 状态行不再复述「改了几处」（橙点已标出改过的段），有改动时只多出一个撤销入口。
+    expect(screen.getByRole("button", { name: "撤销手动修改" })).toBeVisible();
     expect(firstNode.closest(".summary-ai-sec")).toHaveAttribute(
+      "data-edited",
+      "true",
+    );
+    expect(secondNode.closest(".summary-ai-sec")).toHaveAttribute(
       "data-edited",
       "true",
     );
@@ -400,8 +405,17 @@ describe("RecordSummaryModal AI 助手", () => {
     if (firstRevert === undefined) throw new Error("缺少回退按钮");
     fireEvent.click(firstRevert);
     await waitFor(() =>
-      expect(screen.getByText(/已手动改 1 处/)).toBeVisible(),
+      expect(firstNode.closest(".summary-ai-sec")).toHaveAttribute(
+        "data-edited",
+        "false",
+      ),
     );
+    // 第二处改动还在：橙点与撤销入口都不消失。
+    expect(secondNode.closest(".summary-ai-sec")).toHaveAttribute(
+      "data-edited",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "撤销手动修改" })).toBeVisible();
     expect(firstNode.textContent).toBe("2026 年度总结");
     expect(secondNode.textContent).toBe("改过的第二句");
 
@@ -410,7 +424,7 @@ describe("RecordSummaryModal AI 助手", () => {
     fireEvent.input(firstNode);
     fireEvent.click(screen.getByRole("button", { name: "撤销手动修改" }));
     await waitFor(() =>
-      expect(screen.queryByText(/已手动改/)).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: "撤销手动修改" })).toBeNull(),
     );
     expect(firstNode.textContent).toBe("2026 年度总结");
     expect(secondNode.textContent).toBe("一、整体概览");
@@ -533,7 +547,7 @@ describe("RecordSummaryModal 本地正文就地编辑", () => {
     window.localStorage.clear();
   });
 
-  it("改一句即计数，复制取改动版，单句回退与全量撤销都生效", async () => {
+  it("改一句即出现撤销入口，复制取改动版，单句回退与全量撤销都生效", async () => {
     const writeText = mockClipboard();
     const client = baseClient();
     mount(client as unknown as InpulseApiClient);
@@ -552,7 +566,9 @@ describe("RecordSummaryModal 本地正文就地编辑", () => {
     fireEvent.input(node);
     // 弹窗入场动画走完后再断言可见性（与 AI 用例的等待口径一致）。
     await waitFor(() =>
-      expect(screen.getByText(/已手动改 1 处/)).toBeVisible(),
+      expect(
+        screen.getByRole("button", { name: "撤销手动修改" }),
+      ).toBeVisible(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "复制正文" }));
@@ -567,13 +583,13 @@ describe("RecordSummaryModal 本地正文就地编辑", () => {
     if (!(revertButton instanceof HTMLElement)) throw new Error("缺少回退按钮");
     fireEvent.click(revertButton);
     expect(node.textContent).toBe(original);
-    expect(screen.queryByText(/已手动改/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "撤销手动修改" })).toBeNull();
 
     node.textContent = "又改了一次";
     fireEvent.input(node);
     fireEvent.click(screen.getByRole("button", { name: "撤销手动修改" }));
     expect(node.textContent).toBe(original);
-    expect(screen.queryByText(/已手动改/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "撤销手动修改" })).toBeNull();
   });
 
   it("scopeLine 是事实元数据，不参与就地编辑", async () => {
@@ -583,5 +599,41 @@ describe("RecordSummaryModal 本地正文就地编辑", () => {
       /\d{4}-\d{2}-\d{2} - \d{4}-\d{2}-\d{2}/,
     );
     expect(scope).not.toHaveAttribute("contenteditable");
+  });
+  /** 底栏**直接子级**按钮的 DOM 顺序：用户要求「复制正文」永远在最右侧。 */
+  function footerButtons(): readonly HTMLElement[] {
+    return Array.from(
+      document.querySelectorAll<HTMLElement>(".calm-action-footer > button"),
+    );
+  }
+
+  it("底栏固定三枚按钮、「复制正文」永远最右；撤销降级成状态行里的浅链接", async () => {
+    const client = baseClient();
+    mount(client as unknown as InpulseApiClient);
+    // 未编辑：底栏就是三枚按钮，没有「撤销手动修改」。
+    expect(
+      footerButtons().map((button) => button.textContent?.trim() ?? ""),
+    ).toEqual(["查看明细", "重新生成", "复制正文"]);
+    expect(screen.queryByRole("button", { name: "撤销手动修改" })).toBeNull();
+
+    const node = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(
+        '[data-key="local:0:text"]',
+      );
+      if (found === null) throw new Error("概览可编辑段未渲染");
+      return found;
+    });
+    node.textContent = "改过的概览句";
+    fireEvent.input(node);
+
+    const revert = await screen.findByRole("button", { name: "撤销手动修改" });
+    // 降级为状态行末尾的浅链接：不占底栏按钮位、也不再用警示色。
+    expect(revert.closest(".summary-footer-count")).not.toBeNull();
+    expect(revert.className).toMatch(/ant-btn-(link|variant-link)/);
+    expect(revert.className).not.toContain("ant-btn-dangerous");
+    expect(
+      footerButtons().map((button) => button.textContent?.trim() ?? ""),
+    ).toEqual(["查看明细", "重新生成", "复制正文"]);
+    expect(footerButtons().at(-1)).toHaveTextContent("复制正文");
   });
 });
