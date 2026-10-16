@@ -281,7 +281,8 @@ sudo docker exec -i inpulse-deploy-db-1 pg_restore --list < backups/<文件名>.
 
 测试 VM 的企业微信通知推送由一个**独立于 compose 栈**的桥接容器完成：轮询
 `app.notifications`，把新通知经企业微信智能机器人长连接（`aibot_send_msg`）推给
-已映射的成员。桥接源码已归档进本仓库 `deploy/test-vm/wecom-bridge/`（本地唯一源，
+已映射的成员；2026-10-16 起同一桥接把新的 `task.assigned` 通知与 `MEMBER` 可见项目动态物化后
+投递到已绑定的项目群（本地实现，VM 未同步，见下）。桥接源码已归档进本仓库 `deploy/test-vm/wecom-bridge/`（本地唯一源，
 用 `deploy/test-vm/update-bridge.ps1` 同步到 VM）；它属于测试环境 PoC，不进
 `deploy/compose.yaml`、不参与生产镜像与 CI 门禁。
 
@@ -302,6 +303,17 @@ sudo docker exec -i inpulse-deploy-db-1 pg_restore --list < backups/<文件名>.
   `state/bridge-state.json`（lastId），只推新通知、不补发历史。
 - **同一机器人同时只允许一条长连接**：VM 桥接与本地 PoC 不能同时在线，否则互相踢线。
   本地要跑 PoC 时先停 VM 侧，用完再启动。
+- 进入会话欢迎语（2026-10-16）：用户进入机器人会话时按绑定状态回欢迎语——未绑定给「把绑定码发
+  给我」的引导（默认 10 分钟最多一条），已绑定/未知只发一句简短欢迎（默认 24 小时最多一条）；
+  普通文本消息（非绑定码）也按绑定状态回复指引，不再回显 PoC 调试文案。限频时间戳写在
+  `welcomeStateFile`（默认与命令文件同目录），可用 `config.json` 的 `welcomeUnboundThrottleMs` /
+  `welcomeBoundThrottleMs` 调整（毫秒，0 = 该类用户不再自动发）。
+- 项目群消息投递（2026-10-16 本地实现，VM 未同步）：`bridge.mjs` 把新的 `task.assigned`
+  通知与 `MEMBER` 可见项目动态物化为 `app.wecom_group_deliveries` 的 `PENDING` 行，
+  `long-conn.mjs` 按 id 升序经 `chat_type:2` 投递到该项目绑定的群，并以响应 errcode
+  回写 `SENT` / `FAILED` 与绑定行 `last_delivery_error`；限速 30 条/分钟、1000 条/小时，
+  重启后从 PENDING 断点续传；`ADMIN_ONLY` 动态不进群；个人单聊与群推送并存。
+  本地联调（真实群）已验证成功投递 / 失败回写 / 停机续传三条路径，合成数据已清理。
 
 常用命令（VM 上执行，需 sudo）：
 
@@ -329,7 +341,7 @@ sudo docker start inpulse-wecom-bridge            # 恢复
 提取绑定码（容忍「@机器人 」前缀），调用 `app.redeem_project_wecom_binding_code`（SECURITY DEFINER，
 单事务消费），结果用 `chat_type:2` 主动推送回该群，失败按 PWG01～PWG08 分类回复；群里的非绑定码消息保持
 安静，不再触发私聊回声。`smoke-project-group-redeem.mjs`（镜像内 `/opt/wecom-bridge/`）自检 16 项
-（提取 / 首次绑定 / 幂等 / 换绑 / PWG01～PWG06）。**群消息投递**（任务派发与项目动态推送进项目群）仍属第二批，未部署。
+（提取 / 首次绑定 / 幂等 / 换绑 / PWG01～PWG06）。**群消息投递**（任务派发与项目动态推送进项目群）已按 ADR-077 第二批在本地实现并通过真实群联调（成功投递 / 失败回写 / 停机续传），**尚未同步到 VM**。
 
 当前部署 Tag 为内容哈希 `0.1.0-20261015-bridgedd2084d`（2026-10-15 18:02 同步；源码自本次归档起以仓库 `deploy/test-vm/wecom-bridge/` 为唯一源，bridge3/bridge4 功能均含）。历史 Tag（bridge1～bridge4、`bridgee7cda2f`）都保留在 registry，可用 `-RollbackTo` 回滚。
 

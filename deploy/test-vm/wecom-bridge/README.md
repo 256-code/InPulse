@@ -7,12 +7,48 @@
 ## 目录
 
 - `app/`：桥接脚本。`runner.mjs` 拉起两个子进程——`long-conn.mjs`（企业微信长连接：绑定码兑换、
-  主动推送）与 `bridge.mjs`（轮询 `app.notifications` 推送个人通知）。
+  主动推送、项目群投递消费）与 `bridge.mjs`（轮询 `app.notifications` 推送个人通知并物化项目群投递）。
 - `Dockerfile`：`FROM` 本地 registry 的 api 镜像（复用其 node 24）；`COPY app /opt/wecom-bridge`。
 - `bridge.env`、`app/bridge-config.json`、`app/config.json`、`test-bridge-config.json`：运行配置
   （不含任何 Secret；密钥与密码由 VM 上只读挂载）。
 - `node_modules` 不入库：VM 侧 `app/node_modules` 是上一次安装的结果；仅当 `package.json`
   变化时，同步脚本会在 VM 上用既有桥接镜像执行 `npm install --omit=dev` 刷新。
+
+## 进入会话欢迎语与限频（2026-10-16）
+
+- `enter_chat` 按绑定状态发欢迎语：未绑定 → 绑定引导（默认 10 分钟最多一条）；已绑定/未知 →
+  一句话简短欢迎（默认 24 小时最多一条）。普通文本消息（不是绑定码）同样按绑定状态回复指引。
+- 限频时间戳存 `welcomeStateFile`，默认取命令文件同目录的 `*-welcome.json`（容器内为 `/state/`，
+  tmpfs，容器重启即清空，最多重启后多发一条）。绑定状态查 `app.user_wecom_bindings` 的 ACTIVE 行。
+- `config.json` 可选键：`welcomeUnboundThrottleMs`、`welcomeBoundThrottleMs`（毫秒，0 = 该类用户
+  不再自动发）、`welcomeStateFile`。
+
+## 项目群消息投递（2026-10-16，本地实现，VM 未同步）
+
+- 范围（ADR-077 第二批）：`app.notifications` 的 `task.assigned`（同一次指派事件的多个
+  收件人只占一行，正文聚合「指派给」姓名）与 `app.activity_projection` 中
+  `visibility_scope = 'MEMBER'` 的项目动态；`ADMIN_ONLY` 动态不进群；个人单聊推送
+  不受影响，两条通道并存。
+- 两级分工：`bridge.mjs` 按独立游标物化——在「该项目当前 ACTIVE 群绑定」下插入
+  `app.wecom_group_deliveries` 的 `PENDING` 行（按「绑定行 + 来源类型 + 来源 id」去重；
+  只物化绑定时间之后发生的来源）；`long-conn.mjs` 消费 PENDING 队列，按 id 升序用
+  `aibot_send_msg` + `chat_type:2` 发送 markdown，发送结果以响应帧 `errcode` 为准回写：
+  成功 -> `SENT` + `sent_at`（并清空绑定行 `last_delivery_error`），失败 -> `FAILED` +
+  `attempts` + `last_error`（同时截断回写绑定行 `last_delivery_error`，≤500 字符）。
+- 限速与重试：投递侧 30 条/分钟、1000 条/小时（内存窗口，超限自动退避并限频打日志）；
+  识别为限速/临时错误的响应保持 `PENDING` 并退避 60 秒重试；15 秒无响应按超时保持
+  `PENDING` 稍后重试（响应迟到时可能重复，PoC 取舍）；其余错误直接 `FAILED` 不自动重试；
+  解绑后残留的 `PENDING` 行按「群绑定已解绑」置 FAILED；重启后从 PENDING 断点续传。
+- 游标与配置：`bridge-config.json` 的状态文件新增 `lastGroupNotificationId` /
+  `lastActivityId`，首次运行从当前最大 id 之后开始（不回补历史）；可选键
+  `groupDeliveries=false` 关闭物化、`groupNotificationTypes` 覆盖通知类型清单、
+  `startFromGroupNotificationId` / `startFromActivityId` 指定游标初值。`config.json`
+  可选键 `groupDeliveries=false`、`groupDeliveryPollMs`、`groupDeliveriesPerMinute`、
+  `groupDeliveriesPerHour`。
+- 本地实测（2026-10-16，真实群绑定：项目 1）：任务指派与 MEMBER 动态各 1 条真实送达
+  （errcode=0，投递行 `SENT`）；同批 ADMIN_ONLY 动态未产生投递行；假 chatid 绑定验证
+  失败回写（`errcode 93006 invalid chatid` -> `FAILED` + 绑定行 `last_delivery_error`）；
+  long-conn 停机期间 PENDING 行保留、重启后续传送达。联调合成数据已清理。
 
 ## 同步到 VM
 

@@ -8,7 +8,21 @@
 //   管理员在设置页保存新机器人后本进程自动重连生效。
 //   config.json 键：databaseUrl、keyringFile、configPollMs；
 //   仍兼容旧的静态键 botId/secret（静态模式不轮询、不自动重连）。
-import { readFileSync } from "node:fs";
+// 2026-10-16 改造（进入会话欢迎语 + 限频）：
+//   进入会话不再回显 PoC 调试文案，改为欢迎语：未绑定用户给「把绑定码发给我」的引导
+//   （默认 10 分钟最多一条），已绑定用户只发一句简短欢迎（默认 24 小时最多一条）；
+//   限频时间戳落在 welcomeStateFile（默认与命令文件同目录，容器内即 /state 下）。
+//   config.json 可选键：welcomeUnboundThrottleMs、welcomeBoundThrottleMs（0 = 该类用户不再自动发）、
+//   welcomeStateFile。普通文本消息的自动回复也改为按绑定状态给指引，不再回 PoC 文案。
+// 2026-10-16 改造（ADR-077 第二批：项目群消息投递）：
+//   消费 app.wecom_group_deliveries 的 PENDING 行（由 bridge.mjs 物化），
+//   按 id 升序经 aibot_send_msg + chat_type:2 投递到绑定的项目群；
+//   发送结果以响应帧 errcode 为准回写 SENT / FAILED、attempts 与 last_error
+//   （失败同时截断回写绑定行 last_delivery_error），限速 30 条/分钟、
+//   1000 条/小时，超限自动退避；重启后从 PENDING 断点续传。
+//   config.json 可选键：groupDeliveries=false 关闭、groupDeliveryPollMs、
+//   groupDeliveriesPerMinute、groupDeliveriesPerHour。
+import { readFileSync, writeFileSync } from "node:fs";
 import { createDecipheriv } from "node:crypto";
 import {
   BINDING_FAILURE_REASONS,
@@ -28,6 +42,14 @@ const EXTRA_PUSH_DELAY_MS = 3000;
 const OPEN = 1;
 const PUSH_INTERVAL_MS = 1200;
 const DEFAULT_CONFIG_POLL_MS = 5000;
+const DEFAULT_WELCOME_UNBOUND_THROTTLE_MS = 10 * 60 * 1000;
+const DEFAULT_WELCOME_BOUND_THROTTLE_MS = 24 * 60 * 60 * 1000;
+const WELCOME_STATE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_GROUP_DELIVERY_POLL_MS = 3000;
+const DEFAULT_GROUP_DELIVERIES_PER_MINUTE = 30;
+const DEFAULT_GROUP_DELIVERIES_PER_HOUR = 1000;
+const GROUP_DELIVERY_RESPONSE_TIMEOUT_MS = 15000;
+const GROUP_DELIVERY_RETRY_BACKOFF_MS = 60000;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const SECRET_AAD = Buffer.from("app.wecom_robot_config.secret", "utf8");
@@ -93,6 +115,38 @@ const configPollMs =
   Number(config.configPollMs) > 0
     ? Number(config.configPollMs)
     : DEFAULT_CONFIG_POLL_MS;
+
+// 进入会话欢迎语配置：未绑定用户按短窗口重复提醒绑定，已绑定用户按长窗口只问好。
+const welcomeUnboundThrottleMs = readThrottleWindow(
+  config.welcomeUnboundThrottleMs,
+  DEFAULT_WELCOME_UNBOUND_THROTTLE_MS,
+);
+const welcomeBoundThrottleMs = readThrottleWindow(
+  config.welcomeBoundThrottleMs,
+  DEFAULT_WELCOME_BOUND_THROTTLE_MS,
+);
+const welcomeStateFile =
+  typeof config.welcomeStateFile === "string" &&
+  config.welcomeStateFile.trim().length > 0
+    ? config.welcomeStateFile.trim()
+    : commandFile.endsWith(".txt")
+      ? commandFile.slice(0, -4) + "-welcome.json"
+      : commandFile + "-welcome.json";
+const groupDeliveriesEnabled = dbMode && config.groupDeliveries !== false;
+const groupDeliveryPollMs = readPositiveNumber(
+  config.groupDeliveryPollMs,
+  DEFAULT_GROUP_DELIVERY_POLL_MS,
+);
+const groupDeliveriesPerMinute = readPositiveNumber(
+  config.groupDeliveriesPerMinute,
+  DEFAULT_GROUP_DELIVERIES_PER_MINUTE,
+);
+const groupDeliveriesPerHour = readPositiveNumber(
+  config.groupDeliveriesPerHour,
+  DEFAULT_GROUP_DELIVERIES_PER_HOUR,
+);
+const welcomeSentAt = new Map();
+loadWelcomeState();
 
 const pool = dbMode
   ? new Pool({ connectionString: databaseUrl, max: 2 })
@@ -304,6 +358,404 @@ function sendCard(userId, title, desc, url) {
   });
 }
 
+// ---- 项目群投递消费（ADR-077 第二批，2026-10-16）----
+// 队列行由 bridge.mjs 物化（task.assigned 通知 + MEMBER 可见项目动态）；
+// 同一审计事件的多个收件人只占一行，这里按事件聚合收件人姓名后再发。
+// 发送结果以 aibot_send_msg 响应帧为准回写状态；重启后从 PENDING 断点续传。
+
+const GROUP_NEWLINE = String.fromCharCode(10);
+const GROUP_PRIORITY_LABELS = {
+  LOW: "低",
+  NORMAL: "普通",
+  HIGH: "高",
+  URGENT: "紧急",
+};
+const GROUP_STATUS_LABELS = {
+  TODO: "未完成",
+  DONE: "已完成",
+  CANCELED: "已取消",
+};
+const GROUP_PENDING_SQL = [
+  "select",
+  "  d.id as delivery_id,",
+  "  d.group_binding_id,",
+  "  d.source_kind,",
+  "  d.source_id,",
+  "  g.status as binding_status,",
+  "  g.wecom_chat_id",
+  "from app.wecom_group_deliveries d",
+  "join app.project_wecom_groups g on g.id = d.group_binding_id",
+  "where d.status = 'PENDING'",
+  "order by d.id asc",
+  "limit 1",
+].join(" ");
+const GROUP_NOTIFICATION_SQL = [
+  "select",
+  "  n.id,",
+  "  n.notification_type,",
+  "  n.title,",
+  "  n.body as task_code,",
+  "  n.source_chain_id,",
+  "  n.source_sequence,",
+  "  t.title as task_title,",
+  "  t.priority,",
+  "  t.work_status,",
+  "  t.due_at,",
+  "  p.name as project_name",
+  "from app.notifications n",
+  "left join app.tasks t",
+  "  on t.id = nullif(substring(n.target_path from 'taskId=([0-9]+)'), '')::int",
+  "left join app.projects p on p.id = n.project_id",
+  "where n.id = $1",
+].join(" ");
+const GROUP_NOTIFICATION_RECIPIENTS_SQL = [
+  "select u.name",
+  "from app.notifications n",
+  "join app.users u on u.id = n.recipient_id",
+  "where n.source_chain_id = $1",
+  "  and n.source_sequence = $2",
+  "  and n.notification_type = $3",
+  "order by n.id asc",
+].join(" ");
+const GROUP_ACTIVITY_SQL = [
+  "select",
+  "  a.id,",
+  "  a.summary,",
+  "  a.occurred_at,",
+  "  p.name as project_name,",
+  "  u.name as actor_name",
+  "from app.activity_projection a",
+  "left join app.projects p on p.id = a.project_id",
+  "left join app.users u on u.id = a.actor_id",
+  "where a.id = $1",
+].join(" ");
+
+let groupDeliveryInFlight = null;
+let groupDeliveryRateLogAt = 0;
+const groupSendTimestamps = [];
+const groupDeliveryBackoffUntil = new Map();
+
+function clampGroupText(value, maxChars) {
+  const text = String(value === null || value === undefined ? "" : value)
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1) + "…";
+}
+
+function formatGroupTime(value) {
+  if (value === null || value === undefined) return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function groupSendCountSince(now, windowMs) {
+  const from = now - windowMs;
+  let count = 0;
+  for (let index = groupSendTimestamps.length - 1; index >= 0; index -= 1) {
+    if (groupSendTimestamps[index] >= from) count += 1;
+    else break;
+  }
+  return count;
+}
+
+function pruneGroupSendTimestamps(now) {
+  const cutoff = now - 60 * 60 * 1000;
+  let remove = 0;
+  while (
+    remove < groupSendTimestamps.length &&
+    groupSendTimestamps[remove] < cutoff
+  ) {
+    remove += 1;
+  }
+  if (remove > 0) groupSendTimestamps.splice(0, remove);
+}
+
+async function buildGroupNotificationContent(sourceId) {
+  const detail = await pool.query(GROUP_NOTIFICATION_SQL, [sourceId]);
+  const item = detail.rows[0];
+  if (item === undefined) return null;
+  if (item.notification_type !== "task.assigned") {
+    const projectName = clampGroupText(item.project_name, 40);
+    const lines = [
+      projectName.length > 0
+        ? "**【" + projectName + "】项目通知**"
+        : "**【项目通知】**",
+    ];
+    const title = clampGroupText(item.title, 60);
+    if (title.length > 0) lines.push("**" + title + "**");
+    return lines.join(GROUP_NEWLINE);
+  }
+  const recipients = await pool.query(GROUP_NOTIFICATION_RECIPIENTS_SQL, [
+    item.source_chain_id,
+    item.source_sequence,
+    item.notification_type,
+  ]);
+  const names = [];
+  for (const row of recipients.rows) {
+    const name = clampGroupText(row.name, 30);
+    if (name.length > 0 && !names.includes(name)) names.push(name);
+  }
+  const projectName = clampGroupText(item.project_name, 40);
+  const lines = [
+    projectName.length > 0
+      ? "**【" + projectName + "】新任务指派**"
+      : "**【新任务指派】**",
+  ];
+  const taskTitle = clampGroupText(
+    item.task_title === null || item.task_title === undefined
+      ? item.title
+      : item.task_title,
+    60,
+  );
+  if (taskTitle.length > 0) lines.push("**" + taskTitle + "**");
+  const headMeta = [];
+  const code = clampGroupText(item.task_code, 40);
+  if (code.length > 0) headMeta.push("编号 " + code);
+  headMeta.push("指派给 " + (names.length > 0 ? names.join("、") : "（未知）"));
+  lines.push(headMeta.join(" ｜ "));
+  const taskMeta = [];
+  const priority = GROUP_PRIORITY_LABELS[item.priority];
+  if (priority !== undefined) taskMeta.push("优先级 " + priority);
+  const status = GROUP_STATUS_LABELS[item.work_status];
+  if (status !== undefined) taskMeta.push("状态 " + status);
+  const due = formatGroupTime(item.due_at);
+  if (due.length > 0) taskMeta.push("截止 " + due);
+  if (taskMeta.length > 0) lines.push(taskMeta.join(" ｜ "));
+  return lines.join(GROUP_NEWLINE);
+}
+
+async function buildGroupActivityContent(sourceId) {
+  const detail = await pool.query(GROUP_ACTIVITY_SQL, [sourceId]);
+  const item = detail.rows[0];
+  if (item === undefined) return null;
+  const projectName = clampGroupText(item.project_name, 40);
+  const lines = [
+    projectName.length > 0
+      ? "**【" + projectName + "】项目动态**"
+      : "**【项目动态】**",
+  ];
+  const summary = clampGroupText(item.summary, 120);
+  if (summary.length > 0) lines.push("**" + summary + "**");
+  const meta = [];
+  const actorName = clampGroupText(item.actor_name, 30);
+  if (actorName.length > 0) meta.push("操作人 " + actorName);
+  const occurred = formatGroupTime(item.occurred_at);
+  if (occurred.length > 0) meta.push(occurred);
+  if (meta.length > 0) lines.push(meta.join(" ｜ "));
+  return lines.join(GROUP_NEWLINE);
+}
+
+async function markGroupDeliverySent(deliveryId, bindingId) {
+  await pool.query(
+    [
+      "update app.wecom_group_deliveries",
+      "set status = 'SENT', sent_at = now(), attempts = attempts + 1, last_error = null",
+      "where id = $1",
+    ].join(" "),
+    [deliveryId],
+  );
+  await pool.query(
+    [
+      "update app.project_wecom_groups",
+      "set last_delivery_error = null, updated_at = now()",
+      "where id = $1 and last_delivery_error is not null",
+    ].join(" "),
+    [bindingId],
+  );
+}
+
+async function markGroupDeliveryFailed(deliveryId, bindingId, reason) {
+  const text = clampGroupText(reason, 500) || "未知错误";
+  await pool.query(
+    [
+      "update app.wecom_group_deliveries",
+      "set status = 'FAILED', attempts = attempts + 1, last_error = $2",
+      "where id = $1",
+    ].join(" "),
+    [deliveryId, text],
+  );
+  await pool.query(
+    [
+      "update app.project_wecom_groups",
+      "set last_delivery_error = $2, updated_at = now()",
+      "where id = $1 and status = 'ACTIVE'",
+    ].join(" "),
+    [bindingId, text],
+  );
+  log("群投递失败：投递行", deliveryId, "绑定行", bindingId, "原因:", text);
+}
+
+async function keepGroupDeliveryForRetry(deliveryId, note) {
+  groupDeliveryBackoffUntil.set(
+    deliveryId,
+    Date.now() + GROUP_DELIVERY_RETRY_BACKOFF_MS,
+  );
+  await pool.query(
+    [
+      "update app.wecom_group_deliveries",
+      "set attempts = attempts + 1, last_error = $2",
+      "where id = $1 and status = 'PENDING'",
+    ].join(" "),
+    [deliveryId, clampGroupText(note, 500) || "稍后重试"],
+  );
+}
+
+function isRetryableGroupSendError(errcode, errmsg) {
+  if (errcode === 45009) return true;
+  const text = String(errmsg === null || errmsg === undefined ? "" : errmsg);
+  return /限|频繁|too many|rate|limit/i.test(text);
+}
+
+async function completeGroupDelivery(frame) {
+  const inflight = groupDeliveryInFlight;
+  if (inflight === null) return;
+  const reqId =
+    frame.headers && typeof frame.headers.req_id === "string"
+      ? frame.headers.req_id
+      : null;
+  if (reqId !== inflight.reqId) return;
+  groupDeliveryInFlight = null;
+  if (inflight.timer !== null) clearTimeout(inflight.timer);
+  if (frame.errcode === 0) {
+    await markGroupDeliverySent(inflight.deliveryId, inflight.bindingId);
+    log(
+      "群投递已送达：投递行",
+      inflight.deliveryId,
+      "绑定行",
+      inflight.bindingId,
+    );
+    return;
+  }
+  const errorText =
+    "errcode " +
+    frame.errcode +
+    " " +
+    String(
+      frame.errmsg === null || frame.errmsg === undefined ? "" : frame.errmsg,
+    );
+  if (isRetryableGroupSendError(frame.errcode, frame.errmsg)) {
+    await keepGroupDeliveryForRetry(
+      inflight.deliveryId,
+      "限速/临时错误，稍后重试：" + errorText,
+    );
+    log(
+      "群投递遇到限速/临时错误，保持 PENDING 稍后重试：投递行",
+      inflight.deliveryId,
+      errorText,
+    );
+    return;
+  }
+  await markGroupDeliveryFailed(
+    inflight.deliveryId,
+    inflight.bindingId,
+    "发送失败：" + errorText,
+  );
+}
+
+async function pollGroupDeliveries() {
+  if (!groupDeliveriesEnabled || pool === null) return;
+  if (groupDeliveryInFlight !== null) return;
+  if (!subscribed || socket === null || socket.readyState !== OPEN) return;
+  const now = Date.now();
+  pruneGroupSendTimestamps(now);
+  if (
+    groupSendCountSince(now, 60 * 1000) >= groupDeliveriesPerMinute ||
+    groupSendCountSince(now, 60 * 60 * 1000) >= groupDeliveriesPerHour
+  ) {
+    if (now - groupDeliveryRateLogAt > 60000) {
+      groupDeliveryRateLogAt = now;
+      log("群投递达到机器人限速窗口，窗口释放后自动继续");
+    }
+    return;
+  }
+  const pending = await pool.query(GROUP_PENDING_SQL);
+  const row = pending.rows[0];
+  if (row === undefined) return;
+  const deliveryId = Number(row.delivery_id);
+  const bindingId = Number(row.group_binding_id);
+  const backoffUntil = groupDeliveryBackoffUntil.get(deliveryId);
+  if (backoffUntil !== undefined && backoffUntil > now) return;
+  if (row.binding_status !== "ACTIVE") {
+    await markGroupDeliveryFailed(
+      deliveryId,
+      bindingId,
+      "群绑定已解绑，消息未投递",
+    );
+    return;
+  }
+  let content = null;
+  if (row.source_kind === "NOTIFICATION") {
+    content = await buildGroupNotificationContent(Number(row.source_id));
+  } else if (row.source_kind === "ACTIVITY") {
+    content = await buildGroupActivityContent(Number(row.source_id));
+  }
+  if (content === null || content.trim().length === 0) {
+    await markGroupDeliveryFailed(
+      deliveryId,
+      bindingId,
+      "来源数据不存在，无法生成群消息",
+    );
+    return;
+  }
+  const reqId = sendCommand("aibot_send_msg", {
+    chatid: row.wecom_chat_id,
+    chat_type: 2,
+    msgtype: "markdown",
+    markdown: { content: content },
+  });
+  if (reqId === null) return;
+  groupSendTimestamps.push(now);
+  const inflight = {
+    reqId: reqId,
+    deliveryId: deliveryId,
+    bindingId: bindingId,
+    timer: null,
+  };
+  inflight.timer = setTimeout(() => {
+    if (groupDeliveryInFlight !== inflight) return;
+    groupDeliveryInFlight = null;
+    void keepGroupDeliveryForRetry(
+      deliveryId,
+      "发送响应超时（" +
+        Math.round(GROUP_DELIVERY_RESPONSE_TIMEOUT_MS / 1000) +
+        " 秒），稍后重试",
+    )
+      .then(() => {
+        log("群投递响应超时：投递行", deliveryId, "（保持 PENDING，稍后重试）");
+      })
+      .catch((error) => {
+        log(
+          "群投递超时回写失败:",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+  }, GROUP_DELIVERY_RESPONSE_TIMEOUT_MS);
+  groupDeliveryInFlight = inflight;
+  groupDeliveryBackoffUntil.delete(deliveryId);
+  log(
+    "已发起群投递：投递行",
+    deliveryId,
+    "绑定行",
+    bindingId,
+    "-> 群",
+    row.wecom_chat_id,
+  );
+  log(
+    "  消息内容:",
+    clampGroupText(content.split(GROUP_NEWLINE).join(" / "), 140),
+  );
+}
+
 function onSubscribed() {
   log("订阅成功：长连接已就绪，等待回调或主动推送");
   if (extraUserIds.length > 0 && !extraPushDone) {
@@ -320,6 +772,130 @@ function onSubscribed() {
       }
     }, EXTRA_PUSH_DELAY_MS);
   }
+}
+
+// 欢迎语与自动回复文案（企业微信 markdown）。
+const WELCOME_BOUND_TEXT = [
+  "**你好，我是 InPulse 任务提醒机器人**",
+  "",
+  "任务指派、完成等提醒会发到这里。",
+].join("\n");
+const WELCOME_UNBOUND_TEXT = [
+  "**你好，我是 InPulse 任务提醒机器人**",
+  "",
+  "把 InPulse 里生成的**绑定码**发给我即可完成绑定，之后派给你的任务会在这里提醒你。",
+  "",
+  "绑定码在 InPulse 网页右上角「账户菜单 → 绑定企业微信」里生成。",
+].join("\n");
+const REPLY_BOUND_TEXT = [
+  "**消息已收到**",
+  "",
+  "我负责发送 InPulse 的任务提醒；需要解绑或重新绑定请在 InPulse 网页的账户菜单里操作。",
+].join("\n");
+const REPLY_UNBOUND_TEXT = [
+  "**这不像是一个绑定码**",
+  "",
+  "绑定码请在 InPulse 网页右上角「账户菜单 → 绑定企业微信」里生成，生成后把码发给我即可完成绑定。",
+].join("\n");
+
+function readPositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readThrottleWindow(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function loadWelcomeState() {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(welcomeStateFile, "utf8"));
+  } catch {
+    // 首次运行或文件不可读：从空状态开始（最多重启后多发一条欢迎语）
+    return;
+  }
+  const sentAt = parsed && typeof parsed === "object" ? parsed.sentAt : null;
+  if (sentAt === null || typeof sentAt !== "object") return;
+  for (const [key, value] of Object.entries(sentAt)) {
+    const timestamp = Number(value);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      welcomeSentAt.set(key, timestamp);
+    }
+  }
+}
+
+function persistWelcomeState() {
+  const cutoff = Date.now() - WELCOME_STATE_RETENTION_MS;
+  const sentAt = {};
+  for (const [key, value] of welcomeSentAt) {
+    if (value >= cutoff) sentAt[key] = value;
+  }
+  try {
+    writeFileSync(
+      welcomeStateFile,
+      JSON.stringify({ sentAt: sentAt, updatedAt: new Date().toISOString() }),
+      "utf8",
+    );
+  } catch (error) {
+    log(
+      "写入欢迎语状态失败（本次仅内存限频生效）:",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+// 该企业微信用户在本地库是否有 ACTIVE 绑定；返回 null 表示无法判断（无数据库或查询失败）。
+async function isWecomUserBound(wecomUserId) {
+  if (!dbMode || pool === null) return null;
+  try {
+    const result = await pool.query(
+      "select 1 from app.user_wecom_bindings where wecom_userid = $1 and status = 'ACTIVE' limit 1",
+      [wecomUserId],
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    log(
+      "读取绑定状态失败（本轮按已绑定处理，只发简短欢迎）:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
+async function sendEnterChatWelcomeIfDue(wecomUserId) {
+  const bound = await isWecomUserBound(wecomUserId);
+  const unbound = bound === false;
+  const throttleMs = unbound
+    ? welcomeUnboundThrottleMs
+    : welcomeBoundThrottleMs;
+  if (throttleMs <= 0) {
+    log("进入会话欢迎语已关闭（限频窗口为 0），跳过:", wecomUserId);
+    return;
+  }
+  const now = Date.now();
+  const lastSentAt = welcomeSentAt.get(wecomUserId) ?? 0;
+  if (now - lastSentAt < throttleMs) {
+    log(
+      "跳过进入会话欢迎语（限频中，还剩 " +
+        Math.ceil((throttleMs - (now - lastSentAt)) / 1000) +
+        " 秒）:",
+      wecomUserId,
+    );
+    return;
+  }
+  welcomeSentAt.set(wecomUserId, now);
+  persistWelcomeState();
+  log(
+    "发送进入会话欢迎语:",
+    wecomUserId,
+    unbound ? "(未绑定)" : "(已绑定/未知)",
+  );
+  sendMarkdown(
+    wecomUserId,
+    unbound ? WELCOME_UNBOUND_TEXT : WELCOME_BOUND_TEXT,
+  );
 }
 
 async function tryRedeemBindingCode(rawText, wecomUserId) {
@@ -444,15 +1020,14 @@ async function handleCallback(frame) {
       log("本连接已被新连接踢下线（单个机器人同时只允许一条长连接）");
       return;
     }
-    if (eventType === "enter_chat" && pushOnCallback && userId !== null) {
-      sendMarkdown(
-        userId,
-        "**InPulse PoC**" +
-          String.fromCharCode(10) +
-          "收到进入会话事件，userid = " +
-          userId +
-          "。这条是主动推送。",
-      );
+    if (
+      eventType === "enter_chat" &&
+      pushOnCallback &&
+      userId !== null &&
+      body.chattype !== "group"
+    ) {
+      // 欢迎语按绑定状态 + 限频窗口发送，不再回显 PoC 调试文案。
+      await sendEnterChatWelcomeIfDue(userId);
     }
     return;
   }
@@ -481,13 +1056,11 @@ async function handleCallback(frame) {
     }
   }
   if (pushOnCallback && userId !== null && !isGroupChat) {
+    // 不是绑定码：按绑定状态给下一步指引（未绑定引导去生成绑定码）。
+    const bound = await isWecomUserBound(userId);
     sendMarkdown(
       userId,
-      "**InPulse PoC**" +
-        String.fromCharCode(10) +
-        "已收到你的消息，userid = " +
-        userId +
-        "。这条是 aibot_send_msg 主动推送。",
+      bound === false ? REPLY_UNBOUND_TEXT : REPLY_BOUND_TEXT,
     );
   }
 }
@@ -537,6 +1110,14 @@ function handleFrame(raw) {
         }
         scheduleReconnect();
       }
+    }
+    if (groupDeliveryInFlight !== null) {
+      void completeGroupDelivery(frame).catch((error) => {
+        log(
+          "群投递回写失败:",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
     }
     return;
   }
@@ -775,6 +1356,27 @@ if (dbMode) {
   setInterval(() => {
     refreshCredentials();
   }, configPollMs);
+  if (groupDeliveriesEnabled) {
+    setInterval(() => {
+      pollGroupDeliveries().catch((error) => {
+        log(
+          "群投递轮询异常:",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    }, groupDeliveryPollMs);
+    log(
+      "项目群投递：每 " +
+        groupDeliveryPollMs +
+        " 毫秒检查一次 PENDING 队列（限速 " +
+        groupDeliveriesPerMinute +
+        " 条/分钟、" +
+        groupDeliveriesPerHour +
+        " 条/小时）",
+    );
+  } else {
+    log("项目群投递未启用（groupDeliveries=false 或未配置数据库）");
+  }
 } else {
   activeCreds = { botId: config.botId, secret: config.secret, rowVersion: 0 };
   log("机器人凭据来源：config.json 静态配置 bot_id=" + activeCreds.botId);
