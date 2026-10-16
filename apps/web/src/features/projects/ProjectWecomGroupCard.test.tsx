@@ -129,6 +129,11 @@ describe("ProjectWecomGroupCard（ADR-077）", () => {
     const confirmButtons = await screen.findAllByRole("button", {
       name: "确认解绑",
     });
+    // 气泡挂载类名是布局修复的挂点：antd-adapter.css 会把所有 .ant-popover 容器压成
+    // 1×1 透明盒，只有带上这个类才有把它还原成正常卡片的高特异性规则。
+    expect(
+      document.querySelector(".ant-popover.wecom-unbind-popconfirm"),
+    ).not.toBeNull();
     fireEvent.click(confirmButtons[confirmButtons.length - 1]!);
 
     await waitFor(() =>

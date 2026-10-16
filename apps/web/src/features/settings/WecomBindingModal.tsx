@@ -165,6 +165,8 @@ export const WecomBindingModal: React.FC<WecomBindingModalProps> = ({
               description="解除后，指派给你的任务不会再通过企业微信机器人提醒；你可以随时重新绑定。"
               okText="解除绑定"
               cancelText="取消"
+              classNames={{ root: "wecom-unbind-popconfirm" }}
+              placement="topRight"
               okButtonProps={{ danger: true }}
               onConfirm={() => unbind.mutate()}
             >

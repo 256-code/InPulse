@@ -1,5 +1,11 @@
-// InPulse -> 企业微信智能机器人 临时通知桥 v4（演示用，不进入 InPulse 仓库）
+// InPulse -> 企业微信智能机器人 临时通知桥 v5（演示用，不进入 InPulse 仓库）
 // v4 变化：消息改为 template_card 卡片（主标题 + 编号 + 字段行），通过 PoC raw 通道发送。
+// v5 变化（ADR-077 第二批，2026-10-16）：新增项目群投递物化——把新的 task.assigned
+// 通知与 MEMBER 可见项目动态写成 app.wecom_group_deliveries 的 PENDING 行，
+// 由 long-conn 消费并回写 SENT / FAILED；个人单聊推送逻辑不变。
+// 可选键：groupDeliveries=false 关闭物化、groupNotificationTypes 覆盖类型清单
+// （默认 ["task.assigned"]）、startFromGroupNotificationId / startFromActivityId
+// 指定游标初值（缺省从当前最大 id 开始，不回补历史）。
 // 数据：直连本地开发库只读查询（演示用 cluster_bootstrap；正式实现不得照搬此方式）。
 import {
   appendFileSync,
@@ -71,6 +77,15 @@ const maxIterations =
     ? config.maxIterations
     : null;
 const cardActionUrl = String(config.cardActionUrl || "https://example.com");
+const groupDeliveriesEnabled = config.groupDeliveries !== false;
+const groupNotificationTypes = new Set(
+  Array.isArray(config.groupNotificationTypes) &&
+    config.groupNotificationTypes.length > 0
+    ? config.groupNotificationTypes.filter(
+        (value) => typeof value === "string" && value.length > 0,
+      )
+    : ["task.assigned"],
+);
 
 const PRIORITY_LABELS = {
   LOW: "低",
@@ -220,18 +235,24 @@ function appendCommand(line) {
   appendFileSync(commandFile, prefix + line + "\n", "utf8");
 }
 
-function loadLastId() {
+function loadState() {
   if (existsSync(stateFile)) {
     try {
       const state = JSON.parse(readFileSync(stateFile, "utf8"));
-      if (Number.isInteger(state.lastId)) return state.lastId;
+      return {
+        lastId: Number.isInteger(state.lastId) ? state.lastId : null,
+        lastGroupNotificationId: Number.isInteger(state.lastGroupNotificationId)
+          ? state.lastGroupNotificationId
+          : null,
+        lastActivityId: Number.isInteger(state.lastActivityId)
+          ? state.lastActivityId
+          : null,
+      };
     } catch {
       // 状态文件损坏时忽略，走正常初始化
     }
   }
-  if (Number.isInteger(config.startFromId) && config.startFromId >= 0)
-    return config.startFromId;
-  return null;
+  return { lastId: null, lastGroupNotificationId: null, lastActivityId: null };
 }
 
 async function reloadRecipients() {
@@ -277,6 +298,8 @@ async function reloadRecipients() {
 }
 
 let lastId = null;
+let lastGroupNotificationId = null;
+let lastActivityId = null;
 let iterations = 0;
 const pool = new Pool({ connectionString: databaseUrl, max: 2 });
 
@@ -287,8 +310,113 @@ async function currentMaxId() {
   return Number(result.rows[0].max_id);
 }
 
+async function currentMaxActivityId() {
+  const result = await pool.query(
+    "select coalesce(max(id), 0) as max_id from app.activity_projection",
+  );
+  return Number(result.rows[0].max_id);
+}
+
+// 物化项目群投递：为每条候选来源在「该项目当前 ACTIVE 群绑定」下写一条 PENDING。
+// 同一审计事件的多个收件人（同 chain+sequence+type）只占一行，消费侧再聚合姓名；
+// 只物化「绑定时间之后发生」的来源，桥接停机期间也不会补发绑定前的历史。
+async function insertGroupDelivery(kind, sourceId, projectId, sourceAt) {
+  const result = await pool.query(
+    [
+      "insert into app.wecom_group_deliveries (group_binding_id, source_kind, source_id)",
+      "select g.id, $1, $2",
+      "from app.project_wecom_groups g",
+      "where g.project_id = $3 and g.status = 'ACTIVE' and g.bound_at <= $4",
+      "on conflict (group_binding_id, source_kind, source_id) do nothing",
+    ].join(" "),
+    [kind, sourceId, projectId, sourceAt],
+  );
+  return result.rowCount;
+}
+
+async function materializeGroupDeliveries() {
+  if (!groupDeliveriesEnabled || dryRun) return 0;
+  let created = 0;
+
+  const notifications = await pool.query(
+    [
+      "select n.id, n.project_id, n.notification_type, n.created_at, n.source_chain_id, n.source_sequence",
+      "from app.notifications n",
+      "where n.id > $1",
+      "order by n.id asc",
+      "limit 200",
+    ].join(" "),
+    [lastGroupNotificationId],
+  );
+  const representatives = new Map();
+  let maxNotificationId = lastGroupNotificationId;
+  for (const row of notifications.rows) {
+    const id = Number(row.id);
+    if (id > maxNotificationId) maxNotificationId = id;
+    if (!groupNotificationTypes.has(row.notification_type)) continue;
+    if (row.project_id === null || row.project_id === undefined) continue;
+    const key =
+      row.source_chain_id +
+      "|" +
+      row.source_sequence +
+      "|" +
+      row.notification_type;
+    const current = representatives.get(key);
+    if (current === undefined || id < current.sourceId) {
+      representatives.set(key, {
+        sourceId: id,
+        projectId: Number(row.project_id),
+        sourceAt: row.created_at,
+      });
+    }
+  }
+  for (const item of representatives.values()) {
+    created += await insertGroupDelivery(
+      "NOTIFICATION",
+      item.sourceId,
+      item.projectId,
+      item.sourceAt,
+    );
+  }
+  lastGroupNotificationId = maxNotificationId;
+
+  const activities = await pool.query(
+    [
+      "select a.id, a.project_id, a.visibility_scope, a.occurred_at",
+      "from app.activity_projection a",
+      "where a.id > $1",
+      "order by a.id asc",
+      "limit 200",
+    ].join(" "),
+    [lastActivityId],
+  );
+  let maxActivityId = lastActivityId;
+  for (const row of activities.rows) {
+    const id = Number(row.id);
+    if (id > maxActivityId) maxActivityId = id;
+    if (row.visibility_scope !== "MEMBER") continue;
+    created += await insertGroupDelivery(
+      "ACTIVITY",
+      id,
+      Number(row.project_id),
+      row.occurred_at,
+    );
+  }
+  lastActivityId = maxActivityId;
+  return created;
+}
+
 async function pollOnce() {
   await reloadRecipients();
+  let materialized = 0;
+  try {
+    materialized = await materializeGroupDeliveries();
+  } catch (error) {
+    log(
+      "群投递物化失败（本轮仅跳过物化）:",
+      error && error.message ? error.message : String(error),
+    );
+  }
   const result = await pool.query(POLL_SQL, [lastId]);
   let delivered = 0;
   for (const row of result.rows) {
@@ -321,45 +449,100 @@ async function pollOnce() {
     }
     delivered += 1;
   }
-  return { rows: result.rows.length, delivered };
+  return { rows: result.rows.length, delivered, materialized };
 }
 
 function persistState() {
   writeFileSync(
     stateFile,
-    JSON.stringify({ lastId: lastId, updatedAt: new Date().toISOString() }),
+    JSON.stringify({
+      lastId: lastId,
+      lastGroupNotificationId: lastGroupNotificationId,
+      lastActivityId: lastActivityId,
+      updatedAt: new Date().toISOString(),
+    }),
     "utf8",
   );
 }
 
 async function main() {
   log(
-    "通知桥 v4 启动",
+    "通知桥 v5 启动",
     dryRun ? "(dry-run)" : "(实发)",
     "| 转发范围:",
     forwardAll ? "全部类型" : [...forwardTypes].join(","),
     "| 卡片动作链接:",
     cardActionUrl,
   );
-  lastId = loadLastId();
+  const state = loadState();
+  lastId = state.lastId;
+  if (
+    lastId === null &&
+    Number.isInteger(config.startFromId) &&
+    config.startFromId >= 0
+  ) {
+    lastId = config.startFromId;
+  }
   if (lastId === null) {
     lastId = await currentMaxId();
     log("无状态文件且未指定 startFromId，从当前最大 id 之后开始:", lastId);
   } else {
     log("从 id >", lastId, "开始轮询");
   }
+  lastGroupNotificationId = state.lastGroupNotificationId;
+  if (
+    lastGroupNotificationId === null &&
+    Number.isInteger(config.startFromGroupNotificationId) &&
+    config.startFromGroupNotificationId >= 0
+  ) {
+    lastGroupNotificationId = config.startFromGroupNotificationId;
+  }
+  if (lastGroupNotificationId === null) {
+    lastGroupNotificationId = await currentMaxId();
+    log(
+      "群投递：通知游标从当前最大通知 id 之后开始",
+      lastGroupNotificationId,
+      "（不回补历史）",
+    );
+  }
+  lastActivityId = state.lastActivityId;
+  if (
+    lastActivityId === null &&
+    Number.isInteger(config.startFromActivityId) &&
+    config.startFromActivityId >= 0
+  ) {
+    lastActivityId = config.startFromActivityId;
+  }
+  if (lastActivityId === null) {
+    lastActivityId = await currentMaxActivityId();
+    log(
+      "群投递：动态游标从当前最大动态 id 之后开始",
+      lastActivityId,
+      "（只投递此后新增的 MEMBER 可见动态）",
+    );
+  }
+  log(
+    "群投递物化:",
+    groupDeliveriesEnabled && !dryRun ? "已启用" : "未启用",
+    "| 通知游标",
+    lastGroupNotificationId,
+    "| 动态游标",
+    lastActivityId,
+  );
   if (!dryRun) persistState();
 
   for (;;) {
     iterations += 1;
     try {
       const outcome = await pollOnce();
-      if (outcome.rows > 0) {
+      if (outcome.rows > 0 || outcome.materialized > 0) {
         log(
           "本轮读取",
           outcome.rows,
           "条，投递",
           outcome.delivered,
+          "条，群投递物化",
+          outcome.materialized,
           "条，lastId =",
           lastId,
         );

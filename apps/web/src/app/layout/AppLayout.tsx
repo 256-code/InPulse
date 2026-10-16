@@ -302,7 +302,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const handleAccountAction = async () => {
     setAccountOpen(false);
     if (status !== "authenticated") {
-      // 未登录先回登录页：默认本地口令表单 + 统一身份认证入口（ADR-036）。
+      // 未登录先回登录页：登录页默认直达统一身份认证（ADR-080）。
       navigate("/login");
       return;
     }
@@ -314,10 +314,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       setIsLoggingOut(false);
       return;
     }
-    // 退出后回到干净的 /login（不带 from），由用户选择本地口令或统一身份认证
-    // （ADR-036）。退出态必须保持到路由真正落到 /login（见 isLoggingOut 的
-    // effect）：认证态一旦收敛为匿名，受保护页面若仍在渲染，RequireAuth 会
-    // 先把当前地址写成 /login?from=...，换账号登录就会落回上一个账号的页面。
+    // 退出后回到干净的 /login（不带 from），登录页随后自动发起统一身份认证
+    // （ADR-080；SSO 未启用时由服务端 302 回落到本地应急口令入口）。退出态
+    // 必须保持到路由真正落到 /login（见 isLoggingOut 的 effect）：认证态一旦
+    // 收敛为匿名，受保护页面若仍在渲染，RequireAuth 会先把当前地址写成
+    // /login?from=...，换账号登录就会落回上一个账号的页面。
     navigate("/login");
   };
 

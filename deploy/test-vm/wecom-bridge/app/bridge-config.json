@@ -9,5 +9,6 @@
   "stateFile": "/state/bridge-state.json",
   "pollIntervalMs": 3000,
   "startFromId": 22145,
-  "cardActionUrl": "https://test-inpulse.libiaorobot.com/"
+  "cardActionUrl": "https://test-inpulse.libiaorobot.com/",
+  "groupDeliveries": true
 }

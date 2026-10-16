@@ -8015,6 +8015,32 @@ div.ant-popover.import-member-popover
   margin-top: 12px;
 }
 
+/* 解绑二次确认气泡（项目群卡片与账户菜单的绑定弹层共用）：antd-adapter.css 为原型里的
+   账户 / 通知气泡把 `.ant-popover-container` 压成 1×1 透明盒、`.ant-popover-content`
+   绝对定位（选择器写在 `div.ant-popover > ...` 上）；普通 Popconfirm 会被一并按那个引用系
+   摆放——气泡从锚点向右下方生长、压在触发按钮上并越出面板右缘。
+   这里照 calm-date-picker.css / .import-member-popover 的写法，用「元素 + 类」提高特异性把
+   容器还原成正常尺寸的白色卡片、内容层回到常规流；容器尺寸等于气泡尺寸后，rc-trigger 才能把
+   它锚到按钮上（放不下时按 autoAdjustOverflow 自动翻转）。 */
+div.ant-popover.wecom-unbind-popconfirm > div.ant-popover-container {
+  width: auto;
+  height: auto;
+  padding: 12px;
+  border: 1px solid #dce7f2;
+  border-radius: 10px;
+  background: #ffffff;
+  background-clip: border-box;
+  box-shadow:
+    0 18px 44px -14px #10253e2e,
+    0 3px 8px -3px #10253e14;
+}
+
+div.ant-popover.wecom-unbind-popconfirm
+  > div.ant-popover-container
+  > div.ant-popover-content {
+  position: static;
+}
+
 /* ADR-070 企业微信机器人设置面板：正文统一内缩（与标题带 20px 对齐），字段单列堆叠
  * （标签在上、控件全宽、提示紧随），替代两列等宽网格造成的标签 / 控件远距与行间拥挤。 */
 .wecom-robot-body {

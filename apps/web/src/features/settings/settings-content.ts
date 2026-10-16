@@ -67,6 +67,24 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     member: "leader",
     note: "物理删除且不可撤销，仅系统审计链保留一条记录",
   },
+  {
+    feature: "导入文档到项目",
+    admin: true,
+    member: true,
+    note: "项目活跃成员或管理员；负责人须为项目活跃成员",
+  },
+  {
+    feature: "整项目文档导入",
+    admin: true,
+    member: true,
+    note: "任何登录用户；创建者自动成为新项目成员",
+  },
+  {
+    feature: "AI 辅助文档转换",
+    admin: true,
+    member: true,
+    note: "文档导入工作台；任何登录用户；需管理员启用",
+  },
   { feature: "创建模块", admin: true, member: true, note: "—" },
   { feature: "编辑模块", admin: true, member: true, note: "—" },
   { feature: "创建功能", admin: true, member: true, note: "—" },
@@ -76,6 +94,12 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     admin: true,
     member: true,
     note: "保存操作日志",
+  },
+  {
+    feature: "删除模块/删除功能",
+    admin: true,
+    member: "leader",
+    note: "软删除；级联收尾下级任务与记录，不物理删除历史",
   },
   { feature: "创建任务", admin: true, member: true, note: "—" },
   { feature: "编辑任务", admin: true, member: true, note: "普通项目成员均可" },
@@ -115,6 +139,12 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     note: "高风险权限",
   },
   {
+    feature: "AI 改写迭代总结",
+    admin: true,
+    member: true,
+    note: "生成总结时可用；任何登录用户；需管理员启用",
+  },
+  {
     feature: "添加/删除 GitHub 链接",
     admin: true,
     member: true,
@@ -122,13 +152,30 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
   },
   { feature: "查看项目动态", admin: true, member: true, note: "—" },
   {
+    feature: "绑定企业微信机器人",
+    admin: true,
+    member: true,
+    note: "绑定与解绑本人；任何登录用户",
+  },
+  {
+    feature: "项目企业微信群绑定",
+    admin: true,
+    member: "leader",
+    note: "组长或系统管理员签发绑定码、解绑；普通成员只读",
+  },
+  {
     feature: "查看原始审计快照",
     admin: true,
     member: false,
     note: "项目成员看可读动态",
   },
   { feature: "用户账号管理", admin: true, member: false, note: "—" },
-  { feature: "系统配置", admin: true, member: false, note: "—" },
+  {
+    feature: "系统配置",
+    admin: true,
+    member: false,
+    note: "含 AI 辅助与企业微信机器人配置",
+  },
 ];
 
 export interface NotificationScenarioRow {

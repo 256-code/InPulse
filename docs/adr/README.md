@@ -45,11 +45,11 @@
 | [ADR-029](ADR-029.md) | Accepted | Nest 运行期采用自研 Zod Pipe 与响应 Serializer |
 | [ADR-030](ADR-030.md) | Accepted | 空项目、模块业务编号与任务就地创建归属 |
 | [ADR-031](ADR-031.md) | Accepted | 移除 TOTP 两步验证与管理员高风险重认证 |
-| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO）；前端默认入口经 ADR-036 修订、会话空闲时长经 ADR-038 修订 |
+| [ADR-032](ADR-032.md) | Accepted | 接入立镖 Casdoor OIDC 单点登录（SSO）；前端默认入口经 ADR-036、ADR-080 修订、会话空闲时长经 ADR-038 修订 |
 | [ADR-033](ADR-033.md) | Accepted | 项目内角色（组长与项目管理员），扩展 ADR-012；项目管理员与授权口径经 ADR-039 修订 |
 | [ADR-034](ADR-034.md) | Accepted | 任务与功能归档及父级归档前置校验；角色口径经 ADR-039 修订，**项目归档申请—审核部分由 [ADR-043](ADR-043.md) 替代，模块归档部分由 [ADR-044](ADR-044.md) 替代，功能归档部分由 [ADR-045](ADR-045.md) 替代，任务归档部分由 [ADR-054](ADR-054.md) 替代** |
 | [ADR-035](ADR-035.md) | Accepted | 项目生命周期、粘性标记与项目写入口口径；角色口径经 ADR-039 修订，**状态口径由 [ADR-043](ADR-043.md) 修订为三态** |
-| [ADR-036](ADR-036.md) | Accepted | 登录页默认展示本地口令表单，统一身份认证改为并列入口 |
+| [ADR-036](ADR-036.md) | Accepted | 登录页默认展示本地口令表单，统一身份认证改为并列入口（2026-10-16 由 ADR-080 修订：`/login` 恢复默认直达 SSO，本地表单退居隐藏应急入口） |
 | [ADR-037](ADR-037.md) | Proposed | 任务列表排序口径统一（紧急度优先 + 状态分组）与多列 keyset 游标 |
 | [ADR-038](ADR-038.md) | Accepted | 本地会话空闲有效期由 30 分钟调整为 2 小时 |
 | [ADR-039](ADR-039.md) | Accepted | 移除项目管理员角色，项目内管理权限下放给全体活跃成员（修订 ADR-033/034/035） |
@@ -93,6 +93,7 @@
 | [ADR-077](ADR-077.md) | Accepted | 企业微信项目群绑定（项目 ↔ 群，第一批）：新增 `getProjectWecomGroup` / `createProjectWecomGroupCode` / `deleteProjectWecomGroup` 三条项目级路由（116 → 119），组长 + 系统管理员签发一次性绑定码 / 解绑（`wecomGroupBinderRole`，ADR-039 例外清单扩展；签发加入 ADR-023 allowlist securityFlow 第七条）；迁移 `0044`（`app.project_wecom_binding_codes` + `app.project_wecom_groups` 一项目一群 / 一群一项目 + `app.wecom_group_deliveries` 投递去重表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08），群推送与个人单聊并存、默认投递「任务派发 + 全部 MEMBER 可见动态」；长连接桥接 `chat_type:2` 投递改造为第二批 |
 | [ADR-078](ADR-078.md) | Accepted | 更换机器人（botId 变化）时自动解除全部企业微信绑定：`updateWecomRobotConfig` 在同一事务内经迁移 `0045` 新增的 `SECURITY DEFINER` 函数 `app.revoke_wecom_bindings_on_robot_change()` 把 `app.user_wecom_bindings` 与 `app.project_wecom_groups` 的 ACTIVE 行全部置 REVOKED（保留历史、计数返回、PUBLIC 回收与部署断言），响应新增可空 `revokedUserBindings` / `revokedProjectGroups`（未更换为 null、更换为计数含 0、GET 恒 null），幂等契约 1.1.0 → 1.2.0，审计增加 `robotChanged` 与两计数；仅轮换 Secret / 修改机器人链接不触发；不改桥接、路由数不变（119） |
 | [ADR-079](ADR-079.md) | Accepted | 未绑定企业微信的提醒弹窗（忽略 / 不再提醒）与机器人可用标记：`WecomBindingStatus` 新增 `robotConfigured`（机器人是否已配置，未配置不提示绑定）；已登录且 UNBOUND 时弹「绑定企业微信，及时收到任务提醒」——「去绑定」打开既有绑定弹窗、忽略按会话记 sessionStorage、不再提醒按账号记 localStorage（均只存浏览器本地，不入库不写审计）；PENDING / BOUND / 未配置 / 读取失败静默不弹；无新增路由（119）、无迁移 |
+| [ADR-080](ADR-080.md) | Accepted | 登录页直达单点登录（修订 ADR-036 / ADR-032 决策 7 的前端入口）：`/login`（含 `?from=`）匿名态立即整页跳转 `/api/v1/auth/sso/start?returnTo=...`，`?local=1` 管理员应急与服务端 fail closed 回落的 `?sso=disabled` 渲染本地口令表单且不自动跳转，`?sso_error=` 只显示错误与手动重试；退出登录仍回 `/login` 后自动进入 SSO；服务端路由 / 契约 / 迁移 / 依赖 / 权限矩阵不变 |
 
 ## 关联基线
 

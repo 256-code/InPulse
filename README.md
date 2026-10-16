@@ -196,11 +196,11 @@ node scripts/dev-start.mjs --lan          # 让同一局域网的设备以 HTTPS
 2. 向 Casdoor 应用负责人索取 `SSO_CLIENT_ID` 与 Client Secret，把 Client Secret 保存到仓库外的本地文件，
    并在 `SSO_CLIENT_SECRET_FILE` 中填写该文件的绝对路径；
 3. 在 Casdoor 的 `INPulse` 应用中登记本地回调地址 `http://127.0.0.1:5173/api/v1/auth/sso/callback`；
-4. 重新运行 `node scripts/dev-start.mjs`，在登录页点击登录框下方的单点登录图标即可跳出到统一身份认证。
+4. 重新运行 `node scripts/dev-start.mjs`，打开登录页即自动跳出到统一身份认证（管理员应急口令入口为 `/login?local=1`）。
 
 本地读取 `/run/secrets/` 之外的 Secret 文件时，脚本会同时设置 `NODE_ENV=test` 与
 `SSO_CLIENT_SECRET_TEST_PATH=1`，这是仓库规则允许的本地/集成测试路径；生产只从
-`/run/secrets/sso_client_secret` 读取。配置缺失或非法时按 fail closed：点击统一身份认证入口回落到
+`/run/secrets/sso_client_secret` 读取。配置缺失或非法时按 fail closed：访问登录页回落到
 `/login?local=1&sso=disabled` 并提示未启用；管理员应急口令入口为 `/login?local=1`。
 
 ## 部署
@@ -214,8 +214,8 @@ node scripts/dev-start.mjs --lan          # 让同一局域网的设备以 HTTPS
   （compose 以只读 Secret 挂载到 `/run/secrets/sso_client_secret`，禁止用环境变量代替）；
 - 在 Casdoor 应用中登记 `SSO_REDIRECT_URI` 指向的正式回调地址。
 
-配置非法或缺失时 API 按 fail closed 以本地登录模式启动，点击统一身份认证入口回落到 `/login?local=1&sso=disabled`；`/login?local=1` 仍作为管理员应急口令入口可用。
-决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)与[登录入口 ADR](./docs/adr/ADR-036.md)。
+配置非法或缺失时 API 按 fail closed 以本地登录模式启动，访问登录页回落到 `/login?local=1&sso=disabled`；`/login?local=1` 仍作为管理员应急口令入口可用。
+决策与回滚边界见[单点登录 ADR](./docs/adr/ADR-032.md)、[登录入口 ADR](./docs/adr/ADR-036.md)与[直达登录 ADR](./docs/adr/ADR-080.md)。
 
 测试环境（单机 Docker Compose + 本地 registry）的一键更新、迁移与回滚步骤见[测试 VM 更新手册](./deploy/test-vm/README.md)。
 
@@ -251,3 +251,7 @@ node scripts/dev-start.mjs --lan          # 让同一局域网的设备以 HTTPS
 部署前执行新增迁移 `0010`–`0012`，再部署配套 API/Web。历史未分类模块保留，迁移包含历史编号回填；`0012` 只为 runtime 增加根仓库标记列的 UPDATE 权限。无新增生产依赖。
 
 本轮使用 Node 24、独立 PostgreSQL 18.6 + PGroonga 测试库完成相关服务层、HTTP/数据库与前端交互回归，并验证 `0000`–`0009` 历史数据升级后名称/ID/kind 保留、编号连续及空项目可提交。按用户要求未执行全量构建、静态检查或依赖审计；浏览器全量 E2E 未运行，不能将本轮定向测试视为完整 CI 通过。
+
+### 2026-10-16 登录页直达单点登录
+
+见 [ADR-080](docs/adr/ADR-080.md)。`/login`（含 `?from=`）默认直达统一身份认证（匿名访问即整页跳转 `/api/v1/auth/sso/start`），本地口令表单退居 `/login?local=1` 与 `sso=disabled` 回落的隐藏应急入口，`?sso_error=` 回落只显示错误与手动重试；服务端路由、契约与权限矩阵不变。

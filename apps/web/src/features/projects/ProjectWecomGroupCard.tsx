@@ -179,19 +179,25 @@ export const ProjectWecomGroupCard: React.FC<ProjectWecomGroupCardProps> = ({
     >
       <div className="settings-panel-head">
         <CalmSectionTitle title="企业微信项目群">
-          {canManage ? issueButton : null}
-          {canManage && bound ? (
-            <Popconfirm
-              title="解除项目与企业微信群的绑定？"
-              description="解绑后该群不再收到项目消息；已有通知与投递历史都会保留。"
-              okText="确认解绑"
-              cancelText="取消"
-              onConfirm={() => unbind.mutate()}
-            >
-              <Button size="small" danger loading={unbind.isPending}>
-                解绑企业微信群
-              </Button>
-            </Popconfirm>
+          {canManage ? (
+            <div className="calm-section-actions">
+              {issueButton}
+              {bound ? (
+                <Popconfirm
+                  title="解除项目与企业微信群的绑定？"
+                  description="解绑后该群不再收到项目消息；已有通知与投递历史都会保留。"
+                  okText="确认解绑"
+                  cancelText="取消"
+                  classNames={{ root: "wecom-unbind-popconfirm" }}
+                  placement="topRight"
+                  onConfirm={() => unbind.mutate()}
+                >
+                  <Button size="small" danger loading={unbind.isPending}>
+                    解绑企业微信群
+                  </Button>
+                </Popconfirm>
+              ) : null}
+            </div>
           ) : null}
         </CalmSectionTitle>
       </div>

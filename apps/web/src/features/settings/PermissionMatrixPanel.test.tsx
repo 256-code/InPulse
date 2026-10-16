@@ -36,6 +36,9 @@ describe("PermissionMatrixPanel", () => {
     );
     expect(cell("用户账号管理", 1)).toHaveTextContent("√");
     expect(cell("用户账号管理", 2)).toHaveTextContent("—");
+    expect(cell("系统配置", 3)).toHaveTextContent(
+      "含 AI 辅助与企业微信机器人配置",
+    );
   });
 
   it("omits removed and nobody-can-do capabilities and never shows a version tag", () => {
@@ -63,9 +66,24 @@ describe("PermissionMatrixPanel", () => {
 
   it("distinguishes member-wide, leader-only and admin-only capabilities", () => {
     render(<PermissionMatrixPanel />);
-    expect(cell("变更项目状态", 2)).toHaveTextContent("√");
-    expect(cell("添加/移除项目成员", 2)).toHaveTextContent("√");
-    for (const row of ["组长转移", "删除项目"]) {
+    for (const row of [
+      "变更项目状态",
+      "添加/移除项目成员",
+      "导入文档到项目",
+      "整项目文档导入",
+      "AI 辅助文档转换",
+      "AI 改写迭代总结",
+      "绑定企业微信机器人",
+    ]) {
+      expect(cell(row, 1)).toHaveTextContent("√");
+      expect(cell(row, 2)).toHaveTextContent("√");
+    }
+    for (const row of [
+      "组长转移",
+      "删除项目",
+      "删除模块/删除功能",
+      "项目企业微信群绑定",
+    ]) {
       expect(cell(row, 1)).toHaveTextContent("√");
       expect(cell(row, 2)).toHaveTextContent("仅组长");
     }
