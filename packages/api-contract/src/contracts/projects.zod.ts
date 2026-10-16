@@ -362,7 +362,7 @@ export type SetProjectMemberRoleResponse = z.infer<
 
 /**
  * 创建项目请求。创建者由服务端从认证 Session 解析，不接收客户端提交的
- * createdBy；memberIds 为可选初始成员（不含创建者），服务端校验其 ACTIVE 状态。
+ * createdBy；memberIds 为可选项目成员（不含创建者），服务端校验其 ACTIVE 状态。
  */
 export const createProjectRequestSchema = z
   .object({

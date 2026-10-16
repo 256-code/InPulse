@@ -13,7 +13,7 @@
 | 停用用户 | 用户被停用；其全部 Session 按无效处理，不能恢复身份；仅可按匿名安全语义签发预认证 CSRF 或清 Cookie 登出 |
 | 系统管理员 | 全局管理员；高风险操作要求当前有效的完整管理员 Session（ADR-031 起不再要求 TOTP 重认证） |
 
-项目创建者不是独立身份。创建时必须作为初始成员且表单不可取消，创建者成员行以 `role='LEADER'` 落库（ADR-033）；创建完成后可由系统管理员或现任组长把组长身份转交给其他活跃成员（[ADR-053](adr/ADR-053.md)：组长只能转移、不能被撤销，也不能被直接移除——要移除现任组长必须先把身份交出去；有活跃成员的项目必须恰好有一名组长）。`projects.created_by` 永久保留用于溯源，不直接授予权限；项目内权限来自成员行 `role`（`MEMBER | LEADER`，ADR-039、[ADR-053](adr/ADR-053.md)），角色只在本项目内生效，成员被移除即失效、重新加入从普通成员开始（无活跃组长的项目由首位加入者直接成为组长）。系统管理员创建者仍保留与成员记录无关的全局权限。详见 [ADR-012](adr/ADR-012.md)（已被 [ADR-033](adr/ADR-033.md) 扩展）。
+项目创建者不是独立身份。创建时必须作为项目成员且表单不可取消，创建者成员行以 `role='LEADER'` 落库（ADR-033）；创建完成后可由系统管理员或现任组长把组长身份转交给其他活跃成员（[ADR-053](adr/ADR-053.md)：组长只能转移、不能被撤销，也不能被直接移除——要移除现任组长必须先把身份交出去；有活跃成员的项目必须恰好有一名组长）。`projects.created_by` 永久保留用于溯源，不直接授予权限；项目内权限来自成员行 `role`（`MEMBER | LEADER`，ADR-039、[ADR-053](adr/ADR-053.md)），角色只在本项目内生效，成员被移除即失效、重新加入从普通成员开始（无活跃组长的项目由首位加入者直接成为组长）。系统管理员创建者仍保留与成员记录无关的全局权限。详见 [ADR-012](adr/ADR-012.md)（已被 [ADR-033](adr/ADR-033.md) 扩展）。
 
 ## 认证安全流程矩阵
 
@@ -48,7 +48,7 @@ F-12 本地接口已登记到可执行权限矩阵，真实 HTTP/数据库验收
 |---|---:|---:|---:|---:|---:|---:|---|
 | 读取当前用户 | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 服务端从 `__Host-session` 解析身份，不接受客户端传入用户 ID；响应 `no-store` |
 | 读取用户目录（`getUserDirectory` · `GET /api/v1/users`） | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 服务端从 Session 解析身份；只返回 `id`、`name`、`avatarUrl`、`isAdmin`，不返回登录名、邮箱、密码哈希或停用状态；只返回 ACTIVE 且 `disabled_at IS NULL` 的用户，最多 300 条；响应 `no-store` |
-| 创建项目（`createProject` · `POST /api/v1/projects`） | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 请求者自动成为活跃成员且创建时不可取消；请求头需同步 CSRF，正文 `memberIds` 为可选初始成员且不含创建者，服务端在单事务内校验全员 ACTIVE 并写审计、搜索/活动投影与通知；要求 `Idempotency-Key`，重放前需重新验证当前认证与项目可读权限；成功返回 200；`code` 显式提供时须符合 `^[A-Z][A-Z0-9_]{1,31}$`，未提供时由服务端从名称派生 |
+| 创建项目（`createProject` · `POST /api/v1/projects`） | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 请求者自动成为活跃成员且创建时不可取消；请求头需同步 CSRF，正文 `memberIds` 为可选项目成员且不含创建者，服务端在单事务内校验全员 ACTIVE 并写审计、搜索/活动投影与通知；要求 `Idempotency-Key`，重放前需重新验证当前认证与项目可读权限；成功返回 200；`code` 显式提供时须符合 `^[A-Z][A-Z0-9_]{1,31}$`，未提供时由服务端从名称派生 |
 | 项目列表（`listProjects` · `GET /api/v1/projects`）与项目详情（`getProject` · `GET /api/v1/projects/{projectId}`） | 401 | 列表返回本人全部活跃项目，详情按资源允许 | 列表只返回本人活跃项目，详情 404 | 列表只返回本人其他活跃项目，已移除项目不返回，详情 404 | 401 | 列表与详情均返回全部项目 | 服务端从 Session 解析 actor 并先取得 `AuthorizedProjectScope`，SQL 前限制项目范围，不接受客户端传入范围；无权限与不存在统一 404；历史数据仍可读；响应 `no-store`；`projectId` 非法时 422 |
 | 编辑项目（`updateProject` · `PATCH /api/v1/projects/{projectId}`） | 401 | 允许 | 404 | 404 | 401 | 允许 | 项目编码创建后不可修改，只允许整笔替换 `name` 与 `description`；项目三态下都可写（ADR-043 起项目已无归档态）；CSRF 与 `Idempotency-Key` 必填、`If-Match` 乐观锁（版本冲突 409）；名称/描述、审计 `project.update`、活动与搜索投影同一事务；重放前重新验证当前成员关系与项目可写性 |
 | 变更项目状态（`changeProjectStatus` · `PATCH /api/v1/projects/{projectId}/status`） | 401 | 403 | 404 | 404 | 401 | 允许 | ADR-039/ADR-043：本项目任意活跃成员或系统管理员可把项目在未开始 / 进行中 / 维护中之间切换（三态即全部状态，归档已下线），非成员或跨项目 404；请求体只收三个目标态（ARCHIVED 422 `PROJECT_VALIDATION_FAILED`）；版本不符 409 `PROJECT_VERSION_CONFLICT`，进入维护中且项目下仍有未收尾任务（`lifecycle_status = 'ACTIVE'` 且 `work_status NOT IN ('DONE','CANCELED')`）409 `PROJECT_MAINTENANCE_TASKS_OPEN`，目标与当前状态相同 409 `PROJECT_STATE_CONFLICT`；未开始与维护中禁止直接互改 409 `PROJECT_STATUS_LEVEL_SKIP`，项目内出现过已完成任务后不可回退未开始 409 `PROJECT_STATUS_NOT_STARTED_LOCKED`；CSRF、`Idempotency-Key` 与 `If-Match` 必填；只有「未开始 → 进行中」通知全体活跃成员，维护中不通知；审计 `project.status.change`、活动与搜索投影在同一事务提交；重放前重新验证当前成员关系与项目可读权限 |
@@ -251,9 +251,9 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | `previewProjectDocumentImport` | 401 | 允许 | 404 | 404 | 401 | 允许 | 只读校验（不写任何持久化状态）：会话认证、无 CSRF、无幂等；`document` 1～200000 字符；项目可写门禁（非成员与不存在统一 404 `PROJECT_NOT_FOUND`） |
 | `importProjectDocument` | 401 | 允许 | 404 | 404 | 401 | 允许 | 同源 / CSRF、数据库级幂等（`Idempotency-Key` 必填，契约版本 1.0.0）；`expectedDigest` 与文档不一致 409 `DOCUMENT_IMPORT_STALE`；同摘要文档在本项目内已导入 409 `DOCUMENT_IMPORT_DUPLICATE`（迁移 0039 `app.document_import_runs` 唯一约束兜底）；行级 ERROR 422 `DOCUMENT_IMPORT_INVALID`（负责人须为项目活跃成员，否则 `ASSIGNEE_NOT_MEMBER`）；同名模块 / 功能复用不覆盖（差异仅 WARNING）；写审计 `project.documentImport`、批次行与各域既有活动 / 通知 / 搜索投影，全部同事务 |
 | `previewProjectImport` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 只读校验；整项目文档必须含项目段与项目编码（`^[A-Z][A-Z0-9_]{1,31}$`）；返回编码占用与全局重复导入提示 |
-| `importProject` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 同源 / CSRF、数据库级幂等；项目编码强制必填且全局唯一，被占用 409 `PROJECT_CODE_CONFLICT`；初始成员与任务负责人解析后自动加入新项目（去重、排除创建者）；同一摘要文档全局查重 409；单事务创建项目与全部下级，任一行级 ERROR 整笔 422 零残留 |
+| `importProject` | 401 | 允许（任何已登录用户） | — | — | 401 | 允许 | 同源 / CSRF、数据库级幂等；项目编码强制必填且全局唯一，被占用 409 `PROJECT_CODE_CONFLICT`；项目成员与任务负责人解析后自动加入新项目（去重、排除创建者）；同一摘要文档全局查重 409；单事务创建项目与全部下级，任一行级 ERROR 整笔 422 零残留 |
 
-模式 B 的预览 / 执行面向任何已登录用户（等价于 F-04 手工创建项目），执行成功后创建者自动成为新项目成员；模式 A 面向项目可写成员（活跃成员或系统管理员）。两种模式都不新增数据库角色或权限；负责人 / 成员令牌按登录名或姓名解析，未找到或同名歧义均 422 并给出可执行的修正提示。模式 A 的负责人必须是项目当前活跃成员（不隐式加成员）；模式 B 自动加入初始成员与全部任务负责人。
+模式 B 的预览 / 执行面向任何已登录用户（等价于 F-04 手工创建项目），执行成功后创建者自动成为新项目成员；模式 A 面向项目可写成员（活跃成员或系统管理员）。两种模式都不新增数据库角色或权限；负责人 / 成员令牌按登录名或姓名解析，未找到或同名歧义均 422 并给出可执行的修正提示。模式 A 的负责人必须是项目当前活跃成员（不隐式加成员）；模式 B 自动加入项目成员与全部任务负责人。
 
 ## ADR-067 AI 辅助文档转换接口（2026-10-13）
 

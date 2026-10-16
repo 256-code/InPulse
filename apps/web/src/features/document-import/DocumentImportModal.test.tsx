@@ -67,7 +67,7 @@ const SUGGEST_ONLY_DOCUMENT = [
 const WORKBENCH_DOCUMENT = [
   "# 项目：商城结算系统",
   "- 项目编码：MALL",
-  "- 初始成员：林雨、陈昊",
+  "- 项目成员：林雨、陈昊",
   "## 模块：购物车",
   "- 说明：购物车增删改与价格试算",
   "### 功能：数量调整",
@@ -92,12 +92,12 @@ const MISSING_DOCUMENT = [
   "- 优先级：高",
 ].join("\n");
 
-/** 一份要素齐全的模板草稿：负责人 / 初始成员都能对上目录，用来验证「要素完好」。 */
+/** 一份要素齐全的模板草稿：负责人 / 项目成员都能对上目录，用来验证「要素完好」。 */
 const COMPLETE_DOCUMENT = [
   "# 项目：商城结算系统",
   "- 项目编码：MALL",
   "- 项目说明：结算与对账",
-  "- 初始成员：林雨",
+  "- 项目成员：林雨",
   "## 模块：购物车",
   "- 说明：购物车增删改与价格试算",
   "### 功能：数量调整",
@@ -649,7 +649,7 @@ describe("ADR-071 左右分栏工作台", () => {
     expect(screen.queryByRole("button", { name: "订单：添加说明" })).toBeNull();
   });
 
-  it("「＋字段」入口区分必填与可选：负责人 / 项目编码 / 初始成员都标「必填」", () => {
+  it("「＋字段」入口区分必填与可选：负责人 / 项目编码 / 项目成员都标「必填」", () => {
     mount({ directory: DIRECTORY, mode: "NEW_PROJECT" });
     pasteDocument(
       [
@@ -673,11 +673,11 @@ describe("ADR-071 左右分栏工作台", () => {
       screen.getByRole("button", { name: "项目：添加项目编码（必填）" })
         .className,
     ).toContain("is-required");
-    // ADR-072：整项目导入的初始成员必填。
+    // ADR-072：整项目导入的项目成员必填。
     const member = screen.getByRole("button", {
-      name: "项目：添加初始成员（必填）",
+      name: "项目：添加项目成员（必填）",
     });
-    expect(member.textContent).toBe("＋初始成员（必填）");
+    expect(member.textContent).toBe("＋项目成员（必填）");
     expect(member.className).toContain("is-required");
     // 可选（补不补都能导入）：项目说明保持素色，不出现「必填」字样。
     const description = screen.getByRole("button", {
@@ -906,6 +906,42 @@ describe("ADR-071 左右分栏工作台", () => {
     );
   });
 
+  it("「从成员里挑」支持按姓名里的一个字筛选（用户「打一个字就筛出来」）", async () => {
+    mount({ directory: DIRECTORY });
+    pasteDocument(WORKBENCH_DOCUMENT);
+
+    const panel = await screen.findByTestId("document-import-unmatched");
+    const row = within(panel)
+      .getByText("林语")
+      .closest(".import-unmatched-row") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "从成员里挑" }));
+
+    const picker = row.querySelector(".import-member-picker") as HTMLElement;
+    const search = within(picker).getByLabelText("搜索成员");
+    // 没输入时名单是完整的（antd 会在两个汉字之间插空格，所以按钮名用正则）。
+    expect(
+      within(picker).getByRole("button", { name: /^林\s*雨$/ }),
+    ).toBeTruthy();
+    expect(
+      within(picker).getByRole("button", { name: /^陈\s*昊$/ }),
+    ).toBeTruthy();
+
+    // 打一个字：只留名字里带这个字的人。
+    fireEvent.change(search, { target: { value: "陈" } });
+    expect(
+      within(picker).getByRole("button", { name: /^陈\s*昊$/ }),
+    ).toBeTruthy();
+    expect(
+      within(picker).queryByRole("button", { name: /^林\s*雨$/ }),
+    ).toBeNull();
+
+    // 一个字都匹配不上时给一句明确的空态，而不是空白面板。
+    fireEvent.change(search, { target: { value: "赵" } });
+    expect(
+      within(picker).getByText("没有匹配的成员，换个字再试。"),
+    ).toBeTruthy();
+  });
+
   it("补充说明与原始文档拼成一段重新分析，仍然只调同一条路由", async () => {
     const { assistDocumentImport } = mount({ directory: DIRECTORY });
     pasteDocument(WORKBENCH_DOCUMENT);
@@ -921,10 +957,9 @@ describe("ADR-071 左右分栏工作台", () => {
     expect(screen.getByText("订单查询要在本周五前完成")).toBeTruthy();
   });
 
-  it("用户发问后助手立刻回一句：点名还缺的必填字段，不等模型也不静默重跑", async () => {
+  it("模型没落地前不再先报一次旧缺口：同屏不会出现「还差 N 处」又「已更新」", async () => {
     const { assistDocumentImport } = mount({
       directory: DIRECTORY,
-      // AI 草稿里留一个缺负责人的任务，回复才有具体缺口可点。
       assist: { markdown: MISSING_DOCUMENT, model: "stub-model", issues: [] },
     });
     // 走文件入口：AI 草稿直接成为「已应用」的草稿，补充说明不再弹覆盖确认。
@@ -936,13 +971,54 @@ describe("ADR-071 左右分栏工作台", () => {
     pickFile(new File(["x"], "支付.md"));
     await waitFor(() => expect(assistDocumentImport).toHaveBeenCalledTimes(1));
 
-    // 这一轮模型永不返回：回复必须来自本地确定性计算，不能等 assist 回来。
+    // 这一轮模型挂住不返回：此刻不该冒出「必填还差…」这种按用户发言前草稿算出的结论，
+    // 否则模型落地后再报「已按补充说明更新草稿：…负责人：特哥」，同屏两句就是自打脸
+    // （2026-10-16 实测反馈）。等待期间由 busy 提示「正在让 AI 整理…」顶上。
     assistDocumentImport.mockImplementation(() => new Promise(() => undefined));
     sendSupplement("要补充什么");
 
-    const reply = await screen.findByText(/我重新核对了一遍/);
-    // 模型还挂着（busy 提示仍在），说明这句回复没等模型。
     expect(screen.getByTestId("document-import-assist-busy")).toBeTruthy();
+    // 顶部常驻结论本来就会一直在那里报缺口，这里只看「对话气泡」：
+    // 模型没落地前，对话里不能再冒出一条按旧草稿算出的「必填还差…」。
+    const bubbles = Array.from(
+      screen.getByTestId("document-import-assist-messages").children,
+    )
+      .filter(
+        (node) =>
+          node.getAttribute("data-testid") !== "document-import-assist-verdict",
+      )
+      .map((node) => node.textContent ?? "");
+    expect(bubbles.filter((text) => text.includes("必填还差"))).toHaveLength(0);
+    expect(
+      bubbles.filter((text) => text.includes("我重新核对了一遍")),
+    ).toHaveLength(0);
+    // 用户那一句必须已经入列，不能点了发送毫无反应。
+    expect(screen.getByText("要补充什么")).toBeTruthy();
+  });
+
+  it("模型落地后只发一条汇报：先说左栏改了什么，再补还差的必填缺口", async () => {
+    const { assistDocumentImport } = mount({
+      directory: DIRECTORY,
+      // AI 草稿里留一个缺负责人的任务，落地汇报才有具体缺口可点。
+      assist: { markdown: MISSING_DOCUMENT, model: "stub-model", issues: [] },
+    });
+    extractDocumentTextMock.mockResolvedValue({
+      fileName: "支付.md",
+      text: "支付模块的原始需求正文",
+      warning: null,
+    });
+    pickFile(new File(["x"], "支付.md"));
+    await waitFor(() => expect(assistDocumentImport).toHaveBeenCalledTimes(1));
+
+    // 模型原样返回：这一轮只发一条气泡，先如实说清「草稿没有变化」，再补必填缺口。
+    assistDocumentImport.mockResolvedValue({
+      markdown: MISSING_DOCUMENT,
+      model: "stub-model",
+      issues: [],
+    });
+    sendSupplement("要补充什么");
+
+    const reply = await screen.findByText(/这一轮草稿没有变化/);
     expect(reply.textContent).toContain(
       "必填还差 1 处：缺负责人 ×1（修复重复回调）",
     );
@@ -955,13 +1031,13 @@ describe("ADR-071 左右分栏工作台", () => {
     );
     const userIndex = bubbles.findIndex((text) => text.includes("要补充什么"));
     const replyIndex = bubbles.findIndex((text) =>
-      text.includes("我重新核对了一遍"),
+      text.includes("这一轮草稿没有变化"),
     );
     expect(userIndex).toBeGreaterThanOrEqual(0);
     expect(replyIndex).toBeGreaterThan(userIndex);
   });
 
-  it("缺口没变时不再重复念同一句核对结论（用户「这句话为什么一直重复？」）", async () => {
+  it("缺口状态没变时不再重复念同一句缺口结论（用户「这句话为什么一直重复？」）", async () => {
     const { assistDocumentImport } = mount({
       directory: DIRECTORY,
       assist: { markdown: MISSING_DOCUMENT, model: "stub-model", issues: [] },
@@ -974,14 +1050,14 @@ describe("ADR-071 左右分栏工作台", () => {
     pickFile(new File(["x"], "支付.md"));
     await waitFor(() => expect(assistDocumentImport).toHaveBeenCalledTimes(1));
 
-    // 模型每轮都原样返回同一份草稿：必填缺口一直是「缺负责人 ×1」，第二轮不该再念一遍。
+    // 模型每轮都原样返回同一份草稿：必填缺口一直是「缺负责人 ×1」。
     assistDocumentImport.mockResolvedValue({
       markdown: MISSING_DOCUMENT,
       model: "stub-model",
       issues: [],
     });
     sendSupplement("要补充什么");
-    await screen.findByText(/我重新核对了一遍/);
+    await screen.findByText(/这一轮草稿没有变化/);
     await waitFor(() =>
       expect(screen.queryByTestId("document-import-assist-busy")).toBeNull(),
     );
@@ -997,14 +1073,17 @@ describe("ADR-071 左右分栏工作台", () => {
 
     const bubbles = Array.from(
       screen.getByTestId("document-import-assist-messages").children,
-    ).map((node) => node.textContent ?? "");
+    )
+      .filter(
+        (node) =>
+          node.getAttribute("data-testid") !== "document-import-assist-verdict",
+      )
+      .map((node) => node.textContent ?? "");
+    // 两轮都如实回报了「草稿没有变化」，但同一句缺口结论只念一次。
     expect(
-      bubbles.filter((text) => text.includes("我重新核对了一遍")),
-    ).toHaveLength(1);
-    // 这一轮的结果仍旧如实回报，不是把用户晾着。
-    expect(
-      bubbles.filter((text) => text.includes("草稿没有变化")).length,
-    ).toBeGreaterThan(0);
+      bubbles.filter((text) => text.includes("草稿没有变化")),
+    ).toHaveLength(2);
+    expect(bubbles.filter((text) => text.includes("必填还差"))).toHaveLength(1);
   });
   it("只剩建议项时不再每轮复读建议清单（用户「这个可选择性的补充重复次数太多了」）", async () => {
     const { assistDocumentImport } = mount({
@@ -1029,9 +1108,10 @@ describe("ADR-071 左右分栏工作台", () => {
       issues: [],
     });
     sendSupplement("要补充什么");
-    const reply = await screen.findByText(/我重新核对了一遍/);
-    // 必填齐了就只说这一句，建议项不再跟着念一遍（顶部常驻结论里已经逐条点名）。
-    expect(reply.textContent).toBe("我重新核对了一遍：必填都齐了。");
+    const reply = await screen.findByText(/这一轮草稿没有变化/);
+    // 必填齐了就只说左栏改了什么，建议项不再跟着念一遍（顶部常驻结论里已经逐条点名）。
+    expect(reply.textContent).not.toContain("建议补齐");
+    expect(reply.textContent).not.toContain("必填还差");
     await waitFor(() =>
       expect(screen.queryByTestId("document-import-assist-busy")).toBeNull(),
     );
@@ -1054,9 +1134,7 @@ describe("ADR-071 左右分栏工作台", () => {
           node.getAttribute("data-testid") !== "document-import-assist-verdict",
       )
       .map((node) => node.textContent ?? "");
-    expect(
-      bubbles.filter((text) => text.includes("我重新核对了一遍")),
-    ).toHaveLength(1);
+    expect(bubbles.filter((text) => text.includes("必填还差"))).toHaveLength(0);
     expect(bubbles.filter((text) => text.includes("建议补齐"))).toHaveLength(0);
   });
 });
@@ -1426,7 +1504,7 @@ describe("文档导入：拖放与进行中反馈", () => {
   });
 });
 
-describe("初始成员名单校验（整项目导入；ADR-073 起创建者默认算成员）", () => {
+describe("项目成员名单校验（整项目导入；ADR-073 起创建者默认算成员）", () => {
   const creatorUser: CurrentUserResponse = {
     id: 9,
     loginName: "tege",
@@ -1436,18 +1514,18 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
     isAdmin: false,
     status: "ACTIVE",
   };
-  /** 初始成员只写了一个同事，任务负责人另一个人：负责人没在名单里。 */
+  /** 项目成员只写了一个同事，任务负责人另一个人：负责人没在名单里。 */
   const MEMBER_GAP_DOCUMENT = [
     "# 项目：商城结算系统",
     "- 项目编码：MALL",
-    "- 初始成员：林雨",
+    "- 项目成员：林雨",
     "## 模块：购物车",
     "### 功能：数量调整",
     "#### 任务：数量调整交互",
     "- 负责人：陈昊",
   ].join("\n");
 
-  it("没写初始成员：报「缺初始成员」，助手按必填缺口报数", async () => {
+  it("没写项目成员：报「缺项目成员」，助手按必填缺口报数", async () => {
     mount({
       mode: "NEW_PROJECT",
       user: creatorUser,
@@ -1465,11 +1543,11 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
     );
 
     const assist = screen.getByTestId("document-import-assist");
-    expect(within(assist).getByText("缺初始成员 ×1")).toBeTruthy();
+    expect(within(assist).getByText("缺项目成员 ×1")).toBeTruthy();
     expect(await within(assist).findByText(/必填还差 1 处/)).toBeTruthy();
   });
 
-  it("名单缺任务负责人：只点这一条，不再报「初始成员缺创建者」", async () => {
+  it("名单缺任务负责人：只点这一条，不再报「项目成员缺创建者」", async () => {
     mount({
       mode: "NEW_PROJECT",
       user: creatorUser,
@@ -1478,10 +1556,10 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
     pasteDocument(MEMBER_GAP_DOCUMENT);
 
     const assist = screen.getByTestId("document-import-assist");
-    expect(within(assist).queryByText("初始成员缺创建者 ×1")).toBeNull();
+    expect(within(assist).queryByText("项目成员缺创建者 ×1")).toBeNull();
     // 负责人那条要等成员目录回来才能判（判定依赖目录里的账号）。
     expect(
-      await within(assist).findByText("初始成员缺任务负责人 ×1"),
+      await within(assist).findByText("项目成员缺任务负责人 ×1"),
     ).toBeTruthy();
   });
 
@@ -1495,7 +1573,7 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
       [
         "# 项目：商城结算系统",
         "- 项目编码：MALL",
-        "- 初始成员：林雨, 陈昊",
+        "- 项目成员：林雨, 陈昊",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -1506,8 +1584,8 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
     const assist = screen.getByTestId("document-import-assist");
     // 落地汇报只在成员目录就绪后才发，等到它就说明判定已经拿到目录。
     expect(await within(assist).findByText(/已进入内容梳理/)).toBeTruthy();
-    expect(within(assist).queryByText(/初始成员缺/)).toBeNull();
-    expect(within(assist).queryByText("缺初始成员 ×1")).toBeNull();
+    expect(within(assist).queryByText(/项目成员缺/)).toBeNull();
+    expect(within(assist).queryByText("缺项目成员 ×1")).toBeNull();
   });
 
   it("任务负责人就是创建者本人时也不报缺负责人", async () => {
@@ -1520,7 +1598,7 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
       [
         "# 项目：商城结算系统",
         "- 项目编码：MALL",
-        "- 初始成员：林雨",
+        "- 项目成员：林雨",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -1530,7 +1608,7 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
 
     const assist = screen.getByTestId("document-import-assist");
     expect(await within(assist).findByText(/已进入内容梳理/)).toBeTruthy();
-    expect(within(assist).queryByText(/初始成员缺/)).toBeNull();
+    expect(within(assist).queryByText(/项目成员缺/)).toBeNull();
   });
 
   it("名单里写了登录名（本地读不懂）时不误报缺负责人", async () => {
@@ -1543,7 +1621,7 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
       [
         "# 项目：商城结算系统",
         "- 项目编码：MALL",
-        "- 初始成员：林雨, xiaowu",
+        "- 项目成员：林雨, xiaowu",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -1553,7 +1631,7 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
 
     const assist = screen.getByTestId("document-import-assist");
     expect(await within(assist).findByText(/已进入内容梳理/)).toBeTruthy();
-    expect(within(assist).queryByText(/初始成员缺/)).toBeNull();
+    expect(within(assist).queryByText(/项目成员缺/)).toBeNull();
   });
 
   it("项目内导入不做这两项校验", async () => {
@@ -1569,8 +1647,8 @@ describe("初始成员名单校验（整项目导入；ADR-073 起创建者默�
 
     const assist = screen.getByTestId("document-import-assist");
     expect(await within(assist).findByText(/已进入内容梳理/)).toBeTruthy();
-    expect(within(assist).queryByText("缺初始成员 ×1")).toBeNull();
-    expect(within(assist).queryByText(/初始成员缺/)).toBeNull();
+    expect(within(assist).queryByText("缺项目成员 ×1")).toBeNull();
+    expect(within(assist).queryByText(/项目成员缺/)).toBeNull();
   });
 });
 
@@ -1591,7 +1669,7 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
   const CREATOR_DOCUMENT = [
     "# 项目：商城结算系统",
     "- 项目编码：MALL",
-    "- 初始成员：林雨",
+    "- 项目成员：林雨",
     "## 模块：购物车",
     "- 说明：购物车增删改与价格试算",
     "### 功能：数量调整",
@@ -1609,7 +1687,7 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
       );
   }
 
-  it("初始成员行上挂着创建者的锁定标签，且正文一字不改", async () => {
+  it("项目成员行上挂着创建者的锁定标签，且正文一字不改", async () => {
     mount({ mode: "NEW_PROJECT", user: CREATOR, directory: CREATOR_DIRECTORY });
     pasteDocument(CREATOR_DOCUMENT);
 
@@ -1623,12 +1701,12 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
     expect(importTextarea().value).toBe(CREATOR_DOCUMENT);
   });
 
-  it("点开初始成员编辑时，创建者不是可删的标签，锁定标签仍在", async () => {
+  it("点开项目成员编辑时，创建者不是可删的标签，锁定标签仍在", async () => {
     mount({ mode: "NEW_PROJECT", user: CREATOR, directory: CREATOR_DIRECTORY });
     pasteDocument(CREATOR_DOCUMENT);
     await screen.findByTestId("document-import-creator-lock");
 
-    fireEvent.click(screen.getByRole("button", { name: "项目：初始成员" }));
+    fireEvent.click(screen.getByRole("button", { name: "项目：项目成员" }));
     expect(tagNames()).toEqual(["林雨"]);
     expect(screen.queryByRole("button", { name: "移除 林雨妍" })).toBeNull();
     expect(screen.getByTestId("document-import-creator-lock")).toBeTruthy();
@@ -1637,7 +1715,7 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
   it("名单里已经写了创建者本人就不再重复挂锁定标签（按姓名认）", async () => {
     mount({ mode: "NEW_PROJECT", user: CREATOR, directory: CREATOR_DIRECTORY });
     pasteDocument(
-      CREATOR_DOCUMENT.replace("- 初始成员：林雨", "- 初始成员：林雨妍、林雨"),
+      CREATOR_DOCUMENT.replace("- 项目成员：林雨", "- 项目成员：林雨妍、林雨"),
     );
     await screen.findByText("林雨妍、林雨");
 
@@ -1647,7 +1725,7 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
   it("名单里写的是创建者登录名也不重复挂（按登录名认）", async () => {
     mount({ mode: "NEW_PROJECT", user: CREATOR, directory: CREATOR_DIRECTORY });
     pasteDocument(
-      CREATOR_DOCUMENT.replace("- 初始成员：林雨", "- 初始成员：linyuyan"),
+      CREATOR_DOCUMENT.replace("- 项目成员：林雨", "- 项目成员：linyuyan"),
     );
     await screen.findByText("linyuyan");
 
@@ -1667,7 +1745,7 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
     { id: 2, name: "小潘", avatarUrl: null, isAdmin: false },
     { id: 3, name: "小邵", avatarUrl: null, isAdmin: true },
     { id: 4, name: "王小二", avatarUrl: null, isAdmin: false },
-    // 文档里「初始成员」本就写着陈昊：目录里也有他，点开就只是一个标签，不再出现在候选里。
+    // 文档里「项目成员」本就写着陈昊：目录里也有他，点开就只是一个标签，不再出现在候选里。
     { id: 5, name: "陈昊", avatarUrl: null, isAdmin: false },
   ];
 
@@ -1708,22 +1786,22 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
       );
   }
 
-  it("初始成员：已写定的名字各是一个标签，候选列表一直挂着可以接着挑下一个", async () => {
+  it("项目成员：已写定的名字各是一个标签，候选列表一直挂着可以接着挑下一个", async () => {
     mount({ directory: MEMBER_DIRECTORY });
     pasteDocument(WORKBENCH_DOCUMENT);
     await waitForDirectory();
 
-    fireEvent.click(screen.getByRole("button", { name: "项目：初始成员" }));
+    fireEvent.click(screen.getByRole("button", { name: "项目：项目成员" }));
     // 「林雨、陈昊」直接拆成两个标签；输入框只装正在输入的那一段（此刻是空的）。
     expect(tagNames()).toEqual(["林雨", "陈昊"]);
-    expect(editor("项目：初始成员").value).toBe("");
+    expect(editor("项目：项目成员").value).toBe("");
 
     // 目录里剩下的人全在候选里：不用先猜一个字。
     await screen.findByTestId("document-import-member-suggest");
     expect(suggestionNames()).toEqual(["小潘", "小邵", "王小二"]);
 
     // 打一个字就筛；管理员多一个标记（与「指派给」下拉同款）。
-    fireEvent.change(editor("项目：初始成员"), { target: { value: "小" } });
+    fireEvent.change(editor("项目：项目成员"), { target: { value: "小" } });
     expect(suggestionNames()).toEqual(["小潘", "小邵", "王小二"]);
     const second = within(suggestList()).getAllByRole(
       "button",
@@ -1735,13 +1813,13 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
       within(suggestList()).getByRole("button", { name: "小潘" }),
     );
     expect(tagNames()).toEqual(["林雨", "陈昊", "小潘"]);
-    expect(editor("项目：初始成员").value).toBe("");
+    expect(editor("项目：项目成员").value).toBe("");
     expect(suggestList()).toBeTruthy();
     // 加过的人不再出现在候选里，剩下的还挂着，可以接着点下一个。
     expect(suggestionNames()).toEqual(["小邵", "王小二"]);
 
-    fireEvent.keyDown(editor("项目：初始成员"), { key: "Enter" });
-    expect(importTextarea().value).toContain("- 初始成员：林雨、陈昊、小潘");
+    fireEvent.keyDown(editor("项目：项目成员"), { key: "Enter" });
+    expect(importTextarea().value).toContain("- 项目成员：林雨、陈昊、小潘");
   });
 
   it("任务负责人同样按标签挑：摘掉对不上的人，点候选写回负责人行", async () => {
@@ -1773,18 +1851,18 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
     pasteDocument(WORKBENCH_DOCUMENT);
     await waitForDirectory();
 
-    fireEvent.click(screen.getByRole("button", { name: "项目：初始成员" }));
-    fireEvent.change(editor("项目：初始成员"), { target: { value: "小" } });
+    fireEvent.click(screen.getByRole("button", { name: "项目：项目成员" }));
+    fireEvent.change(editor("项目：项目成员"), { target: { value: "小" } });
     // 组合中的回车是「确认候选字」，不是「提交这一格」。
-    fireEvent.keyDown(editor("项目：初始成员"), {
+    fireEvent.keyDown(editor("项目：项目成员"), {
       key: "Enter",
       isComposing: true,
     });
     expect(screen.getByTestId("document-import-member-editor")).toBeTruthy();
-    expect(importTextarea().value).toContain("- 初始成员：林雨、陈昊");
+    expect(importTextarea().value).toContain("- 项目成员：林雨、陈昊");
 
-    fireEvent.keyDown(editor("项目：初始成员"), { key: "Enter" });
-    expect(importTextarea().value).toContain("- 初始成员：林雨、陈昊、小");
+    fireEvent.keyDown(editor("项目：项目成员"), { key: "Enter" });
+    expect(importTextarea().value).toContain("- 项目成员：林雨、陈昊、小");
   });
 
   it("只有成员字段给建议：项目编码打字不出候选", async () => {
@@ -1793,11 +1871,11 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
     await waitForDirectory();
 
     // 先在成员字段上确认这次挂载确实能出建议，免得下面的空断言只是因为目录没回来。
-    fireEvent.click(screen.getByRole("button", { name: "项目：初始成员" }));
+    fireEvent.click(screen.getByRole("button", { name: "项目：项目成员" }));
     expect(
       await screen.findByTestId("document-import-member-suggest"),
     ).toBeTruthy();
-    fireEvent.keyDown(editor("项目：初始成员"), { key: "Escape" });
+    fireEvent.keyDown(editor("项目：项目成员"), { key: "Escape" });
 
     fireEvent.click(screen.getByRole("button", { name: "项目：项目编码" }));
     fireEvent.change(screen.getByLabelText("项目：项目编码"), {

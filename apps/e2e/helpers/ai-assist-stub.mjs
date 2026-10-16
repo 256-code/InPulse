@@ -37,7 +37,7 @@ function buildContent(mode, text, creatorName) {
     lines.push("- 项目编码：AIP" + marker.slice(6, 14));
     // ADR-073 修订：先写创建者（取自提示词），再写文档里的全部任务负责人。
     lines.push(
-      "- 初始成员：" +
+      "- 项目成员：" +
         [creatorName, owner].filter((item) => item.length > 0).join(", "),
     );
     lines.push("");
@@ -51,6 +51,36 @@ function buildContent(mode, text, creatorName) {
   lines.push("#### 任务：AI 导入任务");
   lines.push("- 负责人：" + owner);
   return lines.join("\n");
+}
+
+/**
+ * ADR-076 迭代总结改写的应答：把「本次要求」与「事实正文」两侧各自的唯一标记回显
+ * 进正文，供 E2E 断言两份文本真的到达了上游；结构固定为标题 + 两条列表 + 段落，
+ * 覆盖弹窗的三种段落渲染。事实那一行刻意按真实模型的习惯带 `**` 行内强调，
+ * 用来钉住「弹窗按纯文本清洗标记」，而不是把星号原样亮给用户。
+ */
+function buildSummaryContent(text) {
+  const requirement = messageSection(text, "【本次要求】");
+  const facts = messageSection(text, "【当前总结正文（唯一事实来源）】");
+  const requirementMarker = (requirement.match(/AIE2EREQ[A-Z0-9]*/) ?? [""])[0];
+  const factsMarker = (facts.match(/AIE2EFACT[A-Z0-9]*/) ?? [""])[0];
+  return [
+    "## 给领导看的改写稿 " + requirementMarker,
+    "",
+    "- 事实命中：**" + factsMarker + "**",
+    "- 要求原文：" + requirement.trim(),
+    "",
+    "按「" + requirement.trim() + "」改写，事实与分节结构保持不变。",
+  ].join("\n");
+}
+
+/** 取两段式 user message 里某一节的内容（到下一个【标记】为止）。 */
+function messageSection(text, heading) {
+  const start = text.indexOf(heading);
+  if (start < 0) return "";
+  const rest = text.slice(start + heading.length);
+  const next = rest.indexOf("\n\n【");
+  return (next < 0 ? rest : rest.slice(0, next)).trim();
 }
 
 const server = createServer((request, response) => {
@@ -74,6 +104,7 @@ const server = createServer((request, response) => {
     let mode = "IN_PROJECT";
     let text = "";
     let creatorName = "";
+    let systemText = "";
     try {
       const body = JSON.parse(raw);
       const messages =
@@ -88,6 +119,7 @@ const server = createServer((request, response) => {
         (message) => message && message.role === "system",
       );
       if (systemMessage && typeof systemMessage.content === "string") {
+        systemText = systemMessage.content;
         creatorName = extractCreatorName(systemMessage.content);
         if (systemMessage.content.includes("当前模式：整项目导入")) {
           mode = "WHOLE_PROJECT";
@@ -122,6 +154,35 @@ const server = createServer((request, response) => {
             total_tokens: 8224,
             completion_tokens_details: { reasoning_tokens: 8192 },
           },
+        }),
+      );
+      return;
+    }
+
+    // ADR-076：同一上游换一份提示词（迭代总结改写）。stub 按两段式 user message
+    // 里的标记回一份可逐段编辑的正文；带限流标记时回 429，供界面断言上游限流提示。
+    if (systemText.includes("InPulse 迭代总结的改写助手")) {
+      if (/AIE2ERATELIMIT/.test(text)) {
+        response.writeHead(429, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { message: "rate limited" } }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "chatcmpl-e2e-summary",
+          object: "chat.completion",
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: buildSummaryContent(text),
+              },
+              finish_reason: "stop",
+            },
+          ],
         }),
       );
       return;

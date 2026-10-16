@@ -38,7 +38,7 @@ async function createTask(
   const task = page.getByRole("dialog", { name: "任务详情" });
   const sourceUrl = new URL(
     (await task
-      .getByRole("link", { name: "迭代记录草稿" })
+      .getByRole("link", { name: "打开迭代记录" })
       .getAttribute("href"))!,
     page.url(),
   );
@@ -98,7 +98,7 @@ test("F19 草稿超限失败保留待办和选择，修正草稿后可发布并�
     { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     const { task, url } = await createTask(page, runtime, false);
-    await task.getByRole("link", { name: "迭代记录草稿" }).click();
+    await task.getByRole("link", { name: "打开迭代记录" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建任务迭代" });
     // 草稿与正式版本共用字段上限，超限只能在发布阶段由搜索容量触发；API 请求体默认上限

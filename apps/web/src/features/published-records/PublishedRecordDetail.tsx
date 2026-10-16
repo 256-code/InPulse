@@ -19,7 +19,7 @@ import { RecordMarkdown } from "@features/common/components/RecordMarkdown";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { CalmBadge } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { useModules } from "@features/modules/module-query";
 import { useProjectDetail } from "@features/projects/project-query";
 import { useProjectFeatureNames } from "@features/records/feature-name-map";
@@ -264,14 +264,9 @@ export function PublishedRecordDetail({
         )}
         <dt>作者与时间</dt>
         <dd>
-          {authorName} · 创建{" "}
-          {new Date(record.createdAt).toLocaleString("zh-CN", {
-            timeZone: BEIJING_TIME_ZONE,
-          })}
+          {authorName} · 创建 {formatBeijingMinute(record.createdAt)}
           {record.status === "PUBLISHED"
-            ? ` · 发布 ${new Date(record.publishedAt).toLocaleString("zh-CN", {
-                timeZone: BEIJING_TIME_ZONE,
-              })}`
+            ? ` · 发布 ${formatBeijingMinute(record.publishedAt)}`
             : ""}
         </dd>
         {record.status === "VOID" && (
@@ -370,9 +365,7 @@ export function PublishedRecordDetail({
           description={
             <>
               最近作废：
-              {new Date(record.voidedAt).toLocaleString("zh-CN", {
-                timeZone: BEIJING_TIME_ZONE,
-              })}
+              {formatBeijingMinute(record.voidedAt)}
               <p className="draft-content">{record.voidReason}</p>
             </>
           }
@@ -416,9 +409,7 @@ export function PublishedRecordDetail({
                         "v" +
                         v.versionNo +
                         " · " +
-                        new Date(v.createdAt).toLocaleString("zh-CN", {
-                          timeZone: BEIJING_TIME_ZONE,
-                        }),
+                        formatBeijingMinute(v.createdAt),
                     }))}
                     animated
                   />
@@ -437,9 +428,7 @@ export function PublishedRecordDetail({
                         "v" +
                         v.versionNo +
                         " · " +
-                        new Date(v.createdAt).toLocaleString("zh-CN", {
-                          timeZone: BEIJING_TIME_ZONE,
-                        }),
+                        formatBeijingMinute(v.createdAt),
                     }))}
                     animated
                   />

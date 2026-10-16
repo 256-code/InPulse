@@ -131,7 +131,7 @@ test("F18 已完成 FEATURE 来源任务的记录发布和历史查看", async (
     await pickCalmSelectOption(complete, "完成原因", "测试验证");
     await complete.getByRole("button", { name: "确认完成任务" }).click();
     await expect(complete).toBeHidden();
-    await task.getByRole("link", { name: "迭代记录草稿" }).click();
+    await task.getByRole("link", { name: "打开迭代记录" }).click();
     await page.getByRole("button", { name: "新建来源草稿" }).click();
     const draft = page.getByRole("dialog", { name: "新建任务迭代" });
     await draft.getByLabel("改动原因").fill("补充测试记录");

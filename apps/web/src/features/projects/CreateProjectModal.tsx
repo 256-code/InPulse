@@ -239,7 +239,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               )}
             />
             <fieldset className="impact-fieldset">
-              <legend>初始项目成员</legend>
+              <legend>项目成员</legend>
               <p className="member-hint">
                 创建者 {creatorName} 自动成为活跃成员，创建流程中不可取消。
               </p>
@@ -250,7 +250,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   <label htmlFor="project-member-candidates">选择成员</label>
                   <CalmSelect
                     id="project-member-candidates"
-                    ariaLabel="选择初始成员"
+                    ariaLabel="选择项目成员"
                     appearance="member"
                     multiple
                     value={selectedMemberIds}

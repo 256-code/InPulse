@@ -259,7 +259,7 @@ export function RecordDraftsView({
     });
   };
   return (
-    <section className="record-drafts-page" aria-label="迭代记录草稿">
+    <section className="record-drafts-page" aria-label="迭代记录">
       {projects.isError && (
         <Alert
           type="error"

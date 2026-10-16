@@ -1,6 +1,6 @@
 import {
+  formatBeijingMinute,
   formatBeijingMonthDayCn,
-  BEIJING_TIME_ZONE,
 } from "@features/common/beijing-time";
 
 /**
@@ -14,8 +14,5 @@ export function formatDay(iso: string): string {
 }
 
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
-    hour12: false,
-    timeZone: BEIJING_TIME_ZONE,
-  });
+  return formatBeijingMinute(iso);
 }

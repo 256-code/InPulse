@@ -79,7 +79,7 @@ import { ModulesCommandPort, ModulesModule } from "../modules/modules/index.js";
 // Nest: @Module({ imports: [ModulesModule], ... })
 // Workflow constructor: @Inject(ModulesCommandPort) private readonly modules: ModulesCommandPort
 await this.unitOfWork.run(async (tx) => {
-  // A 在此使用同一 tx 创建项目、创建者及初始成员，得到 projectId、creatorId。
+  // A 在此使用同一 tx 创建项目、创建者及项目成员，得到 projectId、creatorId。
   const { moduleId } = await this.modules.createUnclassifiedModule(tx, {
     projectId,
     createdBy: creatorId,
@@ -91,7 +91,7 @@ await this.unitOfWork.run(async (tx) => {
 
 事务所有权只在调用方。Port 和 Repository 只使用传入的 `tx.sql`，不创建
 UnitOfWork、不提交、不使用全局客户端。项目与创建者成员历史必须同事务写入并
-保留数据库 `now()` 默认值，确保延迟初始化约束通过。授权、初始成员有效性、
+保留数据库 `now()` 默认值，确保延迟初始化约束通过。授权、项目成员有效性、
 项目可写性和外层幂等仍由 Workflow 负责；此 Port 不作为普通模块创建入口。
 
 重复创建不视为幂等成功。PostgreSQL `23505` 且约束为

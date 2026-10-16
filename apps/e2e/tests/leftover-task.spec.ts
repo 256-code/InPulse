@@ -34,7 +34,7 @@ async function createTask(
   const task = page.getByRole("dialog", { name: "任务详情" });
   const sourceUrl = new URL(
     (await task
-      .getByRole("link", { name: "迭代记录草稿" })
+      .getByRole("link", { name: "打开迭代记录" })
       .getAttribute("href"))!,
     page.url(),
   );

@@ -313,7 +313,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       `# 项目：${projectName}`,
       `- 项目编码：${projectCode}`,
       "- 项目说明：来自固定模板",
-      `- 初始成员：${creator.loginName}, ${initialMemberLogin}, ${assigneeLogin}`,
+      `- 项目成员：${creator.loginName}, ${initialMemberLogin}, ${assigneeLogin}`,
       "",
       "## 模块：支付",
       "- 说明：支付能力",
@@ -344,7 +344,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       tasks: 1,
       reusedModules: 0,
       reusedFeatures: 0,
-      // ADR-073：创建者默认算初始成员，成员行数=创建者+初始成员+任务负责人。
+      // ADR-073：创建者默认算项目成员，成员行数=创建者+项目成员+任务负责人。
       addedMembers: 3,
     });
     expect(result.modules).toHaveLength(1);
@@ -464,7 +464,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     const document = [
       `# 项目：${projectName}`,
       `- 项目编码：${projectCode}`,
-      `- 初始成员：${actor.loginName}, ${memberLogin}`,
+      `- 项目成员：${actor.loginName}, ${memberLogin}`,
       "",
       "## 模块：账户",
       "### 功能：登录",
@@ -528,7 +528,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     `) as unknown as readonly { count: number }[];
     expect(afterStale[0]!.count).toBe(0);
 
-    // 项目创建触发器要求创建者必须有初始成员行（ADR-033）。
+    // 项目创建触发器要求创建者必须有项目成员行（ADR-033）。
     await sql.begin(async (transaction) => {
       const occupantRows = (await transaction`
         INSERT INTO app.projects (code, name, created_by)
@@ -598,7 +598,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
     expect(issues.some((issue) => issue.code === "ASSIGNEE_UNRESOLVED")).toBe(
       true,
     );
-    // ADR-072：这份文档根本没写初始成员，必填缺失在同一个 422 里一次说清。
+    // ADR-072：这份文档根本没写项目成员，必填缺失在同一个 422 里一次说清。
     expect(issues.some((issue) => issue.code === "MEMBER_REQUIRED")).toBe(true);
     const projects = (await sql`
       SELECT count(*)::int AS "count"
@@ -650,7 +650,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       "DOCUMENT_IMPORT_SESSION_REQUIRED",
     );
   });
-  test("整项目导入：初始成员必填且必须含全部负责人；创建者由系统默认补进成员", async () => {
+  test("整项目导入：项目成员必填且必须含全部负责人；创建者由系统默认补进成员", async () => {
     const sql = runtime!;
     const actor = await sessionActor(sql, await createUser(sql));
     const assigneeId = await createUser(sql);
@@ -662,7 +662,7 @@ describe("ADR-064 文档导入（真实 HTTP + PostgreSQL）", () => {
       [
         `# 项目：${projectName}`,
         `- 项目编码：${projectCode}`,
-        `- 初始成员：${members}`,
+        `- 项目成员：${members}`,
         "",
         "## 模块：结算",
         "### 任务：对账",

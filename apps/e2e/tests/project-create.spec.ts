@@ -25,7 +25,7 @@ test("登录用户创建项目并验证动态、搜索与站内通知", async ({
   await dialog
     .getByLabel("项目描述")
     .fill("由 Playwright 创建，用于验证 F-04 关键路径。");
-  await pickCalmSelectOptions(dialog, "选择初始成员", [runtime.member.name]);
+  await pickCalmSelectOptions(dialog, "选择项目成员", [runtime.member.name]);
   await expect(dialog.getByText(/已选择 1 位其他成员/)).toBeVisible();
   await dialog.getByRole("button", { name: "创建项目" }).click();
 

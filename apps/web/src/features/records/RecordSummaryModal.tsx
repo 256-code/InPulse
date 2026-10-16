@@ -195,6 +195,11 @@ export function RecordSummaryModal({
   const [aiDocument, setAiDocument] = useState<SummaryAssistDocument | null>(
     null,
   );
+  /**
+   * 生成改写稿时用的事实快照：重取到的事实与它不同，就说明这份稿子已经过时。
+   * 与下面「打开时重取」配对，避免出现「事实是新的、正文是旧的」。
+   */
+  const [assistFacts, setAssistFacts] = useState<string | null>(null);
   /** 已改动的段：key → 当前文本；改回原文即删除该键（计数以「与原文不同」为准）。 */
   const [edited, setEdited] = useState<Readonly<Record<string, string>>>({});
   const aiSlotRef = useRef<HTMLDivElement | null>(null);
@@ -249,6 +254,32 @@ export function RecordSummaryModal({
     setAiDocument(null);
     setEdited({});
   }, [range.from, range.to, groupBy, projectId, memberId]);
+
+  /**
+   * 每次打开都重取事实：总结是「此刻事实」的快照（服务端只返回现时可见的已发布
+   * 记录）。弹层关闭时查询被禁用，重新打开不会按挂载重取，沿用缓存会让期间新发布 /
+   * 作废 / 恢复的记录进不了总结——除非用户自己改范围或点「重新生成」。
+   */
+  const refetchedOnOpen = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      refetchedOnOpen.current = false;
+      return;
+    }
+    if (refetchedOnOpen.current) return;
+    refetchedOnOpen.current = true;
+    // 首次打开由 enabled 触发取数；只有缓存里已有数据时才需要显式重取。
+    if (summary.dataUpdatedAt > 0) void summary.refetch();
+  }, [open, summary]);
+
+  // 事实变了（重取到新事实、范围变化、他处发布 / 作废 / 恢复）就丢弃改写稿与手动
+  // 改动：拿旧事实写出的正文汇报新范围，比没有正文更糟（ADR-076 §2.2 同口径）。
+  useEffect(() => {
+    if (assistFacts === null || assistFacts === facts) return;
+    setAiDocument(null);
+    setEdited({});
+    setAssistFacts(null);
+  }, [assistFacts, facts]);
 
   // 点浮层以外的地方收起浮层；Esc 由下一个 effect 在 window 捕获层先收浮层。
   useEffect(() => {
@@ -372,6 +403,7 @@ export function RecordSummaryModal({
       });
       setAiDocument(parseSummaryAssistMarkdown(result.markdown));
       setEdited({});
+      setAssistFacts(facts);
       setDetail(false);
       setAiOpen(false);
       if (text !== "") {

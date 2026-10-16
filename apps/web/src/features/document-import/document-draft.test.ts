@@ -12,7 +12,7 @@ import {
 } from "./document-draft";
 
 const SAMPLE =
-  "# 项目：商城系统\n- 项目编码：SHOP\n- 初始成员：林雨, 陈昊\n\n> 说明行会被忽略\n## 模块：支付\n- 说明：支付与退款能力\n### 功能：微信支付退款回调\n- 当前说明：现在如何处理回调\n#### 任务：修复重复回调\n- 负责人：林雨\n- 优先级：高\n\n### 任务：模块级任务\n- 负责人：陈昊\n- 影响功能：微信支付退款回调\n## 模块：订单\n- 说明：（待补）\n```\n围栏里的正文按行解析\n```\n- 孤立字段行";
+  "# 项目：商城系统\n- 项目编码：SHOP\n- 项目成员：林雨, 陈昊\n\n> 说明行会被忽略\n## 模块：支付\n- 说明：支付与退款能力\n### 功能：微信支付退款回调\n- 当前说明：现在如何处理回调\n#### 任务：修复重复回调\n- 负责人：林雨\n- 优先级：高\n\n### 任务：模块级任务\n- 负责人：陈昊\n- 影响功能：微信支付退款回调\n## 模块：订单\n- 说明：（待补）\n```\n围栏里的正文按行解析\n```\n- 孤立字段行";
 
 describe("ADR-071 模板草稿的结构化往返", () => {
   it("识别标题行、字段行、忽略行与未知行", () => {
@@ -69,7 +69,7 @@ describe("ADR-071 模板草稿的结构化往返", () => {
     expect(view.project).toMatchObject({ name: "商城系统" });
     expect(
       view.project === null ? [] : view.project.fields.map((f) => f.name),
-    ).toEqual(["项目编码", "初始成员"]);
+    ).toEqual(["项目编码", "项目成员"]);
     expect(view.counts).toEqual({ modules: 2, features: 1, tasks: 2 });
     const pay = view.modules[0]!;
     expect(pay.name).toBe("支付");

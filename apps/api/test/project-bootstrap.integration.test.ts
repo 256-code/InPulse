@@ -61,7 +61,7 @@ interface MemberRow {
 }
 
 describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
-  test("成功创建项目：创建者+初始成员+空模块集合+审计+三投影同事务", async () => {
+  test("成功创建项目：创建者+项目成员+空模块集合+审计+三投影同事务", async () => {
     const creatorId = await createUser(client!.sql);
     const memberId = await createUser(client!.sql);
     const name = `项目 ${randomUUID()}`;
@@ -169,7 +169,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
     ).toBe(true);
   });
 
-  test("仅创建者：保留初始成员历史且项目不创建模块", async () => {
+  test("仅创建者：保留项目成员历史且项目不创建模块", async () => {
     const creatorId = await createUser(client!.sql);
     const name = `仅创建者 ${randomUUID()}`;
     const result = await uow!.run((tx) =>
@@ -193,7 +193,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
     expect(memberRows).toEqual([{ user_id: creatorId, status: "ACTIVE" }]);
   });
 
-  test("初始成员为停用用户时整笔回滚", async () => {
+  test("项目成员为停用用户时整笔回滚", async () => {
     const creatorId = await createUser(client!.sql);
     const disabledId = await createUser(client!.sql, { disabled: true });
     const name = `停用成员 ${randomUUID()}`;
@@ -215,7 +215,7 @@ describe("ProjectBootstrapWorkflow (real PostgreSQL)", () => {
     expect(leftover).toHaveLength(0);
   });
 
-  test("初始成员为不存在用户时整笔回滚", async () => {
+  test("项目成员为不存在用户时整笔回滚", async () => {
     const creatorId = await createUser(client!.sql);
     const name = `不存在成员 ${randomUUID()}`;
     const ghostId = 2147483647;

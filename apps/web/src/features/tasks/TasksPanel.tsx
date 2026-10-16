@@ -1,5 +1,12 @@
 import { GlobalTaskCreateModal } from "./GlobalTaskCreateModal";
 import { taskDetailPath, type TaskLocation } from "./task-links";
+import {
+  DETACHED_ASSIGNEE_HINT,
+  detachedAssigneeTitle,
+  hasDetachedAssignee,
+  isDetachedAssignee,
+  withDetachedMark,
+} from "./detached-assignee";
 import { TaskOriginFacts } from "./task-origin";
 import { ExternalLinksPanel } from "@features/external-links/ExternalLinksPanel";
 import { MergeIntoMainTaskModal } from "@features/task-groups/MergeIntoMainTaskModal";
@@ -38,7 +45,8 @@ import {
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   beijingTodayStart,
-  BEIJING_TIME_ZONE,
+  formatBeijingDate,
+  formatBeijingMinute,
 } from "@features/common/beijing-time";
 import {
   CalmBadge,
@@ -140,18 +148,9 @@ const LEFTOVER_SOURCE_BADGE = {
 } as const;
 /** 一律按北京时间渲染服务端时间串，避免在非 +8 环境显示成另一天。 */
 const formatDate = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleString("zh-CN", {
-        hour12: false,
-        timeZone: BEIJING_TIME_ZONE,
-      })
-    : "未设置";
+  value ? formatBeijingMinute(value) : "未设置";
 const formatDay = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleDateString("zh-CN", {
-        timeZone: BEIJING_TIME_ZONE,
-      })
-    : "日期不可用";
+  value ? formatBeijingDate(value) : "日期不可用";
 const dueLabel = (value: string | null) =>
   value ? "截止 " + formatDate(value) : "未设置截止";
 /**
@@ -403,7 +402,7 @@ export function TasksPanel({
    */
   const [publishedRecord, setPublishedRecord] =
     useState<PublishedRecord | null>(null);
-  /** 迭代记录草稿弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
+  /** 迭代记录弹窗目标：与记录页共用同一个弹窗组件，写草稿不再离开当前页面。 */
   const [draftTarget, setDraftTarget] =
     useState<RecordDraftEditorTarget | null>(null);
   const generation = useRef(0);
@@ -482,29 +481,6 @@ export function TasksPanel({
     query.data?.items.filter(
       (item) => statusFilter === "ALL" || item.workStatus === statusFilter,
     ) ?? [];
-  const memberName = (id: number) =>
-    members.data?.items.find((m) => m.id === id)?.name ??
-    "用户 #" + id + "（历史负责人）";
-  /** 多负责人平权（ADR-040）：逐人解析后顺次展示。 */
-  const memberNames = (ids: readonly number[]) =>
-    ids.length === 0 ? "未指派" : ids.map(memberName).join("、");
-  /** 负责人候选项：活跃成员 + 当前任务的历史负责人（已不在成员列表时标注可保留）。 */
-  const assigneeOptions = useMemo(() => {
-    const items = members.data?.items ?? [];
-    const list: CalmSelectOption[] = items.map((member) => ({
-      value: member.id,
-      label: member.name,
-      avatarUrl: member.avatarUrl ?? null,
-    }));
-    for (const currentId of selection?.item?.assigneeIds ?? [])
-      if (!list.some((option) => option.value === currentId))
-        list.unshift({
-          value: currentId,
-          label: memberName(currentId),
-          description: "可保留",
-        });
-    return list;
-  }, [members.data, selection]);
   // 创建人与状态历史操作人未必在任务指派人候选中：用项目活跃成员名单解析姓名，
   // 仍解析不到（已移出项目或停用）时回退中性编号，不冒充负责人语义。
   const projectMembers = useQuery({
@@ -521,6 +497,66 @@ export function TasksPanel({
     members.data?.items.find((m) => m.id === id)?.name ??
     userDirectory.data?.find((u) => u.id === id)?.name ??
     "用户 #" + id;
+
+  /**
+   * 活跃项目成员 id 集合（成员候选名单与项目活跃成员名单同源）：名单还没回来时为
+   * null，此时一律不标「已移出」，免得加载那一瞬间把所有人都误标一遍。
+   */
+  const activeMemberIds = useMemo<ReadonlySet<number> | null>(() => {
+    const source = members.data ?? projectMembers.data;
+    return source === undefined
+      ? null
+      : new Set(source.items.map((item) => item.id));
+  }, [members.data, projectMembers.data]);
+  /**
+   * 负责人姓名。已移出项目的人用「姓名（已移出项目）」呈现——2026-10-16 实测反馈：
+   * 这里原来回退成「用户 #2（历史负责人）」，把内部编号暴露给了用户，也说不清该怎么办。
+   */
+  const memberName = (id: number) =>
+    withDetachedMark(personName(id), isDetachedAssignee(activeMemberIds, id));
+  /** 多负责人平权（ADR-040）：逐人解析后顺次展示。 */
+  const memberNames = (ids: readonly number[]) =>
+    ids.length === 0 ? "未指派" : ids.map(memberName).join("、");
+  /** 这批负责人里是否有已移出项目的人：详情页据此补一行重新分配指引。 */
+  const memberDetached = (ids: readonly number[]) =>
+    hasDetachedAssignee(activeMemberIds, ids);
+  /** hover 文案：姓名之外把「请重新分配」的处置指引一并带上。 */
+  const assigneeTitle = (ids: readonly number[]) =>
+    ids.length === 0
+      ? "负责人：未指派"
+      : "负责人：" +
+        ids
+          .map((id) =>
+            detachedAssigneeTitle(
+              personName(id),
+              isDetachedAssignee(activeMemberIds, id),
+            ),
+          )
+          .join("、");
+  /** 负责人候选项：活跃成员 + 当前任务残留的负责人（已移出项目的带标记与处置指引）。 */
+  const assigneeOptions = useMemo(() => {
+    const items = members.data?.items ?? [];
+    const list: CalmSelectOption[] = items.map((member) => ({
+      value: member.id,
+      label: member.name,
+      avatarUrl: member.avatarUrl ?? null,
+    }));
+    for (const currentId of selection?.item?.assigneeIds ?? [])
+      if (!list.some((option) => option.value === currentId))
+        list.unshift({
+          value: currentId,
+          label: memberName(currentId),
+          description:
+            activeMemberIds === null ? "可保留" : DETACHED_ASSIGNEE_HINT,
+        });
+    return list;
+  }, [
+    members.data,
+    projectMembers.data,
+    userDirectory.data,
+    activeMemberIds,
+    selection,
+  ]);
   // ADR-054：任务层面已下线归档，只读只可能来自任务自身无效或调用方传入的只读范围。
   const editReadOnly =
     selection?.item !== undefined &&
@@ -1020,7 +1056,7 @@ export function TasksPanel({
                         : item.description}
                     </p>
                     <div className="calm-card-assignee">
-                      <span title={"负责人：" + memberNames(item.assigneeIds)}>
+                      <span title={assigneeTitle(item.assigneeIds)}>
                         <InpulseIcon name="users" size={14} />
                         {memberNames(item.assigneeIds)}
                       </span>
@@ -1308,7 +1344,7 @@ export function TasksPanel({
                         <a
                           href={`/records?projectId=${projectId}&moduleId=${moduleId}&taskId=${current.id}`}
                         >
-                          迭代记录草稿
+                          打开迭代记录
                         </a>
                         {currentRecordCount > 0 && (
                           <span
@@ -1512,7 +1548,14 @@ export function TasksPanel({
                       client={client}
                     />
                     <dt>负责人</dt>
-                    <dd>{memberNames(current.assigneeIds)}</dd>
+                    <dd>
+                      {memberNames(current.assigneeIds)}
+                      {memberDetached(current.assigneeIds) && (
+                        <small className="assignee-detached-hint">
+                          {DETACHED_ASSIGNEE_HINT}
+                        </small>
+                      )}
+                    </dd>
                     <dt>创建人</dt>
                     <dd>{personName(current.creatorId)}</dd>
                     <dt>截止时间</dt>

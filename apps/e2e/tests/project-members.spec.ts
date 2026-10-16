@@ -19,7 +19,9 @@ test("普通成员可查看并管理本项目成员，不能读取其他项目",
     await page.goto(`/projects/${runtime.projectId}/members`);
     // 只读视图复用管理员页的视觉语言：h1 为项目名，成员渲染为
     // .calm-member-card 卡片；不再提供旧的 `.project-members` 列表结构。
-    const members = page.locator(".settings-panel");
+    // 用 testid 锚定成员卡片：同一页的项目企微群卡片也带 .settings-panel，
+    // 类名选择器会撞上两个元素（2026-10-16 实测 strict mode violation）。
+    const members = page.getByTestId("project-members-panel");
     await expect(
       page.getByRole("heading", { name: runtime.projectName, level: 1 }),
     ).toBeVisible();

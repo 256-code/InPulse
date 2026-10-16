@@ -231,7 +231,7 @@ export function lastNodeLineIndex(
   );
 }
 
-/** 逗号 / 顿号分隔的字段值（负责人、初始成员、标签、影响功能）。 */
+/** 逗号 / 顿号分隔的字段值（负责人、项目成员、标签、影响功能）。 */
 export function splitDocumentDraftList(value: string): readonly string[] {
   return value
     .split(/[,，、]/)

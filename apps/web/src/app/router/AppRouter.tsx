@@ -20,6 +20,18 @@ const ProjectOverviewRedirect: React.FC = () => {
   return <Navigate to={`/projects/${projectId ?? ""}/modules`} replace />;
 };
 
+/**
+ * 项目子页的别名重定向。手输 / 收藏里的旧地址此前直接落到 404（2026-10-16 实测
+ * /projects/13/settings 与 /projects/13/tasks 都 404，实际分段是 members 与
+ * task-board），这里按分段给一层显式别名，和上面的 overview 同一套做法。
+ */
+const ProjectSegmentRedirect: React.FC<{ readonly segment: string }> = ({
+  segment,
+}) => {
+  const { projectId } = useParams();
+  return <Navigate to={`/projects/${projectId ?? ""}/${segment}`} replace />;
+};
+
 export function loadPageRoutes(): AppRouteModule[] {
   // 静态自动聚合 pages 目录下所有领域 route.ts 导出
   const modules = import.meta.glob<{
@@ -75,6 +87,14 @@ export function createInPulseRouter(
       {
         path: "projects/:projectId/overview",
         element: <ProjectOverviewRedirect />,
+      },
+      {
+        path: "projects/:projectId/tasks",
+        element: <ProjectSegmentRedirect segment="task-board" />,
+      },
+      {
+        path: "projects/:projectId/settings",
+        element: <ProjectSegmentRedirect segment="members" />,
       },
       ...childRoutes,
     ],

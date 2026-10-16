@@ -7,7 +7,7 @@ import type {
 } from "@generated/api";
 import { useAuth } from "@features/auth/auth-context";
 import { AppModal } from "@features/common/components/AppModal";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { useProjectDetail } from "@features/projects/project-query";
 import type { TaskLocation } from "@features/tasks/task-links";
 import { TaskGroupRecordLinks } from "@features/task-groups/TaskGroupRecordLinks";
@@ -130,12 +130,7 @@ export function RecordDetailModal({
             <dt>归属</dt>
             <dd>{record.contextLabel ?? "本任务"}</dd>
             <dt>发布时间</dt>
-            <dd>
-              {new Date(record.publishedAt).toLocaleString("zh-CN", {
-                hour12: false,
-                timeZone: BEIJING_TIME_ZONE,
-              })}
-            </dd>
+            <dd>{formatBeijingMinute(record.publishedAt)}</dd>
           </dl>
           {links.length > 0 ? (
             <TaskGroupRecordLinks

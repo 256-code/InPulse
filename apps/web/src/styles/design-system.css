@@ -4259,6 +4259,15 @@ a:focus-visible {
   margin: 0;
   overflow-wrap: anywhere;
 }
+/* 负责人已移出项目：任务详情在姓名下面补一行「请重新分配」的指引
+   （2026-10-16 实测反馈：人被移出后卡片只平铺姓名、详情回退成内部编号）。 */
+.assignee-detached-hint {
+  display: block;
+  margin-top: 4px;
+  color: #ae741b;
+  font-size: 12px;
+  font-weight: 600;
+}
 .more-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -7425,10 +7434,29 @@ td.due-overdue {
 .import-member-picker {
   flex-basis: 100%;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* 「从成员里挑」的搜索框：打一个字就把相关成员筛出来（2026-10-16 用户要求）。 */
+.import-member-search {
+  width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #f0dca6;
+  border-radius: 7px;
+  background: white;
+  font-size: 12px;
+  color: #7a5300;
+}
+.import-member-cands {
+  display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 120px;
+  max-height: 110px;
   overflow: auto;
+}
+.import-member-empty {
+  font-size: 11.5px;
+  color: #8fa5bb;
 }
 .import-composer {
   flex-shrink: 0;
@@ -7678,7 +7706,7 @@ td.due-overdue {
   line-height: 1.6;
 }
 
-/* 成员字段的账号建议：点「初始成员 / 负责人」的值变输入框，边打边按姓名筛出账号（点一条
+/* 成员字段的账号建议：点「项目成员 / 负责人」的值变输入框，边打边按姓名筛出账号（点一条
    就填进草稿）。antd-adapter.css 为顶栏的账户 / 通知气泡把 ``.ant-popover-container`` 压成
    1×1 透明盒、内容层绝对定位；那两条规则写在 ``div.ant-popover > ...`` 上，会一并作用到这里。
    照 features/common/components/calm-date-picker.css 的写法再加一个 `.import-member-popover`

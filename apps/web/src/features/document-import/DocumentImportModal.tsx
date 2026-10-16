@@ -82,13 +82,17 @@ const MAX_MISSING_WHERE = 3;
 
 const ASSIGNEE_FIELD = "负责人";
 /** 各层级的标准字段（模板版本 1）：缺哪个就在草稿里补一个空行。 */
-const PROJECT_FIELDS = ["项目编码", "项目说明", "初始成员"] as const;
+const PROJECT_FIELDS = ["项目编码", "项目说明", "项目成员"] as const;
 const MODULE_FIELDS = ["说明"] as const;
 const FEATURE_FIELDS = ["当前说明", "验收标准", "标签"] as const;
 const TASK_FIELDS = ["负责人", "优先级", "截止", "描述"] as const;
 const MODULE_TASK_EXTRA_FIELDS = ["影响功能"] as const;
 /** 必填字段（不补服务端会拒绝）：与 computeMissingItems 里的 ERROR 项一一对应。 */
-const PROJECT_REQUIRED_FIELDS = ["项目编码", "初始成员"] as const;
+const PROJECT_REQUIRED_FIELDS = ["项目编码", "项目成员"] as const;
+/** 字段名的历史别名：旧模板把成员字段写成「初始成员」，读草稿时要一并认。 */
+const FIELD_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  项目成员: PROJECT_MEMBER_FIELD_NAMES,
+};
 const TASK_REQUIRED_FIELDS = ["负责人"] as const;
 
 function fieldValue(
@@ -151,7 +155,7 @@ function collectDraftTasks(
  * 建议项只是提醒。模型不参与，「还差几处」任何时候都能算出来。
  */
 /**
- * 成员名单两项校验：缺初始成员 / 初始成员缺任务负责人（ADR-072；ADR-073 起创建者
+ * 成员名单两项校验：缺项目成员 / 项目成员缺任务负责人（ADR-072；ADR-073 起创建者
  * 默认就算成员，不再单列一条缺口）。与服务端 preparePlan 的 NEW_PROJECT 分支同一口径
  * （那边是最终裁决）。
  */
@@ -165,7 +169,7 @@ function memberMissingItems(
     return [
       {
         key: "member",
-        label: "缺初始成员",
+        label: "缺项目成员",
         count: 1,
         severity: "ERROR",
         where: [],
@@ -176,7 +180,7 @@ function memberMissingItems(
   if (coverage.missingAssignees.length > 0) {
     items.push({
       key: "memberAssignee",
-      label: "初始成员缺任务负责人",
+      label: "项目成员缺任务负责人",
       count: coverage.missingAssignees.length,
       severity: "ERROR",
       where: coverage.missingAssignees.slice(0, MAX_MISSING_WHERE),
@@ -385,19 +389,23 @@ function describeGaps(items: readonly MissingItem[]): string | null {
  * 2026-10-14 第三轮反馈「这个可选择性的补充重复次数太多了，不要每一次我和 ai 讲话就
  * 提醒我一下那些可以选择增加」——每轮复读同一份建议清单纯属噪音。
  */
+function gapReplySentence(must: readonly MissingItem[]): string {
+  return (
+    "必填还差 " +
+    String(gapTotal(must)) +
+    " 处：" +
+    gapDetail(must) +
+    "。左栏对应位置点「＋」可以直接填，也可以用一句话告诉我。"
+  );
+}
+
 function buildAssistReply(items: readonly MissingItem[]): string {
   if (items.length === 0) {
     return "我重新核对了一遍：必填和完整度都没问题了，可以直接点「预览」导入。";
   }
   const must = items.filter((item) => item.severity === "ERROR");
   if (must.length === 0) return "我重新核对了一遍：必填都齐了。";
-  return (
-    "我重新核对了一遍：必填还差 " +
-    String(gapTotal(must)) +
-    " 处：" +
-    gapDetail(must) +
-    "。左栏对应位置点「＋」可以直接填，也可以用一句话告诉我。"
-  );
+  return "我重新核对了一遍：" + gapReplySentence(must);
 }
 
 /**
@@ -473,6 +481,61 @@ const PRIORITY_LABELS: Readonly<Record<string, string>> = {
   URGENT: "紧急",
 };
 
+/** 按姓名字串过滤成员目录（目录一次最多 300 人，做个本地的「打一个字就筛」）。 */
+function filterDirectoryByName(
+  members: readonly UserDirectoryItem[],
+  query: string,
+): readonly UserDirectoryItem[] {
+  const needle = query.trim();
+  return needle.length === 0
+    ? members
+    : members.filter((member) => member.name.includes(needle));
+}
+
+/**
+ * 「从成员里挑」候选面板：此前是一整片平铺按钮，人多时既难扫也难挑；
+ * 2026-10-16 用户要求「打名字的其中一个字就把相关的筛出来」，这里补一个搜索框。
+ * 只按姓名子串过滤，不新增接口（目录本来就是一次取回的本地数据）。
+ */
+const MemberPickerPanel: React.FC<{
+  readonly members: readonly UserDirectoryItem[];
+  readonly query: string;
+  readonly disabled: boolean;
+  readonly onQueryChange: (next: string) => void;
+  readonly onPick: (name: string) => void;
+}> = ({ members, query, disabled, onQueryChange, onPick }) => {
+  const filtered = filterDirectoryByName(members, query);
+  return (
+    <div className="import-member-picker">
+      <input
+        aria-label="搜索成员"
+        className="import-member-search"
+        value={query}
+        disabled={disabled}
+        placeholder="输入姓名里的一个字，例如「陈」"
+        onChange={(event) => onQueryChange(event.currentTarget.value)}
+      />
+      <div className="import-member-cands">
+        {filtered.map((member) => (
+          <Button
+            key={member.id}
+            size="small"
+            disabled={disabled}
+            onClick={() => onPick(member.name)}
+          >
+            {member.name}
+          </Button>
+        ))}
+        {filtered.length === 0 ? (
+          <span className="import-member-empty">
+            没有匹配的成员，换个字再试。
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
 export interface DocumentImportModalProps {
   readonly open: boolean;
   readonly mode: DocumentImportMode;
@@ -545,6 +608,8 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     [draftLines],
   );
   const hasContent = documentText.trim().length > 0;
+  /** 「从成员里挑」面板的搜索词：换一个待确认名字时清空，避免下次开面板还带着上次的字。 */
+  const [memberPickerQuery, setMemberPickerQuery] = useState("");
   const directoryQuery = useUserDirectoryQuery({
     client,
     enabled: open && hasContent,
@@ -767,25 +832,14 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   };
 
   /**
-   * 必填缺口状态没变就闭嘴：此前每发一句话都立刻报一次相同的缺口，用户看到的是同一句
-   * 复读（2026-10-14 反馈「这句话为什么一直重复？」），之后又变成只动建议项也每轮念一遍
-   * （第三轮反馈「这个可选择性的补充重复次数太多了」）。现在指纹只取必填项：必填缺口
-   * 增减 / 数量变化立刻再报，只动建议项时不再开口；本轮到底改了什么仍由 describeDraftChange
-   * 的落地汇报如实说清。
-   */
-  const announceGapsOnce = (items: readonly MissingItem[]): void => {
-    const signature = requiredGapSignature(items);
-    if (announcedGapReplyRef.current === signature) return;
-    announcedGapReplyRef.current = signature;
-    appendAssistMessage(buildAssistReply(items));
-  };
-
-  /**
    * 把这一轮的结果落成一条助手气泡。这里用刚返回的草稿文本重新解析，
    * 而不是读 state——runAssist 里的 setDocumentText 还没在这一帧生效。
-   * 传了 base（用户发言那一轮）就说清左栏改了什么 / 有没有改；
-   * 没传 base 的路径仍旧说还剩什么缺口，skipIfSameAs 命中时闭嘴，
-   * 免得同一句结论在对话里出现两遍。
+   *
+   * 2026-10-16 实测发现同轮自相矛盾：发送瞬间先按「用户发言前」的草稿报一句
+   * 「必填还差 2 处：缺负责人 ×2」，模型落地后又报「已按补充说明更新草稿：
+   * …负责人：特哥」，两句话同屏读起来就是自打脸（顶部常驻结论其实已经没有缺口）。
+   * 现在发送路径不再单独预告缺口：等待期间由 busy 提示顶上，这一轮只发这一条——
+   * 先说左栏改了什么，再补剩余必填缺口；缺口状态与上次汇报相同就不再念。
    */
   const appendAssistReply = (
     markdown: string,
@@ -800,11 +854,17 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
       mode,
       memberContext,
     );
-    // 这一轮已经在对话里说清剩余缺口，落地汇总不必再重复一条（未变化的缺口本来就跳过）。
+    // 这一轮已经说清落地结果，落地汇总不必再重复一条。
     announcedImportRef.current = appliedLandingKey(markdown);
     // 这一轮改了什么 / 有没有改：base 传进来就以这句为准，不再让用户自己去左栏里找。
     if (options.base !== undefined) {
-      appendAssistMessage(describeDraftChange(options.base, markdown));
+      const change = describeDraftChange(options.base, markdown);
+      const signature = requiredGapSignature(items);
+      const repeated = announcedGapReplyRef.current === signature;
+      announcedGapReplyRef.current = signature;
+      // 必填结论并进同一条气泡：两句话都读「模型落地后」的这一份草稿，
+      // 不会出现「还差 N 处」与「已更新草稿」同屏互斥。同一份缺口只念一次。
+      appendAssistMessage(repeated ? change : change + buildAssistReply(items));
       return;
     }
     if (
@@ -960,9 +1020,9 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     setComposer("");
     setSupplements(nextSupplements);
     setMessages((current) => [...current, { role: "USER", text }]);
-    // 立刻先回一句：此刻的缺口是本地确定性算出来的，没必要陪模型一起等十几二十秒。
-    // 同一个缺口状态只念一次：缺口没变时，这一轮的结果由下面的落地汇报说清。
-    announceGapsOnce(missingItems);
+    // 不再在发送瞬间单独预告缺口：那一句读的是「用户发言前」的草稿，模型落地后又报
+    // 「已更新草稿」，同屏两句就是自相矛盾（见 appendAssistReply 的说明）。等待期间由
+    // busy 提示「正在让 AI 整理…」顶上，落地结果统一由下面这一条说清。
     const applied = await runAssist(base, nextSupplements, assistSourceName);
     if (applied !== null) {
       appendAssistReply(applied, { skipIfSameAs: missingItems, base });
@@ -1075,9 +1135,13 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     required: readonly string[],
     titleLineIndex: number,
   ): React.ReactElement | null => {
-    const missing = expected.filter(
-      (name) => findDocumentDraftField(fields, name) === null,
-    );
+    // 成员字段有别名（旧模板写「初始成员」）：任一别名已存在就不再提示补这一行。
+    const missing = expected.filter((name) => {
+      const aliases = FIELD_ALIASES[name] ?? [name];
+      return !aliases.some(
+        (alias) => findDocumentDraftField(fields, alias) !== null,
+      );
+    });
     if (missing.length === 0) return null;
     const afterIndex = lastNodeLineIndex(titleLineIndex, fields);
     return (
@@ -1176,7 +1240,7 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   const draftVisible = hasContent && leftView !== "RAW";
 
   /**
-   * 成员字段（「初始成员」/「负责人」）的标签行 + 账号建议：点一条候选就多一个标签、输入框
+   * 成员字段（「项目成员」/「负责人」）的标签行 + 账号建议：点一条候选就多一个标签、输入框
    * 清空，候选列表继续挂着，方便接着加下一个人（2026-10-14 用户「这个下拉框要在选中的时候
    * 一直存在，方便添加下一个人」）。弹层样式与「指派给」同款（头像色块同一个 avatarColorOf）。
    * 目录里没有登录名，所以只按姓名筛；写登录名仍可手打。
@@ -1328,7 +1392,7 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   ): React.ReactElement => {
     const placeholder =
       field.name === ASSIGNEE_FIELD ? "（缺负责人）" : "（待补）";
-    // ADR-073：创建者（= 本次导入人）默认就是成员。它挂在「初始成员」行上，用户看得见、
+    // ADR-073：创建者（= 本次导入人）默认就是成员。它挂在「项目成员」行上，用户看得见、
     // 也删不掉；不改文档原文（「预览文档」仍是一字不改的原版），落库时由服务端写入成员行。
     const creatorLock =
       mode === "NEW_PROJECT" &&
@@ -1712,30 +1776,24 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                 <Button
                   size="small"
                   disabled={assistBusy}
-                  onClick={() =>
+                  onClick={() => {
                     setMemberPicker(
                       memberPicker === item.name ? null : item.name,
-                    )
-                  }
+                    );
+                    setMemberPickerQuery("");
+                  }}
                 >
                   从成员里挑
                 </Button>
               </span>
               {memberPicker === item.name ? (
-                <div className="import-member-picker">
-                  {directory.map((member) => (
-                    <Button
-                      key={member.id}
-                      size="small"
-                      disabled={assistBusy}
-                      onClick={() =>
-                        void handleCandidatePick(item.name, member.name)
-                      }
-                    >
-                      {member.name}
-                    </Button>
-                  ))}
-                </div>
+                <MemberPickerPanel
+                  members={directory}
+                  query={memberPickerQuery}
+                  disabled={assistBusy}
+                  onQueryChange={setMemberPickerQuery}
+                  onPick={(name) => void handleCandidatePick(item.name, name)}
+                />
               ) : null}
             </div>
           ))}
@@ -2024,10 +2082,17 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
               >
                 <div className="import-pane-head">
                   {showTabs ? (
-                    <span className="import-tabs">
+                    /* 两个视图切换按钮此前只有 className 表达选中态，读屏读不出「当前在哪个
+                       视图」：补 aria-pressed（与任务看板工具栏的 segmented 同一语义）。 */
+                    <span
+                      className="import-tabs"
+                      role="group"
+                      aria-label="左栏视图"
+                    >
                       <button
                         type="button"
                         className={leftView === "DRAFT" ? "is-on" : undefined}
+                        aria-pressed={leftView === "DRAFT"}
                         onClick={() => {
                           setLeftView("DRAFT");
                           setPasteOpen(false);
@@ -2038,6 +2103,7 @@ export const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                       <button
                         type="button"
                         className={leftView === "RAW" ? "is-on" : undefined}
+                        aria-pressed={leftView === "RAW"}
                         onClick={() => setLeftView("RAW")}
                       >
                         预览文档

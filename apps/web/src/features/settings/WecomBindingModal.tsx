@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatBeijingSecond } from "@features/common/beijing-time";
 import { Alert, Button, Popconfirm } from "antd";
 
 import { AppModal } from "@features/common/components/AppModal";
@@ -18,7 +19,7 @@ export interface WecomBindingModalProps {
 }
 
 function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingSecond(value);
 }
 
 function formatRemaining(remainingMs: number): string {

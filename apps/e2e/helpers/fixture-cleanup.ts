@@ -30,6 +30,8 @@ export interface FixtureCleanupReport {
   readonly fixtureProjects: number;
   readonly deletedRows: number;
   readonly auditRowsDeleted: number;
+  /** 兜底清掉的悬空引用行数（引用的项目 / 用户已不存在），已计入 `deletedRows`。 */
+  readonly orphansRemoved: number;
   readonly systemChainRewound: boolean;
   readonly systemChainBroken: boolean;
 }
@@ -56,11 +58,15 @@ export function formatFixtureCleanupReport(
   report: FixtureCleanupReport,
 ): string {
   if (report.fixtureUsers === 0) {
-    return "[e2e] 夹具清理：未发现 E2E 夹具数据";
+    const head = "[e2e] 夹具清理：未发现 E2E 夹具数据";
+    return report.orphansRemoved > 0
+      ? `${head}；兜底清除悬空引用 ${String(report.orphansRemoved)} 行`
+      : head;
   }
   let message =
     `[e2e] 夹具清理：删除用户 ${report.fixtureUsers}、项目 ${report.fixtureProjects}` +
-    `、业务行 ${report.deletedRows}、审计行 ${report.auditRowsDeleted}`;
+    `、业务行 ${report.deletedRows}（含兜底悬空引用 ${report.orphansRemoved}）` +
+    `、审计行 ${report.auditRowsDeleted}`;
   if (report.systemChainRewound) {
     message += "；SYSTEM 链头已回退到剩余的最后一条记录";
   }
@@ -101,18 +107,99 @@ export async function cleanupFixtures(
       const fixtureUsers = Number(userRows[0]?.["n"] ?? 0);
       const fixtureProjects = Number(projectRows[0]?.["n"] ?? 0);
 
+      let deletedRows = 0;
+      const remove = async (statement: string): Promise<number> => {
+        const result = await transaction.unsafe(statement);
+        const affected = Number(result.count ?? 0);
+        deletedRows += affected;
+        return affected;
+      };
+
+      // 悬空引用兜底：这些行不依赖 `_cleanup_*` 临时表，只按「引用的项目 / 用户已不存在」
+      // 判定，因此**没有夹具用户时也要跑**——上一次清理留下的孤儿行如果只能在下次清理
+      // 夹具用户时才被修掉，逻辑备份恢复演练会一直红到下一次 E2E 为止。
+      const sweepOrphanReferences = async (): Promise<number> => {
+        const start = deletedRows;
+        await remove(
+          `DELETE FROM app.document_import_runs r
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.projects p WHERE p.id = r.project_id
+            )
+               OR NOT EXISTS (
+                 SELECT 1 FROM app.users u WHERE u.id = r.actor_id
+               )`,
+        );
+        await remove(
+          `DELETE FROM app.user_wecom_bindings
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.users u WHERE u.id = app.user_wecom_bindings.user_id
+            )`,
+        );
+        await remove(
+          `DELETE FROM app.wecom_binding_codes
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.users u WHERE u.id = app.wecom_binding_codes.user_id
+            )`,
+        );
+        await remove(
+          `DELETE FROM app.wecom_robot_config
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.users u WHERE u.id = app.wecom_robot_config.updated_by
+            )`,
+        );
+        await remove(
+          `DELETE FROM app.ai_assist_settings
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.users u WHERE u.id = app.ai_assist_settings.updated_by
+            )`,
+        );
+        // ADR-077 项目群三张表：投递表先删（它引用绑定表），再删绑定表与待用码。
+        await remove(
+          `DELETE FROM app.wecom_group_deliveries
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.project_wecom_groups g
+               WHERE g.id = app.wecom_group_deliveries.group_binding_id
+            )`,
+        );
+        await remove(
+          `DELETE FROM app.project_wecom_groups
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.projects p
+               WHERE p.id = app.project_wecom_groups.project_id
+            )
+               OR NOT EXISTS (
+                 SELECT 1 FROM app.users u
+                  WHERE u.id = app.project_wecom_groups.bound_by_user_id
+               )`,
+        );
+        await remove(
+          `DELETE FROM app.project_wecom_binding_codes
+            WHERE NOT EXISTS (
+              SELECT 1 FROM app.projects p
+               WHERE p.id = app.project_wecom_binding_codes.project_id
+            )
+               OR (consumed_by_user_id IS NOT NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM app.users u
+                      WHERE u.id = app.project_wecom_binding_codes.consumed_by_user_id
+                   ))`,
+        );
+        return deletedRows - start;
+      };
+
       if (fixtureUsers === 0) {
+        const orphansRemoved = await sweepOrphanReferences();
         return {
           fixtureUsers: 0,
           fixtureProjects: 0,
-          deletedRows: 0,
+          deletedRows: orphansRemoved,
           auditRowsDeleted: 0,
+          orphansRemoved,
           systemChainRewound: false,
           systemChainBroken: false,
         } satisfies FixtureCleanupReport;
       }
 
-      let deletedRows = 0;
       // 非夹具项目在清理前的不变量计数：删除动作不得让它变差。
       const beforeInvariants = await transaction.unsafe(
         `SELECT
@@ -134,29 +221,13 @@ export async function cleanupFixtures(
              HAVING count(m.id) <> 1
            ) missing) AS missing_unclassified`,
       );
-      const remove = async (statement: string): Promise<number> => {
-        const result = await transaction.unsafe(statement);
-        const affected = Number(result.count ?? 0);
-        deletedRows += affected;
-        return affected;
-      };
-
       // ADR-064 文档导入批次表：夹具用户/项目产生的导入记录必须一并物理删除，
       // replica 模式跳过外键检查，漏删会留下孤儿行并让逻辑备份恢复演练失败；
-      // 历史遗留的孤儿行（project/actor 已不存在）也在这里兜底修复。
+      // 历史遗留的孤儿行由 `sweepOrphanReferences()` 兜底修复。
       await remove(
         `DELETE FROM app.document_import_runs
           WHERE project_id IN (SELECT id FROM _cleanup_projects)
              OR actor_id IN (SELECT id FROM _cleanup_users)`,
-      );
-      await remove(
-        `DELETE FROM app.document_import_runs r
-          WHERE NOT EXISTS (
-            SELECT 1 FROM app.projects p WHERE p.id = r.project_id
-          )
-             OR NOT EXISTS (
-               SELECT 1 FROM app.users u WHERE u.id = r.actor_id
-             )`,
       );
       await remove(
         `DELETE FROM app.notifications
@@ -339,6 +410,32 @@ export async function cleanupFixtures(
         `DELETE FROM app.ai_assist_settings
           WHERE updated_by IN (SELECT id FROM _cleanup_users)`,
       );
+      // ADR-077（迁移 `0044`）的企业微信**项目群**三张表同样引用夹具用户 / 项目：
+      // `project_wecom_groups.bound_by_user_id` 与 `.project_id`、
+      // `project_wecom_binding_codes.project_id` 与 `.consumed_by_user_id`、
+      // `wecom_group_deliveries.group_binding_id`。上面那份清单最初只覆盖个人绑定那四张
+      // 表，漏了这三张——删除跑在 replica 模式下不校验外键，漏删就留下孤儿行，逻辑备份
+      // 恢复演练重建 RESTRICT 约束时报 FK 违反（2026-10-16 本地 `app_ci` 实测：
+      // `project_wecom_binding_codes_consumer_user_fk` 与 `project_wecom_groups_project_fk`）。
+      await remove(
+        `DELETE FROM app.wecom_group_deliveries
+          WHERE group_binding_id IN (
+            SELECT id FROM app.project_wecom_groups
+             WHERE project_id IN (SELECT id FROM _cleanup_projects)
+                OR bound_by_user_id IN (SELECT id FROM _cleanup_users)
+          )`,
+      );
+      await remove(
+        `DELETE FROM app.project_wecom_groups
+          WHERE project_id IN (SELECT id FROM _cleanup_projects)
+             OR bound_by_user_id IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
+        `DELETE FROM app.project_wecom_binding_codes
+          WHERE project_id IN (SELECT id FROM _cleanup_projects)
+             OR consumed_by_user_id IN (SELECT id FROM _cleanup_users)`,
+      );
+
       await remove(
         `DELETE FROM app.users WHERE id IN (SELECT id FROM _cleanup_users)`,
       );
@@ -352,32 +449,7 @@ export async function cleanupFixtures(
             )`,
       );
 
-      // 同一类悬空引用在删除夹具用户之后才出现；上面单表兜不住「引用方本来就已经没有用户」
-      // 的历史遗留行，因此再按「引用不存在的用户」扫一遍这四张表。
-      await remove(
-        `DELETE FROM app.user_wecom_bindings
-          WHERE NOT EXISTS (
-            SELECT 1 FROM app.users u WHERE u.id = app.user_wecom_bindings.user_id
-          )`,
-      );
-      await remove(
-        `DELETE FROM app.wecom_binding_codes
-          WHERE NOT EXISTS (
-            SELECT 1 FROM app.users u WHERE u.id = app.wecom_binding_codes.user_id
-          )`,
-      );
-      await remove(
-        `DELETE FROM app.wecom_robot_config
-          WHERE NOT EXISTS (
-            SELECT 1 FROM app.users u WHERE u.id = app.wecom_robot_config.updated_by
-          )`,
-      );
-      await remove(
-        `DELETE FROM app.ai_assist_settings
-          WHERE NOT EXISTS (
-            SELECT 1 FROM app.users u WHERE u.id = app.ai_assist_settings.updated_by
-          )`,
-      );
+      const orphansRemoved = await sweepOrphanReferences();
 
       const rewind = await transaction.unsafe(
         `UPDATE app.audit_chain_heads h
@@ -437,6 +509,25 @@ export async function cleanupFixtures(
                 OR NOT EXISTS (
                   SELECT 1 FROM app.users u WHERE u.id = r.actor_id
                 )) AS orphan_import_runs,
+           (SELECT count(*)::int FROM app.project_wecom_binding_codes c
+             WHERE NOT EXISTS (
+               SELECT 1 FROM app.projects p WHERE p.id = c.project_id
+             )
+                OR (c.consumed_by_user_id IS NOT NULL
+                    AND NOT EXISTS (
+                      SELECT 1 FROM app.users u WHERE u.id = c.consumed_by_user_id
+                    ))) AS orphan_project_wecom_codes,
+           (SELECT count(*)::int FROM app.project_wecom_groups g
+             WHERE NOT EXISTS (
+               SELECT 1 FROM app.projects p WHERE p.id = g.project_id
+             )
+                OR NOT EXISTS (
+                  SELECT 1 FROM app.users u WHERE u.id = g.bound_by_user_id
+                )) AS orphan_project_wecom_groups,
+           (SELECT count(*)::int FROM app.wecom_group_deliveries d
+             WHERE NOT EXISTS (
+               SELECT 1 FROM app.project_wecom_groups g WHERE g.id = d.group_binding_id
+             )) AS orphan_wecom_deliveries,
            (SELECT count(*)::int FROM app.users
              WHERE ${FIXTURE_LOGIN_FILTER}) AS remaining_users,
            (SELECT count(*)::int FROM app.projects
@@ -473,6 +564,9 @@ export async function cleanupFixtures(
           "remaining_import_runs",
           "orphan_import_runs",
           "dangling_audit_actors",
+          "orphan_project_wecom_codes",
+          "orphan_project_wecom_groups",
+          "orphan_wecom_deliveries",
         ].filter((key) => Number(checks[key] ?? 0) !== 0),
         // 项目不变量只要求清理未让计数变差：本地库可能存在规范化之前建立的历史项目。
         ...["broken_bootstrap", "missing_unclassified"].filter(
@@ -492,6 +586,7 @@ export async function cleanupFixtures(
         fixtureProjects,
         deletedRows,
         auditRowsDeleted: projectChainRows + systemRows + strayRows,
+        orphansRemoved,
         systemChainRewound,
         systemChainBroken,
       } satisfies FixtureCleanupReport;

@@ -240,7 +240,7 @@ export const documentImportRoutes: readonly RouteDefinition[] = [
     path: "/project-imports",
     operationId: "importProject",
     summary:
-      "单事务创建整个项目：项目、初始成员（含任务负责人自动加入）、模块、功能与任务，写审计、活动、通知与搜索投影；项目编码全局唯一，同摘要文档禁止重复导入。",
+      "单事务创建整个项目：项目、项目成员（含任务负责人自动加入）、模块、功能与任务，写审计、活动、通知与搜索投影；项目编码全局唯一，同摘要文档禁止重复导入。",
     hasProject: false,
   }),
   assistRoute,

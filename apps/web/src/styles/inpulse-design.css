@@ -1708,6 +1708,13 @@
   overflow-y: auto;
 }
 
+/* 卡片之间原来零间距（两张卡片边框直接相接），加一层相邻间距拉开层级。刻意不用
+   flex 列 + gap：正文容器高度固定，flex 子项会被压扁（实测企微卡片被压到 250px、
+   内容溢出），相邻兄弟外边距不改变子项尺寸。 */
+.project-workspace-modal > .project-workspace-modal-body > * + * {
+  margin-top: 14px;
+}
+
 /* 记录视图（正文里是 `.records-workspace`）的顶部间距挤进吸顶块：弹层正文的 padding-top
    留在吸顶线以上，而吸顶块只能盖住自己盒子里的内容，滚动时卡片会从那 20px 的缝里划过。
    两行必须成对存在：正文顶部留白改由吸顶块自己的 padding 承担。 */
@@ -1722,6 +1729,59 @@
 
 /* 2026-10-08 起记录视图 embedded 不再渲染页头（新建入口已移入筛选行，标题由弹层头部
    承担），此处原有的 `.page-header.embedded` 靠右规则一并删除。 */
+
+/* 2026-10-16 成员与设置（项目主页）视觉校准：企微卡片与成员卡片原来只有标题带有
+   20px 内缩，note / 步骤 / 虚线框 / 成员区都贴着卡片边，左边界参差。这里统一内容
+   内缩（标题带随之归零，分隔线缩到内容宽度），并把成员区的「浅蓝盒子里再套白卡片」
+   压成一层：用一条分隔线分区，刷新成员并入区块标题行。 */
+.project-wecom-card,
+.project-members-panel {
+  padding: 0 20px 15px;
+}
+
+.project-wecom-card .calm-section-title,
+.project-members-panel .calm-section-title {
+  padding: 16px 0 14px;
+}
+
+.project-members-panel .project-facts {
+  margin: 0;
+}
+
+.project-members-panel .member-editor {
+  margin-top: 16px;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid #edf1f5;
+  border-radius: 0;
+  background: transparent;
+}
+
+.project-members-panel .member-selection-top {
+  font-size: 13px;
+}
+
+.project-members-panel .member-selection-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.project-members-panel .member-selection-title em {
+  color: #8fa1b3;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.project-members-panel .member-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-members-panel .member-history-list {
+  margin-top: 12px;
+}
 
 /* ===================== F-05 项目与成员 ===================== */
 /* 维护中项目主体已完成、只做小修小补，卡片整体淡化以拉开与进行中/未开始的

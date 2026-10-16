@@ -74,6 +74,39 @@ describe("AppRouter integration", () => {
     }
   });
 
+  it.each([
+    ["/projects/7/tasks", "/projects/7/task-board"],
+    ["/projects/7/settings", "/projects/7/members"],
+  ])("redirects the %s alias to %s", async (from: string, to: string) => {
+    const authClient = {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        id: 1,
+        loginName: "developer",
+        name: "开发者 C",
+        email: null,
+        avatarUrl: null,
+        isAdmin: false,
+        status: "ACTIVE",
+      }),
+    } as unknown as InpulseApiClient;
+
+    // 手输 / 收藏里的旧地址此前直接 404（2026-10-16 实测），现在按分段重定向。
+    window.history.pushState({}, "", from);
+    try {
+      render(
+        <AppErrorBoundary>
+          <AppProviders authClient={authClient}>
+            <AppRouter />
+          </AppProviders>
+        </AppErrorBoundary>,
+      );
+
+      await waitFor(() => expect(window.location.pathname).toBe(to));
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+
   it("keeps the app shell and renders the branded 404 for unknown paths", async () => {
     const authClient = {
       getCurrentUser: vi.fn().mockResolvedValue({

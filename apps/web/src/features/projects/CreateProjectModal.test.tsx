@@ -165,7 +165,7 @@ describe("CreateProjectModal", () => {
     await fillForm(dialog);
     const user = userEvent.setup();
     const trigger = within(dialog)
-      .getByLabelText("选择初始成员")
+      .getByLabelText("选择项目成员")
       .closest(".ant-select");
     expect(trigger).not.toBeNull();
     fireEvent.mouseDown(trigger as HTMLElement);

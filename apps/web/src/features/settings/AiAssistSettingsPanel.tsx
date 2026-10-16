@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { Button, Input, InputNumber, Switch } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { AiAssistSettings, InpulseApiClient } from "@generated/api";
@@ -225,7 +226,7 @@ export const AiAssistSettingsPanel: React.FC<AiAssistSettingsPanelProps> = ({
               {settings.updatedAt === null ? null : (
                 <span>
                   {"最近保存 "}
-                  {new Date(settings.updatedAt).toLocaleString("zh-CN")}
+                  {formatBeijingMinute(settings.updatedAt)}
                 </span>
               )}
             </span>
