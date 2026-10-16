@@ -6567,6 +6567,17 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 未运行 / 已知偏差（本批）：① 星标不含后端：跨设备 / 跨浏览器不同步，`localStorage` 被清即丢失；跨设备需要新表 + `listProjects` 契约（当前 `query: "none"`）+ 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 排序用稳定 `sort`，点亮后卡片落到星标组内它原本的相对位置（不会顶到组内第一）。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）；⑤ 整链 `pnpm check` 未跑，本批实际执行的门禁见开发日志第一百九十五条。
 
+## 站点图标 favicon 接入 + E2E 夹具清理补齐（2026-10-15 本地落库，第二百零五、二百零六条）
+
+定案见开发日志第二百零五、二百零六条：① 站点此前没有任何 favicon，本次把用户提供的 iV 图标（512×512，圆角矩形外为纯黑且整图不透明）按「黑角=透明」反预乘处理后落到 `apps/web/public/favicon.png`，并在 `apps/web/index.html` 加 `<link rel="icon" type="image/png" href="/favicon.png" />`；不改登录页 / 侧栏的既有三个 PNG，不改接口 / 契约 / 迁移 / 权限（仍 116 条路由 / 42 个迁移）。② `apps/e2e/helpers/fixture-cleanup.ts` 补齐 4 张对 `app.users` 为 RESTRICT / NO ACTION 引用的表的清理（`wecom_robot_config.updated_by`、`ai_assist_settings.updated_by`、`user_wecom_bindings.user_id`、`wecom_binding_codes.user_id`）并增加「引用不存在的用户」孤儿扫描；清理事务跑在 replica 模式下不拦外键，漏删会让 `apps/ops` 逻辑备份恢复演练在重建 RESTRICT 约束时失败。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| E2E-FIXTURE-CLEANUP-001 | 集成 + E2E 顺序复现（真实 PostgreSQL `app_ci`） | 跑完 E2E 后备份恢复演练不得因悬空引用失败 | 补丁前 `pnpm test:integration:local` 在 `apps/ops`「恢复演练：TOC 保留会话表结构、排除会话数据，pg_restore 后会话表为空」红（`Key (updated_by)=(1533) is not present in table "users"` 触发 `wecom_robot_config_updated_by_fk`，1 failed / 6 passed）；打补丁后 `pnpm test:e2e:local` **86 例通过（6.7 分钟）**，跑完查库 `app.users` 0 行且四张表行数与悬空计数**全为 0**；随后 `pnpm test:integration:local` 全绿（database 2 文件 27 例、apps/ops 2 文件 7 例、apps/api 62 文件 597 例） | 本地通过（2026-10-15） |
+| WEB-FAVICON-001 | 本地核对 + 构建产物 | favicon 接入且改动面仅限黑角 | 处理后四角 `alpha=0`、内部 `(16,37,62,255)`、中心 `(254,194,5,255)` 与源图逐值相同，透明占比 2.91% 等于源图黑角占比；`GET /favicon.png` → 200 / image/png / 49004 bytes，dev 返回 HTML 与页面 DOM 均含 `link[rel=icon]=/favicon.png`；`pnpm --filter @inpulse/web build` 通过且 `dist/favicon.png` 与带 link 的 `dist/index.html` 落盘；`prettier --check` 通过 | 本地通过（2026-10-15，无自动化断言） |
+
+未运行 / 已知偏差（本批）：① favicon 属纯静态资源与 `<head>` 标签，未新增自动化用例；2026-10-15 的 Playwright 86 例是在夹具补丁之后、favicon 改动之前跑的（6.7 分钟），favicon 改动后又于 2026-10-16 复跑一次 `pnpm test:e2e:local` **86 例通过（6.6 分钟）**，随后 `pnpm test:integration:local` 全绿（database 2 文件 27 例、apps/ops 2 文件 7 例、apps/api 62 文件 597 例），跑完查库 `app.users` 0 行且四张表行数与悬空计数全为 0。② 夹具清理的根因是「夹具写入 + 后续删夹具用户」组合：日后新增引用 `app.users` 且非 CASCADE 的表必须同步进清理清单，按 `pg_constraint` 动态生成覆盖列表属更大改造，未做。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）。
+
 ## 项目企微群绑定（ADR-077，第一批）
 
 需求原话要点：「机器人能做到项目和群聊绑定吗，就是项目里面有变动或者任务派发就发送到对应项目群聊里」「项目组长 + 系统管理员生成绑定码/解绑，先默认发『任务派发 + 全部 MEMBER 可见动态』，群推送与现有个人单聊并存，一个项目一个群、一个群一个项目」。本批落库迁移 `0044`（三张表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08）与三条项目级路由（116 → 119）；长连接桥接的 `chat_type:2` 投递改造为第二批、未实现，本批不产生任何群投递。

@@ -319,6 +319,26 @@ export async function cleanupFixtures(
         `DELETE FROM app.mfa_recovery_codes
           WHERE user_id IN (SELECT id FROM _cleanup_users)`,
       );
+      // 会话外的 RESTRICT 引用：夹具用户还会被企业微信绑定、绑定验证码以及两张全局单例
+      // 配置表（企业微信机器人 / AI 辅助转换，`updated_by`）引用。事务跑在 replica 模式下
+      // 不会拦这些外键，漏删就会在删除夹具用户后留下悬空引用，让逻辑备份恢复演练重建
+      // RESTRICT 约束时报 FK 违反。这四张表按用户维度先删，孤儿行由下面的兜底一并清掉。
+      await remove(
+        `DELETE FROM app.user_wecom_bindings
+          WHERE user_id IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
+        `DELETE FROM app.wecom_binding_codes
+          WHERE user_id IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
+        `DELETE FROM app.wecom_robot_config
+          WHERE updated_by IN (SELECT id FROM _cleanup_users)`,
+      );
+      await remove(
+        `DELETE FROM app.ai_assist_settings
+          WHERE updated_by IN (SELECT id FROM _cleanup_users)`,
+      );
       await remove(
         `DELETE FROM app.users WHERE id IN (SELECT id FROM _cleanup_users)`,
       );
@@ -330,6 +350,33 @@ export async function cleanupFixtures(
             AND NOT EXISTS (
               SELECT 1 FROM app.users u WHERE u.id = app.audit_logs.actor_id
             )`,
+      );
+
+      // 同一类悬空引用在删除夹具用户之后才出现；上面单表兜不住「引用方本来就已经没有用户」
+      // 的历史遗留行，因此再按「引用不存在的用户」扫一遍这四张表。
+      await remove(
+        `DELETE FROM app.user_wecom_bindings
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app.users u WHERE u.id = app.user_wecom_bindings.user_id
+          )`,
+      );
+      await remove(
+        `DELETE FROM app.wecom_binding_codes
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app.users u WHERE u.id = app.wecom_binding_codes.user_id
+          )`,
+      );
+      await remove(
+        `DELETE FROM app.wecom_robot_config
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app.users u WHERE u.id = app.wecom_robot_config.updated_by
+          )`,
+      );
+      await remove(
+        `DELETE FROM app.ai_assist_settings
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app.users u WHERE u.id = app.ai_assist_settings.updated_by
+          )`,
       );
 
       const rewind = await transaction.unsafe(

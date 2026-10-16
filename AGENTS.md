@@ -1114,6 +1114,8 @@
 
 - 「成员与角色」页本地成员搜索已本地落库（第二百零八条，2026-10-16）：用户「这里需要加一个成员搜索栏」（附「成员与角色」页截图）——在 `AdminUsersPageView` 成员面板标题行右侧（`CalmSectionTitle` 的 `children`，即 `.calm-section-title` 本就是 `justify-content: space-between` 的第二个 flex 子级）加本地搜索框，复用 `.task-search` + `InpulseIcon name="search"` + 原生 input（`aria-label="搜索成员"`、占位「搜索姓名、登录名或邮箱」）；按姓名、登录名或邮箱子串过滤（`toLocaleLowerCase` 大小写不敏感、trim 空串显示全部），列表渲染改用 `visibleMembers`；标题 hint 仍显示成员总数、不随搜索跳动（沿用项目列表页口径）；搜索无结果给「没有匹配的成员」空态 + 「清空搜索」按钮；无数据（加载中 / 空库 / 错误）不渲染搜索框；窄屏（≤700px）在既有媒体查询给 `.settings-panel .calm-section-title` 加 `flex-wrap: wrap; row-gap: 10px;`，搜索框整行换行不挤压标题。纯前端本地过滤，无请求 / 路由 / 契约 / 迁移 / 依赖 / 权限变化。门禁：`AdminUsersPageView.test.tsx` **10 例通过**（新增 1 例：姓名「孟杰」/ 登录名「wmj」/ 邮箱大小写 / 无匹配空态 + 清空恢复）、`pnpm test:web` **112 文件 908 例**、`pnpm --filter @inpulse/web typecheck`、Prettier 与 `eslint`（改动文件）通过。「未运行」：Playwright E2E、`pnpm check` 整链、生产镜像构建与 Trivy、GitHub Actions（`test` 分支不触发工作流）。
 
+- 合并远端 `test` 与「成员与角色」页成员搜索栏一并推送（第二百零八、二百零九条，2026-10-16）：远端 `b176e5d`（含 `9281251`：E2E 夹具清理补齐 4 张 RESTRICT 引用表 + 接入网站图标 favicon）已占用日志第一百九十六、一百九十七、第二百零五至二百零七条，本地成员搜索条目因此由第二百零五条顺延为**第二百零八条**（`开发日志.md` 与本节同步改号）；冲突仅 `开发日志.md` 顶部新增条目，取并集（远端条目在前）。合并后复跑 `AdminUsersPageView.test.tsx` 10 例、`pnpm --filter @inpulse/web typecheck`、改动文件 Prettier/`eslint`、`node scripts/check_docs.mjs` 通过；「未运行」：`pnpm check` 整链、Playwright E2E、集成测试、生产镜像构建与 Trivy、GitHub Actions（`test` 分支不触发工作流）。
+
 ## 2026-10-15 ADR-075 空库首个 SSO 账号自动成为系统管理员说明
 
 按用户要求，空库首次部署时第一个完成单点登录（JIT 开通）的账号自动成为系统管理员（[ADR-075](./docs/adr/ADR-075.md)，修订 ADR-032 决策 5 的「JIT 一律 `is_admin=false`」）。因此：
