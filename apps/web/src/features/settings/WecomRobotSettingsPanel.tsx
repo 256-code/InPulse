@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { Button, Input } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import type { InpulseApiClient } from "@generated/api";
@@ -163,7 +164,7 @@ export const WecomRobotSettingsPanel: React.FC<
                   ? "；最近保存 " +
                     (config.updatedByName ?? "") +
                     " " +
-                    new Date(config.updatedAt).toLocaleString("zh-CN")
+                    formatBeijingMinute(config.updatedAt)
                   : "")
               : "；成员可在「账户菜单 → 绑定企业微信」生成绑定码，发送给机器人后完成绑定"}
           </span>

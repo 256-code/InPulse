@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatBeijingSecond } from "@features/common/beijing-time";
 import { Alert, Button, Popconfirm } from "antd";
 
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
@@ -19,7 +20,7 @@ export interface ProjectWecomGroupCardProps {
 }
 
 function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  return formatBeijingSecond(value);
 }
 
 function formatRemaining(remainingMs: number): string {
@@ -102,7 +103,12 @@ export const ProjectWecomGroupCard: React.FC<ProjectWecomGroupCardProps> = ({
   };
 
   const issueButton = (
-    <Button size="small" onClick={generate} loading={issueCode.isPending}>
+    <Button
+      size="small"
+      className="soft-blue-button"
+      onClick={generate}
+      loading={issueCode.isPending}
+    >
       {bound || pendingWithoutCode ? "重新生成绑定码" : "生成绑定码"}
     </Button>
   );

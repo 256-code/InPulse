@@ -15,7 +15,7 @@ import {
  *   # 项目：商城系统
  *   - 项目编码：SHOP
  *   - 项目说明：……
- *   - 初始成员：wangwu, zhaoliu
+ *   - 项目成员：wangwu, zhaoliu
  *   ## 模块：支付
  *   - 说明：……
  *   ### 功能：微信支付退款回调
@@ -361,11 +361,13 @@ function handleField(input: {
       );
       return;
     }
-    if (fieldName === "初始成员") {
+    // 成员字段：2026-10-16 起口径统一为「项目成员」；上一版模板与既有文档里的
+    // 「初始成员」按同一语义继续识别（字段含义不变，只改了叫法）。
+    if (fieldName === "项目成员" || fieldName === "初始成员") {
       project.memberTokens = parseTokenList(
         rawValue,
         line,
-        "初始成员",
+        "项目成员",
         addIssue,
       );
       return;

@@ -13,6 +13,7 @@ import {
   workStatusLabelOf,
   workStatusToneOf,
 } from "../task-board-format";
+import { assigneeNamesOf } from "@features/tasks/detached-assignee";
 import type { TaskBoardCard, TaskBoardModule } from "../task-board-types";
 
 /**
@@ -27,6 +28,8 @@ export interface TaskBoardTableProps {
   readonly modules: readonly TaskBoardModule[];
   readonly collapsedIds: ReadonlySet<number>;
   readonly leftoverIds: ReadonlySet<number>;
+  /** 项目活跃成员 id：null = 名单未就绪，此时不标「已移出项目」。 */
+  readonly activeMemberIds: ReadonlySet<number> | null;
   readonly onToggleLane: (moduleId: number) => void;
   readonly onOpenTask: (card: TaskBoardCard) => void;
 }
@@ -47,16 +50,16 @@ const TaskBoardTableRow: React.FC<{
   readonly card: TaskBoardCard;
   readonly leftoverSource: boolean;
   readonly index: number;
+  readonly activeMemberIds: ReadonlySet<number> | null;
   readonly onOpen: (card: TaskBoardCard) => void;
-}> = ({ card, leftoverSource, index, onOpen }) => {
+}> = ({ card, leftoverSource, index, activeMemberIds, onOpen }) => {
   const due = dueListLabelOf(card);
   const priority = priorityMarkOf(card.priority);
   // ADR-040：负责人是平权集合，列表行要列出全部人，用「、」连接，
   // 超出列宽时由 .tb-owner-name 省略并以 title 兑底全名单。
   const lead = card.assignees[0];
-  const assigneeNames = card.assignees
-    .map((assignee) => assignee.name)
-    .join("、");
+  // 负责人已移出项目时姓名后面带「（已移出项目）」，hover 再给一句处置指引。
+  const assigneeNames = assigneeNamesOf(card.assignees, activeMemberIds, false);
   // 进入动画的错开序号：上限 12，长分组里最后一行不必等太久（见 .tb-row）。
   const enterIndex = Math.min(index, 12);
   return (
@@ -86,7 +89,12 @@ const TaskBoardTableRow: React.FC<{
             {avatarTextOf(lead.name)}
           </span>
         )}
-        <span className="tb-owner-name" title={"负责人：" + assigneeNames}>
+        <span
+          className="tb-owner-name"
+          title={
+            "负责人：" + assigneeNamesOf(card.assignees, activeMemberIds, true)
+          }
+        >
           {assigneeNames}
         </span>
       </span>
@@ -105,6 +113,7 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
   modules,
   collapsedIds,
   leftoverIds,
+  activeMemberIds,
   onToggleLane,
   onOpenTask,
 }) => {
@@ -178,6 +187,7 @@ export const TaskBoardTable: React.FC<TaskBoardTableProps> = ({
                     card={card}
                     leftoverSource={leftoverIds.has(card.taskId)}
                     index={index}
+                    activeMemberIds={activeMemberIds}
                     onOpen={onOpenTask}
                   />
                 ))}

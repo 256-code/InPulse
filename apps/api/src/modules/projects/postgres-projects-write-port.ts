@@ -629,7 +629,7 @@ export class PostgresProjectsWritePort extends ProjectsWritePort {
   }
 }
 
-/** 初始成员 ACTIVE 校验；只读取，不决定业务流转。 */
+/** 项目成员 ACTIVE 校验；只读取，不决定业务流转。 */
 export class PostgresActiveUsersQueryPort extends ActiveUsersQueryPort {
   async resolveActiveUsersByTokens(
     tx: TransactionContext,

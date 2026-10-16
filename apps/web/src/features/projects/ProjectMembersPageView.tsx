@@ -13,7 +13,7 @@ import {
   CalmSectionTitle,
 } from "@features/common/components/Calm";
 import { CalmSelect } from "@features/common/components/CalmSelect";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import {
   projectLifecycleLabel,
@@ -56,11 +56,7 @@ export interface ProjectMembersPageViewProps {
   readonly embedded?: boolean | undefined;
 }
 
-const formatMemberDate = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-    timeZone: BEIJING_TIME_ZONE,
-  });
+const formatMemberDate = (value: string) => formatBeijingMinute(value);
 
 const roleLabel: Record<"MEMBER" | "LEADER", string> = {
   MEMBER: "成员",
@@ -359,7 +355,10 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           </Button>
         </CalmEmptyState>
       ) : (
-        <section className="panel settings-panel">
+        <section
+          className="panel settings-panel project-members-panel"
+          data-testid="project-members-panel"
+        >
           <div className="settings-panel-head">
             <CalmSectionTitle title="项目成员">
               {embedded ? null : (
@@ -401,19 +400,28 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                 </dd>
                 <dt>创建时间</dt>
                 <dd>{formatMemberDate(project.createdAt)}</dd>
-                <dt>当前成员</dt>
-                <dd>
-                  {activeMembers.map((member) => member.name).join("、") || "—"}
-                </dd>
               </dl>
 
               <div className="member-editor">
                 <div className="member-selection-top">
-                  <strong>调整成员</strong>
-                  <Button className="secondary-button" onClick={openAdd}>
-                    <InpulseIcon name="plus" size={15} />
-                    添加成员
-                  </Button>
+                  <span className="member-selection-title">
+                    <strong>调整成员</strong>
+                    <em>共 {activeMembers.length} 人</em>
+                  </span>
+                  <div className="member-selection-actions">
+                    <Button
+                      className="text-button"
+                      onClick={() => {
+                        void query.refetch();
+                      }}
+                    >
+                      刷新成员
+                    </Button>
+                    <Button className="secondary-button" onClick={openAdd}>
+                      <InpulseIcon name="plus" size={15} />
+                      添加成员
+                    </Button>
+                  </div>
                 </div>
                 {/* 2026-09-23：只展示活跃成员，已移除成员不再出现在列表里；
                     成员关系仍按 REMOVED 保留在库中，重新加入走「添加成员」。 */}
@@ -467,16 +475,6 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
                       </div>
                     </article>
                   ))}
-                </div>
-                <div className="calm-action-footer">
-                  <Button
-                    className="secondary-button"
-                    onClick={() => {
-                      void query.refetch();
-                    }}
-                  >
-                    刷新成员
-                  </Button>
                 </div>
               </div>
             </>

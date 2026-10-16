@@ -341,7 +341,7 @@ describe("assist（已启用，stub 上游 + 真实 PostgreSQL）", () => {
       DOCUMENT_IMPORT_TEMPLATE,
     );
     expect(upstreamBody.messages[0]!.content).toContain("整项目导入");
-    // ADR-073 修订：整项目指令要点名创建者（本次导入人）写进初始成员，姓名取自当前
+    // ADR-073 修订：整项目指令要点名创建者（本次导入人）写进项目成员，姓名取自当前
     // Session 对应用户（本夹具的姓名是 "Test <loginName>"），且不写进 user message。
     expect(upstreamBody.messages[0]!.content).toContain(
       "本次导入人的姓名是「Test " + actor.loginName + "」",

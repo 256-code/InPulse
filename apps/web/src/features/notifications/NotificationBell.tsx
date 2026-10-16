@@ -8,7 +8,7 @@ import {
   useNotificationUnreadCount,
 } from "./notification-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 import { routePreloadHandlers } from "@shared/routing/route-preload";
 
 export interface NotificationBellProps {
@@ -45,13 +45,7 @@ function formatNotificationTime(value: string): string {
   if (diffDays < 7) {
     return `${diffDays} 天前`;
   }
-  return parsed.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: BEIJING_TIME_ZONE,
-  });
+  return formatBeijingMinute(value);
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({

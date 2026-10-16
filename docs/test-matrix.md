@@ -139,7 +139,7 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| MOD-BOOT-001 | PostgreSQL 集成 | 成功初始化 | runtime 同事务写项目、创建者及初始成员、唯一未分类模块，默认字段与事务时间正确 | CI 已通过（e826483，见下方证据） |
+| MOD-BOOT-001 | PostgreSQL 集成 | 成功初始化 | runtime 同事务写项目、创建者及项目成员、唯一未分类模块，默认字段与事务时间正确 | CI 已通过（e826483，见下方证据） |
 | MOD-BOOT-002 | PostgreSQL 集成 | 后续步骤失败 | 外层抛错后，独立查询项目、成员、模块均为零 | 同上 |
 | MOD-BOOT-003 | PostgreSQL 集成 | 同项目重复 | 同事务第二次创建冲突并整体回滚；已提交项目再次创建冲突且原数据不变 | 同上 |
 | MOD-BOOT-004 | PostgreSQL 集成 | 项目不存在 | modules_project_fk 拒绝且无孤立模块 | 同上 |
@@ -179,14 +179,14 @@ F-14 业务纵切片，新增路由必须同步 Schema、Route Registry、权限
 
 ## 项目创建 F-04（A 后端 2026-09-08；C 前端 2026-09-09）
 
-单事务创建项目闭环：创建者与可选初始成员 ACTIVE 校验、唯一未分类模块、审计、搜索/活动
-投影与通知；任一初始成员无效（停用/不存在）时整笔回滚，创建者始终以活跃成员写入。
+单事务创建项目闭环：创建者与可选项目成员 ACTIVE 校验、唯一未分类模块、审计、搜索/活动
+投影与通知；任一项目成员无效（停用/不存在）时整笔回滚，创建者始终以活跃成员写入。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| PROJ-CREATE-001 | PostgreSQL 集成 | 成功创建 | 同事务写入项目、创建者与初始成员（ACTIVE）、唯一 UNCLASSIFIED 模块、`project.create` 审计链、`PROJECT_CREATED` 活动投影、项目搜索投影与每成员一条通知；响应 200，`replayAuthContext` 携带项目与创建者 | 本机 PostgreSQL 4/4 通过（2026-09-08） |
+| PROJ-CREATE-001 | PostgreSQL 集成 | 成功创建 | 同事务写入项目、创建者与项目成员（ACTIVE）、唯一 UNCLASSIFIED 模块、`project.create` 审计链、`PROJECT_CREATED` 活动投影、项目搜索投影与每成员一条通知；响应 200，`replayAuthContext` 携带项目与创建者 | 本机 PostgreSQL 4/4 通过（2026-09-08） |
 | PROJ-CREATE-002 | PostgreSQL 集成 | 仅创建者 | 创建者为唯一 ACTIVE 成员；每个项目恰好一个 UNCLASSIFIED 模块 | 同上 |
-| PROJ-CREATE-003 | PostgreSQL 集成 | 停用成员回滚 | 初始成员停用时整笔回滚，无残留项目 | 同上 |
+| PROJ-CREATE-003 | PostgreSQL 集成 | 停用成员回滚 | 项目成员停用时整笔回滚，无残留项目 | 同上 |
 | PROJ-CREATE-004 | PostgreSQL 集成 | 不存在成员回滚 | `memberIds` 含不存在用户时整笔回滚，无残留项目 | 同上 |
 | PROJ-CREATE-005 | 单元 | 项目编码派生 | `deriveCode`/`resolveProjectCode` 覆盖中文归一、分隔符合并、数字前缀补 P、空名/全符号拒绝与显式编码校验 | 本机 7/7 通过（2026-09-08） |
 | PROJ-CREATE-006 | 单元 | 项目创建控制器边界 | 浏览器完整同源请求头只提取 `x-csrf-token`，严格 Schema 不再因 Host/Origin/Sec-Fetch 等额外头误报 422；缺失 Token 仍返回 422 且不进入幂等事务 | 本地通过（`project-bootstrap.controller.test.ts` 2 例，2026-09-09） |
@@ -384,7 +384,7 @@ GitHub Actions 已通过（F-03 PR #72，run 34345191090）。
 | --- | --- | --- | --- | --- |
 | AUTHZ-001 | API 集成 | 每条 Route Registry 操作 | 至少一条允许与一条拒绝用例，身份覆盖与[权限矩阵](permissions.md)一致 | 已自动化（`packages/api-contract/test/permissions.test.ts` 扫描需认证路由的允许/拒绝用例并与 Registry 一致，`pnpm permissions:check` 双向校验；CI 已执行） |
 | AUTHZ-002 | PostgreSQL 集成 | 跨项目 IDOR | 其他项目成员和已移除成员均得到 404，SQL 不返回目标行 | 已自动化（`features-api.integration.test.ts` 跨项目/已移除成员 404 与 `project-member-management-api.integration.test.ts`；CI 已执行） |
-| AUTHZ-003 | Workflow 集成 | 创建项目时取消创建者 | 请求被 Schema/业务规则拒绝；创建者必为初始成员 | 已自动化（`project-bootstrap.integration.test.ts` 创建者同事务写入与仅创建者用例；CI 已执行） |
+| AUTHZ-003 | Workflow 集成 | 创建项目时取消创建者 | 请求被 Schema/业务规则拒绝；创建者必为项目成员 | 已自动化（`project-bootstrap.integration.test.ts` 创建者同事务写入与仅创建者用例；CI 已执行） |
 | AUTHZ-004 | Workflow 集成 | 管理员移除普通成员身份的项目创建者 | ACTIVE 成员记录关闭；`projects.created_by` 值不变；创建者立即失去成员关系派生权限 | 已自动化（`project-member-management-api.integration.test.ts` 移除创建者：`created_by` 不变且权限消失；CI 已执行） |
 | AUTHZ-005 | Workflow 集成 | 创建者重新加入 | 新增成员历史，不覆盖之前 `joined_at/removed_at` | Required（2026-09-12 清账核对：未找到「创建者移除后重新加入」的直接用例，保持待补） |
 | AUTHZ-006 | API 集成 | 停用用户旧 Session | 所有受保护/业务路由及使用停用凭据的登录统一 401；`issueCsrfToken` 只能按匿名创建无身份预认证状态；同源 `logout` 仅清 Cookie 返回 204；其他用户不受影响 | 已自动化（`user-auth-invalidation.integration.test.ts` 与 `login.integration.test.ts` 停用用户 401 且不签发 Session；CI 已执行） |
@@ -2392,7 +2392,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 - 控件换成既有 `CalmSelect appearance="member"`（与「指派给」同一个组件）：`appearance="member"` 按组件既有规则默认开启搜索（`withSearch = searchable ?? appearance === "member"`），过滤匹配 `label + " " + description`，因此按姓名与身份说明都能搜到；头像、说明与选中对勾由组件统一渲染，不新写样式。
 - 候选来自原有 `addCandidates`（用户目录减去当前活跃成员），不再改口径：`options` 为 `{ value: user.id, label: user.name, avatarUrl, description: user.isAdmin ? "系统管理员" : "启用用户" }`——身份说明由原先拼接在姓名后的「· 系统管理员 / · 启用用户」改为选项副标题。
 - 选中态与提交链路不变：仍用 `selectedUserId` 单一状态，底部「添加成员」仍按 `selectedUserId === null` 禁用，`submitAdd()` 仍先签发 CSRF Token 再带 `x-csrf-token` 与幂等键调用 `addProjectMember`；加载中 / 目录错误 / 无可添加用户三个分支的文案与顺序保持原样。
-- 只替换添加成员弹窗：同页「设置项目角色」弹窗仍用 `.member-candidate-list` + `.check-list` 单选列表；`创建项目` 弹窗的初始成员当时仍是 `选择成员：<姓名>` 复选框，已在后续批次一并换成同款多选下拉（见下一节）。
+- 只替换添加成员弹窗：同页「设置项目角色」弹窗仍用 `.member-candidate-list` + `.check-list` 单选列表；`创建项目` 弹窗的项目成员当时仍是 `选择成员：<姓名>` 复选框，已在后续批次一并换成同款多选下拉（见下一节）。
 - 无障碍名从复选框的 `选择成员：<姓名>` 改为下拉触发器的 `ariaLabel="选择要添加的用户"`；`<label htmlFor="project-member-candidate">选择用户</label>` 提供可见标签。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
@@ -2404,19 +2404,19 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 
 未运行 / 已知偏差：① 未跑 `pnpm test:web` 全量、`pnpm build`、全 workspace `pnpm typecheck`、`check:frontend:boundaries` 与 API / 集成测试（本次只改 `apps/web` 一个页面文件、其单测与 E2E 交互方式，未动契约、权限、数据库与后端）；② `ProjectMembersPageView` 上仍保留 `.member-candidate-list` / `.check-list` 样式（「设置项目角色」弹窗继续使用），本轮只删除添加成员弹窗对这两个类的使用；③ 未在浏览器手工登录复验界面外观（本地 dev 会话被并发操作影响，登录返回「登录请求与当前浏览器不匹配」），外观结论来自真实浏览器 E2E 通过而非人工截图比对，配色/间距若需像素级对齐设计师稿仍需产品确认；④ 前端改动需非作者人工评审。
 
-## 创建项目初始成员改为可搜索多选下拉（C，2026-09-20 本地落库）
+## 创建项目时选择成员改为可搜索多选下拉（C，2026-09-20 本地落库）
 
-承接上一节：产品要求「新建项目里面初始成员也要改」，因此「新建项目」弹窗的初始成员选择由逐人复选框（`选择成员：<姓名>`）换成与「添加项目成员」「指派给」同一个 `CalmSelect`。纯前端交互替换，未改契约、权限、数据库与后端。
+承接上一节：产品要求「新建项目里面项目成员也要改」，因此「新建项目」弹窗的项目成员选择由逐人复选框（`选择成员：<姓名>`）换成与「添加项目成员」「指派给」同一个 `CalmSelect`。纯前端交互替换，未改契约、权限、数据库与后端。
 
 锁定口径：
 
 - 组件形态为 `multiple`：`CalmSelect` 增加判别联合的 `multiple: true` 分支（数组 `value`、`maxTagCount` 默认 2、根节点加 `calm-select-multiple`），每段标签仍走 `labelRender`（头像 + 姓名），触发器内保留原生搜索 input（`.ant-select-input`）以支持输入过滤；`calm-select.css` 为此复位该 input 在宿主表单里的边框、内边距与聚焦光环。
 - 弹窗内的候选、排除创建者、受控状态与提交链路全部不变：候选仍是用户目录里的启用用户（选项说明沿用「系统管理员 / 项目成员」），创建者仍自动成为活跃成员且在创建流程中不可取消，提交仍复用既有 `memberIds` 字段，底部提示仍是「已选择 N 位其他成员」。
-- 无障碍名从 `选择成员：<姓名>` 改为触发器的 `ariaLabel="选择初始成员"`，可见标签为 `<label htmlFor="project-member-candidates">选择成员</label>`。
+- 无障碍名从 `选择成员：<姓名>` 改为触发器的 `ariaLabel="选择项目成员"`，可见标签为 `<label htmlFor="project-member-candidates">选择成员</label>`。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| F04-CREATE-MEMBER-MULTISELECT-WEB-001 | Web 单元 | 多选回调、标签折叠与提交载荷 | `CalmSelect.test.tsx` 新增 `multiple` 用例：连续点选按数组回调（`[5]` → `[5,7]` → `[5,7,9]`）、`.calm-select-multiple` 就位、`.ant-select-selection-item` 共 3 个且其中 1 个是 `+N` 折叠计数、原生搜索 input 保留；`CreateProjectModal.test.tsx`「sends several selected active members while excluding the creator」：展开「选择初始成员」→ 点选「开发者 B」「管理员 A」→ 出现「已选择 2 位其他成员」→ `createProject` 仅调用一次且 `memberIds` 为 `[2, 3]`（创建者 `1` 被排除）→ `onCreated` / `onClose` 各一次 | 本地通过（4 文件 22 例，4.78s；`CalmSelect.test.tsx` 单文件 6 例） |
+| F04-CREATE-MEMBER-MULTISELECT-WEB-001 | Web 单元 | 多选回调、标签折叠与提交载荷 | `CalmSelect.test.tsx` 新增 `multiple` 用例：连续点选按数组回调（`[5]` → `[5,7]` → `[5,7,9]`）、`.calm-select-multiple` 就位、`.ant-select-selection-item` 共 3 个且其中 1 个是 `+N` 折叠计数、原生搜索 input 保留；`CreateProjectModal.test.tsx`「sends several selected active members while excluding the creator」：展开「选择项目成员」→ 点选「开发者 B」「管理员 A」→ 出现「已选择 2 位其他成员」→ `createProject` 仅调用一次且 `memberIds` 为 `[2, 3]`（创建者 `1` 被排除）→ `onCreated` / `onClose` 各一次 | 本地通过（4 文件 22 例，4.78s；`CalmSelect.test.tsx` 单文件 6 例） |
 | F04-CREATE-MEMBER-MULTISELECT-E2E-001 | Playwright | 真实浏览器创建项目关键路径 | `apps/e2e/helpers/calm-select.ts` 新增 `pickCalmSelectOptions`（按选项 title 依次点选后收起弹层），`helpers/project-create.ts`、`tests/project-create.spec.ts`、`tests/tasks.spec.ts` 由旧的 `getByLabel('选择成员：…').check()` 改为该辅助；`project-create.spec.ts` 在选中后仍断言「已选择 1 位其他成员」 | 本地通过：`tests/project-members.spec.ts`、`tests/project-create.spec.ts`、`tests/tasks.spec.ts` 共 4 passed（26.5s） |
 | F04-CREATE-MEMBER-MULTISELECT-E2E-002 | Playwright | 复用 `createProjectViaUi` 的其余关键路径无回归 | `tests/activity.spec.ts`、`tests/audit.spec.ts`（2 例）、`tests/csrf.spec.ts`（4 例）、`tests/notifications.spec.ts`、`tests/project-archive.spec.ts`、`tests/record-feed.spec.ts` 全部经同一辅助创建项目 | 本地通过：10 passed（39.0s） |
 
@@ -2509,7 +2509,7 @@ HTML 不允许按钮内嵌链接/按钮，因此三层卡片统一采用「容�
 | --- | --- | --- | --- | --- |
 | CALM-SELECT-SINGLE-CHECK-UNIT-001 | Web 单元 | 多选已选项只剩一个勾 | `CalmSelect.test.tsx` 的 multiple 用例：3 个已选项各自 `.calm-select-check` 计 1，且 `.ant-select-item-option-state` 的 `innerHTML` 为 `""`（antd 自带图标已关） | 本地通过 |
 | CALM-SELECT-SINGLE-CHECK-UNIT-002 | Web 单元（回归验证） | 断言能拦住重复勾 | 临时移除 `menuItemSelectedIcon={null}` 后同用例失败（1 failed / 5 passed），恢复后 6 例通过 | 本地通过 |
-| CALM-SELECT-SINGLE-CHECK-E2E-001 | Playwright | 多选下拉的真实交互未回归 | `project-create.spec.ts`（选择初始成员）、`project-members.spec.ts`（选择要添加的用户）、`record-drafts.spec.ts`（影响功能 + 入口改名）6 passed（30.0s） | 本地通过 |
+| CALM-SELECT-SINGLE-CHECK-E2E-001 | Playwright | 多选下拉的真实交互未回归 | `project-create.spec.ts`（选择项目成员）、`project-members.spec.ts`（选择要添加的用户）、`record-drafts.spec.ts`（影响功能 + 入口改名）6 passed（30.0s） | 本地通过 |
 | CALM-SELECT-SINGLE-CHECK-BROWSER-001 | 真实浏览器实测 | 下拉里只剩一个勾且更粗 | Playwright chromium 登录本地 dev，`/records?projectId=1` → 新建迭代记录 → 所属模块「平台与访问」→ 影响功能连选 3 项：3 个已选项各 `checkCount = 1`、自带图标容器 `innerHTML` 为空、`.calm-select-check` 与其内部 `path` 的 `getComputedStyle(...).strokeWidth` 均为 `2.6px`、勾仍是 14×14，截图确认 | 本地通过 |
 
 本地实际执行（2026-09-21）：`pnpm --filter @inpulse/web exec vitest run src/features/common/components/CalmSelect.test.tsx` 6/6（1.95s）；`pnpm --filter @inpulse/web test` 83 文件 526 例通过（23.83s）；`pnpm exec prettier --check apps/web/src/features/common/components/CalmSelect.test.tsx` 通过；把当前 `calm-select.css` 交给 prettier 格式化后，本批新增的注释与 `stroke-width: 2.6;` 逐字保持；`pnpm check:frontend:boundaries` 通过（279 模块 / 1363 依赖，无越界）；`pnpm check:docs` 通过（84 个 Markdown 文件）；真实浏览器实测见上表第 4 行（临时脚本与截图已删除，`git status` 无未跟踪残留）；`E2E_DATABASE_URL=postgresql://cluster_bootstrap@127.0.0.1:55432/app pnpm --filter @inpulse/e2e exec playwright test project-create.spec.ts record-drafts.spec.ts project-members.spec.ts --reporter=line` 6 passed（30.0s，夹具清理：删除用户 3、项目 3、业务行 124、审计行 14）。
@@ -6207,7 +6207,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | DOC-IMPORT-WORKBENCH-COMPOSER-PIN-001 | 浏览器 E2E | 右栏输入行贴底（高窗口不悬空） | 新增 `document-import.spec.ts` 用例「文档导入右栏输入行贴底：高窗口下不留悬空空隙」：1280×1040 + 10 模块草稿把右栏撑高后，断言 `.import-composer` 底部与 `.import-assist` 底部只差面板下内边距（8–18px）；临时回退 `.import-assist-msgs { max-height: 38vh }` 时该用例红灯，恢复后绿灯 | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-GAP-REPORT-001 | Web 单元 + 浏览器 E2E | 助手主动报告缺失信息：不重复头部计数、随草稿实时更新 | `DocumentImportModal.test.tsx` **30 例通过**：上传模板文件后右栏结论行含「必填还差 1 处（缺负责人 ×1）」「另有 4 处建议补齐（见下方标签）」且不含「已整理」；点「＋负责人」补上必填后立刻改口；只有自由正文时报「还没整理成模板结构」且不再显示空态；`document-import` 目录 **4 文件 62 例通过**；E2E `document-import-ai.spec.ts` 上传 .docx 后断言结论行出现、`document-import.spec.ts` 布局回归同批 6 例通过 | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-ASSIST-RAW-001 | Web 单元 + 浏览器实测 | 自由正文可点「交给 AI 整理」 | `DocumentImportModal.test.tsx` **31 例通过**（新增 1 例：粘贴自由正文后出现「交给 AI 整理」，点击以 `IN_PROJECT` + 原文调用 `assistDocumentImport`、不弹覆盖确认、AI 草稿落进左栏后入口消失）；真实渲染截图核对该入口与点击后的草稿 | 本地通过（2026-10-13） |
-| DOC-IMPORT-AI-PROMPT-MEMBERS-001 | API 单元 | 提示词要求带出「初始成员」 | `apps/api/test/ai-assist.client.test.ts` **9 例通过**（`WHOLE_PROJECT` 的 system 指令断言含「必须把这些名字写进「- 初始成员：」」）；未连真实中转站（只看提示词与本地 stub） | 本地通过（2026-10-13） |
+| DOC-IMPORT-AI-PROMPT-MEMBERS-001 | API 单元 | 提示词要求带出「项目成员」 | `apps/api/test/ai-assist.client.test.ts` **9 例通过**（`WHOLE_PROJECT` 的 system 指令断言含「必须把这些名字写进「- 项目成员：」」）；未连真实中转站（只看提示词与本地 stub） | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-CROWD-001 | 浏览器 E2E（布局回归） | 拥挤时草稿区 / 右栏不越界压字 | `document-import.spec.ts` 新增用例「F-32 文档导入拥挤时不越界压字」：1280×620 与 880×620 下断言 `.import-draft-scroll` 底边 ≤ `.import-draft` 底边、`.import-composer` 底边 ≤ `.import-assist` 底边；把草稿滚动区的 `min-height: 200px` 与窄屏 `flex` 比例分高度回退成改动前时该用例红灯（越界 43 / 101px），修后 **9 例通过（27.6 秒）** | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-DROP-ANYWHERE-001 | Web 单元 + 浏览器 E2E（真实拖放） | 拖放不再只在空态生效 + 读取/整理有反馈 | `DocumentImportModal.test.tsx` 新增 2 例（已有草稿时窗口级拖放会读取并调用 `assistDocumentImport`、拖动出现落点提示；读取期间显示进行中提示）→ 目录 **4 文件 65 例通过**；`document-import-ai.spec.ts` 新增「已有草稿时把 PDF 拖到工作台上同样能分析（真实拖放）」（`DataTransfer` 拖到 `.import-pane`，断言落点提示与覆盖确认后草稿落位），三个 spec **10 例通过（28.6 秒）**；临时停用窗口级监听时该用例红灯 | 本地通过（2026-10-13） |
 | DOC-IMPORT-AI-UPSTREAM-DIAG-001 | API 单元 | 上游失败可诊断且不泄露正文 | `apps/api/test/ai-assist.client.test.ts` **10 例通过**：413 + `Request Entity Too Large` → `context-limit`；失败日志含 `"upstreamStatus":500`（非 2xx）与 `"upstreamStatus":200`（2xx 但缺 `message.content`）、含 `inputChars`、不含文档正文 | 本地通过（2026-10-13） |
@@ -6270,11 +6270,11 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 文档导入工作台「必填 / 可选」入口标注（用户选中方案 A，2026-10-13 本地落库）
 
-背景见开发日志第一百五十四 / 一百五十五条：用户追问「初始成员不是必填为什么点开才出现待补」，定案为它本来就可选，问题出在必填与可选的「＋字段」入口长得一样。本批只做显式标注，不改业务口径；不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
+背景见开发日志第一百五十四 / 一百五十五条：用户追问「项目成员不是必填为什么点开才出现待补」，定案为它本来就可选，问题出在必填与可选的「＋字段」入口长得一样。本批只做显式标注，不改业务口径；不新增接口 / 路由 / 迁移（仍 110 条 / 39 个）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| DOC-IMPORT-WORKBENCH-REQUIRED-001 | Web 单元 | 必填 / 可选入口可区分 | `DocumentImportModal.test.tsx` **36 例通过**（新增 1 例：整项目模式下 `＋负责人（必填）` / `＋项目编码（必填）` 文字含「必填」且带 `is-required`，`＋初始成员` 为素色无标记；原「点「＋负责人」补上必填」用例改用新 aria-label）；`document-import` 目录 **4 文件 68 例通过**、`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-13） |
+| DOC-IMPORT-WORKBENCH-REQUIRED-001 | Web 单元 | 必填 / 可选入口可区分 | `DocumentImportModal.test.tsx` **36 例通过**（新增 1 例：整项目模式下 `＋负责人（必填）` / `＋项目编码（必填）` 文字含「必填」且带 `is-required`，`＋项目成员` 为素色无标记；原「点「＋负责人」补上必填」用例改用新 aria-label）；`document-import` 目录 **4 文件 68 例通过**、`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-REQUIRED-002 | 浏览器 E2E | 真实 UI 回归 | `apps/e2e/tests/document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（27.8 秒）**（含整项目导入关键路径与三条工作台布局回归） | 本地通过（2026-10-13） |
 | DOC-IMPORT-WORKBENCH-REQUIRED-003 | 门禁 | 本轮整链回归 | `pnpm check` **exit 0**（110 条路由 / 权限、依赖边界、模块边界、Secret、116 个 Markdown、`pnpm build`）；`pnpm deps:audit` 仅 1 个 moderate，不阻断 | 本地通过（2026-10-13） |
 
@@ -6351,12 +6351,12 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 点「直接粘贴文本」后直接可粘贴 + 补充说明不再被模型丢掉 + 每轮回执说清左栏改了什么（用户「为什么我让ai补上但是左边并没有反应」，2026-10-14 本地落库）
 
-定案见开发日志第一百六十七条：点「直接粘贴文本」后文本区自动获得焦点；服务端 system 提示词补「补充说明」规则（第 3 条：补充说明里的信息也算真实信息；新增第 5 条：补充说明必须落实到草稿，点名的人写进「- 初始成员：」或对应任务的「- 负责人：」）；右栏每轮回执改成由前端确定性算出的「这一轮草稿改了什么」（`describeDraftChange`）。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见开发日志第一百六十七条：点「直接粘贴文本」后文本区自动获得焦点；服务端 system 提示词补「补充说明」规则（第 3 条：补充说明里的信息也算真实信息；新增第 5 条：补充说明必须落实到草稿，点名的人写进「- 项目成员：」或对应任务的「- 负责人：」）；右栏每轮回执改成由前端确定性算出的「这一轮草稿改了什么」（`describeDraftChange`）。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-SUPPLEMENT-REPLY-001 | Web 单元 | 点开粘贴区即聚焦；每轮发言回报草稿变化 | `document-import` 目录 **4 文件 74 例通过**：新增「点「直接粘贴文本」后光标直接落在文本区，可以立刻粘贴」与「发完一句后说清这一轮改了什么」（断言「已按补充说明更新草稿：新增 1 行：「截止：2026-10-30」」），改写「模型这一轮没改动草稿时…」；`pnpm --filter @inpulse/web exec vitest run` **105 文件 801 例通过**；`pnpm --filter @inpulse/web typecheck` 通过 | 本地通过（2026-10-14） |
-| DOC-IMPORT-SUPPLEMENT-REPLY-002 | API 单元 + 真实上游 | 补充说明被写进草稿 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 11 例通过**（新增两条 system 指令断言：含「以「补充说明：」开头」与「补充说明里点名要加入成员」）；本机 dev 栈接真实上游 `deepseek-v4-flash-vision-exp`：修前返回的 markdown 无 `- 初始成员：`，修后固定返回 `- 初始成员：特哥, 林雨妍`，2925 字长草稿同样生效，不给成员信息时不编造 | 本地通过（2026-10-14），真实上游未进 CI |
+| DOC-IMPORT-SUPPLEMENT-REPLY-002 | API 单元 + 真实上游 | 补充说明被写进草稿 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 11 例通过**（新增两条 system 指令断言：含「以「补充说明：」开头」与「补充说明里点名要加入成员」）；本机 dev 栈接真实上游 `deepseek-v4-flash-vision-exp`：修前返回的 markdown 无 `- 项目成员：`，修后固定返回 `- 项目成员：特哥, 林雨妍`，2925 字长草稿同样生效，不给成员信息时不编造 | 本地通过（2026-10-14），真实上游未进 CI |
 | DOC-IMPORT-SUPPLEMENT-REPLY-003 | 浏览器 E2E + 门禁 | 改提示词与回执后工作台链路仍可用 | `document-import.spec.ts` 首例新增「点「直接粘贴文本」后 `导入文档内容` 为 `toBeFocused()`」断言；`document-import.spec.ts` + `document-import-ai.spec.ts` **10 例通过（25.8 秒）**；整链 `pnpm check` exit 0（110 条路由 / 权限、821 文件依赖边界、344 模块、Secret 1241 文件、116 个 Markdown、`pnpm build`；audit 仅 1 个 moderate，不阻断） | 本地通过（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 服务端提示词改动只在真实上游人工复现，未纳入 CI（CI 的 AI 上游仍是本机回环 stub，ADR-067 口径不变）；② 回执只如实说明「没变化 / 改了什么」，未做自动重试，也未新增等待期进度文案；③ 全量 Playwright 未跑（只动该弹窗与这两个 spec）；④ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
@@ -6398,14 +6398,14 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 整项目导入的初始成员名单必填且必须含创建者与全部负责人（用户「初始成员必须包含创建者以及所有出现在任务负责人中的人」「初始成员必须名字能和目前系统中有的账号相对应」，2026-10-14 本地落库）
 
-定案见 [ADR-072](adr/ADR-072.md) 与开发日志第一百七十一条：整项目（模式 B）导入的 `- 初始成员：` 必填，且必须包含**创建者本人**与**全部任务负责人**，否则预览 422 拒绝（空名单 `MEMBER_REQUIRED`、缺创建者 `MEMBER_CREATOR_MISSING`、缺负责人 `ASSIGNEE_NOT_INITIAL_MEMBER`）；判据是解析后的账号而不是字面令牌，名字对不上账号仍是 `MEMBER_UNRESOLVED`。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见 [ADR-072](adr/ADR-072.md) 与开发日志第一百七十一条：整项目（模式 B）导入的 `- 项目成员：` 必填，且必须包含**创建者本人**与**全部任务负责人**，否则预览 422 拒绝（空名单 `MEMBER_REQUIRED`、缺创建者 `MEMBER_CREATOR_MISSING`、缺负责人 `ASSIGNEE_NOT_INITIAL_MEMBER`）；判据是解析后的账号而不是字面令牌，名字对不上账号仍是 `MEMBER_UNRESOLVED`。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-MEMBER-COVERAGE-001 | 真实 PostgreSQL API 集成 | 三条名单校验与「按账号判」 | `document-import.integration.test.ts` **6 例通过**：新增大用例三次预览——名单缺创建者 → 422 `MEMBER_CREATOR_MISSING`（且不报 `ASSIGNEE_NOT_INITIAL_MEMBER`）；名单只写创建者 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`（且不报缺创建者）；名单写登录名 + 负责人写姓名 → 200 且 `members == [assigneeId]`；既有「负责人未解析」用例新增 `MEMBER_REQUIRED` 断言（空名单一次说清） | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-COVERAGE-002 | API 单元 + 真实 PostgreSQL | 整项目提示词带上导入人姓名、不知道时不编造 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 12 例通过**（整项目 system 提示词含「「- 初始成员：」必填」「所有任务的「负责人」都要写进去」「必须包含创建者本人（本次导入人，姓名：特哥）」；新增「不知道导入人姓名时不编造姓名」）；`document-import-assist.integration.test.ts` **9 例通过**（WHOLE_PROJECT 用例断言提示词含本次导入人的真实 `name`） | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-COVERAGE-003 | Web 单元 | 工作台本地预检与服务端同口径、且不误报 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 88 例通过**：新增 `describe("ADR-072 初始成员名单校验")` 6 例（缺初始成员、缺创建者 + 缺负责人去重、写登录名算包含创建者、读不懂的登录名整体不报缺口、同名多人不报缺口、项目内 / 未登录不校验）与弹窗 5 例（缺初始成员、缺创建者 + 缺负责人、名单完整、登录名不误报、项目内不校验）；`pnpm test:unit` 的 Web 部分 **105 文件 815 例通过** | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-COVERAGE-004 | 浏览器 E2E | 整项目 AI 导入的草稿与预览 | `document-import-ai.spec.ts` 新增「整项目 AI 导入：初始成员带上创建者与任务负责人，预览不再报缺」（stub 从 system 提示词里读出创建者姓名并写进草稿；断言草稿含创建者姓名、verdict 不含「初始成员缺」、预览 issues 为 0、apply 后进入 `/projects/{id}/modules`）；`document-import.spec.ts` + `document-import-ai.spec.ts` **11 例通过（30.0 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 170 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-002 | API 单元 + 真实 PostgreSQL | 整项目提示词带上导入人姓名、不知道时不编造 | `pnpm --filter @inpulse/api exec vitest run test/ai-assist.client.test.ts` **1 文件 12 例通过**（整项目 system 提示词含「「- 项目成员：」必填」「所有任务的「负责人」都要写进去」「必须包含创建者本人（本次导入人，姓名：特哥）」；新增「不知道导入人姓名时不编造姓名」）；`document-import-assist.integration.test.ts` **9 例通过**（WHOLE_PROJECT 用例断言提示词含本次导入人的真实 `name`） | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-003 | Web 单元 | 工作台本地预检与服务端同口径、且不误报 | `pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 88 例通过**：新增 `describe("ADR-072 项目成员名单校验")` 6 例（缺项目成员、缺创建者 + 缺负责人去重、写登录名算包含创建者、读不懂的登录名整体不报缺口、同名多人不报缺口、项目内 / 未登录不校验）与弹窗 5 例（缺项目成员、缺创建者 + 缺负责人、名单完整、登录名不误报、项目内不校验）；`pnpm test:unit` 的 Web 部分 **105 文件 815 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-COVERAGE-004 | 浏览器 E2E | 整项目 AI 导入的草稿与预览 | `document-import-ai.spec.ts` 新增「整项目 AI 导入：项目成员带上创建者与任务负责人，预览不再报缺」（stub 从 system 提示词里读出创建者姓名并写进草稿；断言草稿含创建者姓名、verdict 不含「项目成员缺」、预览 issues 为 0、apply 后进入 `/projects/{id}/modules`）；`document-import.spec.ts` + `document-import-ai.spec.ts` **11 例通过（30.0 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 170 / 审计行 19 | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-005 | 门禁 | 本轮单测与集成整链 | `pnpm test:unit` exit 0（web 105 文件 815 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例）；`node scripts/test-integration-local.mjs --skip-migrate` exit 0（database 2 文件 27 例、`apps/ops` 2 文件 7 例、`apps/api` 58 文件 560 例） | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-COVERAGE-006 | 门禁 | 迁移不可变清单缺 `0040` 的旧漂移（与本 ADR 无关） | `database/test/integration/database.test.ts` 的「migrations are immutable and idempotent」期望清单补齐 `0040_ai_assist_settings.sql`（ADR-068 落库时漏补，本批跑集成时暴露）；database 集成 **2 文件 27 例通过** | 本地通过（2026-10-14） |
 
@@ -6425,14 +6425,14 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 成员字段按姓名筛账号建议（用户「和成员相关的可不可以做到简单的搜索，比如我打名字的其中一个字然后会筛选出来和这个字有关的名字账号做成 p2 这样+」，2026-10-14 本地落库）
 
-定案见开发日志第一百七十三条：成员字段（`负责人` / `初始成员` / `成员`）的编辑态按**姓名子串**给账号建议（前缀命中排前、同长度保持目录顺序、最多 8 条），点一条只替换「正在输入的那一段」；已经写定的名字、以及和正在输入一字不差的名字都不再建议；名单以某个已知成员的名字结尾时，末尾接着打的第一个非分隔符字符前自动补顿号。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见开发日志第一百七十三条：成员字段（`负责人` / `项目成员` / `成员`）的编辑态按**姓名子串**给账号建议（前缀命中排前、同长度保持目录顺序、最多 8 条），点一条只替换「正在输入的那一段」；已经写定的名字、以及和正在输入一字不差的名字都不再建议；名单以某个已知成员的名字结尾时，末尾接着打的第一个非分隔符字符前自动补顿号。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| DOC-IMPORT-MEMBER-SUGGEST-001 | Web 单元 | 只认成员字段 + 筛选 / 排序 / 空段 / 去重 / 上限 | `document-assignee-match.test.ts` 新增 6 例：`isDocumentMemberFieldName` 只对 `负责人` / `初始成员` / `成员` 为真（`项目编码` / `项目说明` / `优先级` 为假）；打「小」按「前缀在前、同长度按目录顺序」给 `小潘 / 小吴 / 王小二`，打「雨」给 `林雨`，打「没人」为空；当前段为空时给整份目录（`林雨, ` 时已写定的 `林雨` 不再出现）；已写定的名字不再建议（`林雨, 林` 为空）；一字不差时不再建议（`林雨`、`小潘、小吴` 为空，`林` 仍给 `林雨`）；12 个「成员N」只给 8 条且首条为 `成员1` | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-001 | Web 单元 | 只认成员字段 + 筛选 / 排序 / 空段 / 去重 / 上限 | `document-assignee-match.test.ts` 新增 6 例：`isDocumentMemberFieldName` 只对 `负责人` / `项目成员` / `成员` 为真（`项目编码` / `项目说明` / `优先级` 为假）；打「小」按「前缀在前、同长度按目录顺序」给 `小潘 / 小吴 / 王小二`，打「雨」给 `林雨`，打「没人」为空；当前段为空时给整份目录（`林雨, ` 时已写定的 `林雨` 不再出现）；已写定的名字不再建议（`林雨, 林` 为空）；一字不差时不再建议（`林雨`、`小潘、小吴` 为空，`林` 仍给 `林雨`）；12 个「成员N」只给 8 条且首条为 `成员1` | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-SUGGEST-002 | Web 单元 | 已知成员结尾时自动补顿号 | `document-assignee-match.test.ts` 新增 4 例：`continueMemberList("林雨、陈昊", "林雨、陈昊小")` → `林雨、陈昊、小`（`陈昊` 是目录里的成员）；已以分隔符结尾或名单为空时按原样输入；末尾那段不是已知成员（`王小` → `王小二`、`林语` → `林语雨`）或粘贴 / 删除 / 改中间时都不插手 | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-SUGGEST-003 | Web 单元 | 弹窗联动：出候选、点选填进草稿、非成员字段不弹 | `DocumentImportModal.test.tsx` 新增 3 例：初始成员「末尾打一个字 → 值里自动补顿号 → 候选为 `小潘 / 小邵（带「管理员」标记） / 王小二` → 点 `小潘` 值变成 `林雨、陈昊、小潘` → 回车写回 `- 初始成员：…`」；任务负责人整段换成「小」后同样出候选、点选回车后原文含 `- 负责人：小潘` 且不再含 `林语`；先在成员字段确认能出候选（排除「目录还没回来」的假通过）后，`项目编码` 打字不出候选。`pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 103 例通过**，`pnpm --filter @inpulse/web test:unit` **105 文件 830 例通过** | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-SUGGEST-004 | 浏览器 E2E | 真实弹窗里候选可点（顺带验证弹层浮在弹窗之上） | `document-import.spec.ts` 新增「成员字段按姓名筛账号：打字出候选、点选填进草稿（候选浮在导入弹窗之上）」：写成员姓名（不是登录名）→ 点 `项目：初始成员` → 末尾接着打另一个成员名字里的一小段 → 值里自动补了顿号 → 弹层 portal 到 body，`getByTestId("document-import-member-suggest")` 可见 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 值被替换 → 回车写回原文；两个 spec **12 例通过（32.7 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-003 | Web 单元 | 弹窗联动：出候选、点选填进草稿、非成员字段不弹 | `DocumentImportModal.test.tsx` 新增 3 例：项目成员「末尾打一个字 → 值里自动补顿号 → 候选为 `小潘 / 小邵（带「管理员」标记） / 王小二` → 点 `小潘` 值变成 `林雨、陈昊、小潘` → 回车写回 `- 项目成员：…`」；任务负责人整段换成「小」后同样出候选、点选回车后原文含 `- 负责人：小潘` 且不再含 `林语`；先在成员字段确认能出候选（排除「目录还没回来」的假通过）后，`项目编码` 打字不出候选。`pnpm --filter @inpulse/web exec vitest run src/features/document-import` **4 文件 103 例通过**，`pnpm --filter @inpulse/web test:unit` **105 文件 830 例通过** | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-SUGGEST-004 | 浏览器 E2E | 真实弹窗里候选可点（顺带验证弹层浮在弹窗之上） | `document-import.spec.ts` 新增「成员字段按姓名筛账号：打字出候选、点选填进草稿（候选浮在导入弹窗之上）」：写成员姓名（不是登录名）→ 点 `项目：项目成员` → 末尾接着打另一个成员名字里的一小段 → 值里自动补了顿号 → 弹层 portal 到 body，`getByTestId("document-import-member-suggest")` 可见 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 值被替换 → 回车写回原文；两个 spec **12 例通过（32.7 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-SUGGEST-005 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 830 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test 5 个 image ref / check:deps 821 文件 / check:frontend:boundaries 344 模块 1707 依赖 / permissions:check 110 条操作 110 条路由 / deps:audit 仅 1 个 moderate、不阻断 / check:secrets 1242 文件 / check:docs 117 个 Markdown） | 本地通过（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 只按姓名筛，登录名仍手写（用户目录里没有登录名）；③ 建议是纯本地提示，点选只改左栏草稿，最终以服务端解析为准；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
@@ -6442,25 +6442,25 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| DOC-IMPORT-MEMBER-TAG-001 | Web 单元 | 建议筛选（新签名）+ 标签工具 | `document-assignee-match.test.ts` 6 + 3 例：`isDocumentMemberFieldName` 只认 `负责人` / `初始成员` / `成员`；打「小」给 `小潘 / 小吴 / 王小二`（前缀在前）、打「雨」给 `林雨`、打「没人」为空；输入框为空给整份目录、只剩空白也算空；已成标签的不再建议（`小` + `[小潘]` → `小吴 / 王小二`）；打全名照常给（点一下就成标签）；12 个「成员N」只给 8 条。`memberTagsFromValue` 三种分隔符拆开 + 去空白；`serializeMemberTags` 拼成顿号名单、`trim` 掉空段、同名只留一遍 | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-TAG-002 | Web 单元 | 弹窗联动：标签化、候选常驻、摘标签、输入法 | `DocumentImportModal.test.tsx` 4 例：点开「项目：初始成员」→ 值是 `林雨、陈昊` 但输入框为空、两个标签（删除按钮的无障碍名为「移除 林雨」/「移除 陈昊」）→ 候选即 `小潘 / 小邵（带管理员标记） / 王小二` → 打「小」筛选 → 点 `小潘` → 标签变三个、输入框清空、候选仍在且只剩 `小邵 / 王小二` → 回车写回 `- 初始成员：林雨、陈昊、小潘`；任务负责人先摘掉「林语」再点候选，写回 `- 负责人：小潘` 且不再含 `林语`；回车带 `isComposing` 时不提交（标签行与草稿都不变）、再按真回车才写回 `- 初始成员：林雨、陈昊、小`；`项目编码` 打字不出候选 | 本地通过（2026-10-14） |
-| DOC-IMPORT-MEMBER-TAG-003 | 浏览器 E2E | 真实弹窗里标签与候选常驻 | `document-import.spec.ts`「F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻（候选浮在导入弹窗之上）」：点开即断言输入框为空、本人已成一个标签 → 候选（portal 到 body）可见 → 打另一个成员名字的一小段 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 输入框清空、多出第二个标签、候选仍可见 → 回车写回 `- 初始成员：A、B`；两个 spec **12 例通过（35.1 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-001 | Web 单元 | 建议筛选（新签名）+ 标签工具 | `document-assignee-match.test.ts` 6 + 3 例：`isDocumentMemberFieldName` 只认 `负责人` / `项目成员` / `成员`；打「小」给 `小潘 / 小吴 / 王小二`（前缀在前）、打「雨」给 `林雨`、打「没人」为空；输入框为空给整份目录、只剩空白也算空；已成标签的不再建议（`小` + `[小潘]` → `小吴 / 王小二`）；打全名照常给（点一下就成标签）；12 个「成员N」只给 8 条。`memberTagsFromValue` 三种分隔符拆开 + 去空白；`serializeMemberTags` 拼成顿号名单、`trim` 掉空段、同名只留一遍 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-002 | Web 单元 | 弹窗联动：标签化、候选常驻、摘标签、输入法 | `DocumentImportModal.test.tsx` 4 例：点开「项目：项目成员」→ 值是 `林雨、陈昊` 但输入框为空、两个标签（删除按钮的无障碍名为「移除 林雨」/「移除 陈昊」）→ 候选即 `小潘 / 小邵（带管理员标记） / 王小二` → 打「小」筛选 → 点 `小潘` → 标签变三个、输入框清空、候选仍在且只剩 `小邵 / 王小二` → 回车写回 `- 项目成员：林雨、陈昊、小潘`；任务负责人先摘掉「林语」再点候选，写回 `- 负责人：小潘` 且不再含 `林语`；回车带 `isComposing` 时不提交（标签行与草稿都不变）、再按真回车才写回 `- 项目成员：林雨、陈昊、小`；`项目编码` 打字不出候选 | 本地通过（2026-10-14） |
+| DOC-IMPORT-MEMBER-TAG-003 | 浏览器 E2E | 真实弹窗里标签与候选常驻 | `document-import.spec.ts`「F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻（候选浮在导入弹窗之上）」：点开即断言输入框为空、本人已成一个标签 → 候选（portal 到 body）可见 → 打另一个成员名字的一小段 → 点候选（Playwright 点击做命中检测，弹层被弹窗盖住即失败）→ 输入框清空、多出第二个标签、候选仍可见 → 回车写回 `- 项目成员：A、B`；两个 spec **12 例通过（35.1 秒）**，夹具清理删除用户 2 / 项目 4 / 业务行 172 / 审计行 19 | 本地通过（2026-10-14） |
 | DOC-IMPORT-MEMBER-TAG-004 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 829 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / db:migrations:check 39 个 / db:seed:check / contract:drift / contract:validate 110 条 / build / check:deploy:test 5 个 image ref / check:deps 821 文件 / check:frontend:boundaries 344 模块 1707 依赖 / permissions:check 110 条操作 110 条路由 / deps:audit 仅 1 个 moderate、不阻断 / check:secrets 1242 文件 / check:docs 117 个 Markdown） | 本地通过（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 只按姓名筛，登录名仍手写（用户目录里没有登录名）；③ 建议是纯本地提示，最终以服务端解析为准；④ 编辑期间候选列表常驻，手打登录名时会挡在下面（提交即收起）；⑤ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
 ## 整项目导入：创建者默认算初始成员 + 草稿里的锁定标签（用户「创建者名字不能直接写入固定吗？」，2026-10-14 本地落库）
 
-定案见 [ADR-073](adr/ADR-073.md) 与开发日志第一百七十五条：整项目（模式 B）导入不再要求文档写出创建者——创建者由服务端默认算成员并排在第一位，工作台在「初始成员」行上挂一枚带锁图标、没有删除按钮的标签给用户看。本小节**取代**上一小节 `DOC-IMPORT-MEMBER-COVERAGE-001` 里 `MEMBER_CREATOR_MISSING`（缺创建者 → 422）的那部分断言：该报错已整条删除，`MEMBER_REQUIRED`（空名单）与 `ASSIGNEE_NOT_INITIAL_MEMBER`（缺负责人）保留。标签**不改文档正文**，所以「预览文档」仍是一字不改的原版。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见 [ADR-073](adr/ADR-073.md) 与开发日志第一百七十五条：整项目（模式 B）导入不再要求文档写出创建者——创建者由服务端默认算成员并排在第一位，工作台在「项目成员」行上挂一枚带锁图标、没有删除按钮的标签给用户看。本小节**取代**上一小节 `DOC-IMPORT-MEMBER-COVERAGE-001` 里 `MEMBER_CREATOR_MISSING`（缺创建者 → 422）的那部分断言：该报错已整条删除，`MEMBER_REQUIRED`（空名单）与 `ASSIGNEE_NOT_INITIAL_MEMBER`（缺负责人）保留。标签**不改文档正文**，所以「预览文档」仍是一字不改的原版。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-CREATOR-MEMBER-001 | 真实 PostgreSQL API 集成 | 创建者默认算成员、缺创建者不再拦 | `document-import.integration.test.ts` **6 例通过**：整项目大用例重写为「文档不写创建者 → 200 且成员含创建者（排第一位）」+「缺任务负责人 → 422 `ASSIGNEE_NOT_INITIAL_MEMBER`」；`addedMembers` 2 → 3、`memberAddCount` 1 → 2、`members` 断言补 `actor.userId`；`document-import-assist.integration.test.ts` **9 例通过**（提示词不再带 `creatorName`） | 本地通过（2026-10-14） |
-| DOC-IMPORT-CREATOR-MEMBER-002 | Web 单元 | 锁定标签：看得见、删不掉、不改正文 | `DocumentImportModal.test.tsx` 新增 3 例：① `document-import-creator-lock` 存在、文本是创建者姓名、带 `is-locked`、内部没有 button，且 `导入文档内容` 文本区的值与粘贴的原文**完全相等**（创建者不写进正文）；② 点开「项目：初始成员」编辑后标签行只有名单里原有的名字（无「移除 林雨妍」按钮），锁定标签仍在；③ 模式 A（项目内导入）不渲染锁定标签 | 本地通过（2026-10-14） |
-| DOC-IMPORT-CREATOR-MEMBER-003 | Web 单元 + 浏览器 E2E | 文案同口径与真实弹窗 | 契约模板说明行、工作台「必填要素」、右栏追问都改成「须包含全部任务负责人；创建者默认就是成员，不用写」（`contract:drift` 无漂移，模板版本仍 1）；`document-import-ai.spec.ts` 改写为「ADR-073 整项目 AI 导入：初始成员只写负责人，创建者默认算成员」并加断言预览名单含创建者，两个 spec **12 例通过**；浏览器实测：`- 初始成员：小潘` 那行渲染成「初始成员 [🔒 林雨妍] 小潘」，切到「预览文档」原文仍是 `- 初始成员：小潘` | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-002 | Web 单元 | 锁定标签：看得见、删不掉、不改正文 | `DocumentImportModal.test.tsx` 新增 3 例：① `document-import-creator-lock` 存在、文本是创建者姓名、带 `is-locked`、内部没有 button，且 `导入文档内容` 文本区的值与粘贴的原文**完全相等**（创建者不写进正文）；② 点开「项目：项目成员」编辑后标签行只有名单里原有的名字（无「移除 林雨妍」按钮），锁定标签仍在；③ 模式 A（项目内导入）不渲染锁定标签 | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-003 | Web 单元 + 浏览器 E2E | 文案同口径与真实弹窗 | 契约模板说明行、工作台「必填要素」、右栏追问都改成「须包含全部任务负责人；创建者默认就是成员，不用写」（`contract:drift` 无漂移，模板版本仍 1）；`document-import-ai.spec.ts` 改写为「ADR-073 整项目 AI 导入：项目成员只写负责人，创建者默认算成员」并加断言预览名单含创建者，两个 spec **12 例通过**；浏览器实测：`- 项目成员：小潘` 那行渲染成「项目成员 [🔒 林雨妍] 小潘」，切到「预览文档」原文仍是 `- 项目成员：小潘` | 本地通过（2026-10-14） |
 | DOC-IMPORT-CHIP-COLOR-001 | Web 单元（class 断言）+ 浏览器实测 | 必填 / 可选入口不再同色 | `is-required`（必填）与普通（可选）仍是两个 class，单测只断言 class 不断言颜色；线上必填 = 淡红实线加粗（`#e8a9a3` / `#fdecea` / `#b03a2e`）、可选 = 暖黄虚线（`#e3c98a` / `#fffaf0` / `#8a6512`），浏览器实测两枚按钮的计算样式确为两套色 | **配色未定案**（用户看过 4 套对照页 `required-chip-colors.html` 后尚未选，当前保持淡红 / 暖黄） |
 
-未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 锁定标签只在项目段**已有**「初始成员」字段时渲染，文档整段没写成员时的显示与按负责人汇聚留待下一轮；③ 必填 / 可选配色未定案；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 编辑态按 Esc 会连整个导入弹窗一起关掉并清空草稿（既有问题，与本批无关，未修）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
+未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只重跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`）；② 锁定标签只在项目段**已有**「项目成员」字段时渲染，文档整段没写成员时的显示与按负责人汇聚留待下一轮；③ 必填 / 可选配色未定案；④ 浏览器实测用真实 dev 栈 + 演示库（只读核对，未导入任何数据）；⑤ 编辑态按 Esc 会连整个导入弹窗一起关掉并清空草稿（既有问题，与本批无关，未修）；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
 ## 助手回执只报必填 + 创建者不重复显示（用户「这个可选择性的补充重复次数太多了，不要每一次我和 ai 讲话就提醒我一下那些可以选择增加」，2026-10-14 本地落库）
 
@@ -6469,7 +6469,7 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | DOC-IMPORT-ASSIST-REPLY-001 | Web 单元 | 回执只报必填、建议不复读 | `DocumentImportModal.test.tsx`：必填缺负责人 + 4 项建议时，回执含「必填还差 1 处：缺负责人 ×1（修复重复回调）」且**不含**「建议补齐」；只剩建议项（必填齐全）时回执逐字等于「我重新核对了一遍：必填都齐了。」，连发两轮后对话气泡里只出现 1 次「我重新核对了一遍」、0 次「建议补齐」（顶部常驻结论不计） | 本地通过（2026-10-14） |
-| DOC-IMPORT-CREATOR-MEMBER-004 | Web 单元 | 名单已写创建者时不重复显示 | 同上：`- 初始成员：林雨妍、林雨`（按姓名）与 `- 初始成员：linyuyan`（按登录名）两例都不渲染 `document-import-creator-lock`；名单没写创建者时仍渲染（DOC-IMPORT-CREATOR-MEMBER-002） | 本地通过（2026-10-14） |
+| DOC-IMPORT-CREATOR-MEMBER-004 | Web 单元 | 名单已写创建者时不重复显示 | 同上：`- 项目成员：林雨妍、林雨`（按姓名）与 `- 项目成员：linyuyan`（按登录名）两例都不渲染 `document-import-creator-lock`；名单没写创建者时仍渲染（DOC-IMPORT-CREATOR-MEMBER-002） | 本地通过（2026-10-14） |
 | DOC-IMPORT-ASSIST-REPLY-002 | 门禁 + 浏览器实测 | 整链回归与真实对话 | 整链 `pnpm check` exit 0（web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、118 个 Markdown、1243 文件 Secret 扫描）；浏览器实测：必填齐全只剩「模块说明 ×1」时连发两句补充说明，回执只有「我重新核对了一遍：必填都齐了。」与两条落地汇报，不再复读建议清单 | 本地通过（2026-10-14） |
 | DOC-IMPORT-ASSIST-REPLY-003 | 浏览器 E2E | 真实弹窗：建议不复查、回执不复读 | `node scripts/test-e2e-local.mjs --skip-migrate tests/document-import.spec.ts tests/document-import-ai.spec.ts` **12 例通过（34.6 秒）**（`pnpm build` 之后跑生产构建 + `vite preview`，API 用的是重建后的 `dist`）：改写后的「ADR-071 用户发问后助手回一句：必填齐了只说一句，建议清单不复读」把旧断言（回执含「截止时间 ×1 / 任务描述 ×1」）换成「含『必填都齐了』、不含『建议补齐』/『截止时间』」，并追加第二句去重断言（「我重新核对了一遍」只 1 条、落地汇报 2 条） | 本地通过（2026-10-14） |
 
@@ -6477,16 +6477,16 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 整项目 AI 草稿必须写出创建者（用户「可以初始成员里模型把创建者（林雨妍）也写了…提示词可以说得更准：『创建者不是任何任务负责人』时也要写」，2026-10-14 本地落库）
 
-定案见开发日志第一百七十七条与 [ADR-073](adr/ADR-073.md) §6（**取代** ADR-073 §2.2「创建者由系统默认算成员、不要写进名单」）：整项目导入的 AI 草稿必须把创建者写进 `- 初始成员：`，**与 TA 是不是任务负责人无关**；姓名由服务端从当前 Session 读出后注入 system 提示词，服务端兜底行为（文档写不写创建者都放行、都会落库）不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
+定案见开发日志第一百七十七条与 [ADR-073](adr/ADR-073.md) §6（**取代** ADR-073 §2.2「创建者由系统默认算成员、不要写进名单」）：整项目导入的 AI 草稿必须把创建者写进 `- 项目成员：`，**与 TA 是不是任务负责人无关**；姓名由服务端从当前 Session 读出后注入 system 提示词，服务端兜底行为（文档写不写创建者都放行、都会落库）不变。不新增接口 / 路由 / 迁移（仍 110 条 / 39 个），模板版本仍为 1。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
-| DOC-IMPORT-AI-CREATOR-001 | API 单元 | 提示词点名创建者；拿不到姓名时不编造 | `ai-assist.client.test.ts` 12 例通过：传 `creatorName: "特哥"` 时 system 含「创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。」；不传姓名时含「本次导入人的姓名未知，不要编造姓名。」且不含「本次导入人的姓名是」 | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-001 | API 单元 | 提示词点名创建者；拿不到姓名时不编造 | `ai-assist.client.test.ts` 12 例通过：传 `creatorName: "特哥"` 时 system 含「创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 项目成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。」；不传姓名时含「本次导入人的姓名未知，不要编造姓名。」且不含「本次导入人的姓名是」 | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-002 | API 集成（真实 PostgreSQL + stub 上游） | 姓名取自当前 Session，且只进 system message | `document-import-assist.integration.test.ts` 9 例通过：system 含「本次导入人的姓名是「Test 〈loginName〉」」，user message 不含该姓名（顺带修夹具：`sessionActor` 的 SQL 漏了 `login_name AS "loginName"` 别名，`actor.loginName` 原为 `undefined`） | 本地通过（2026-10-14） |
-| DOC-IMPORT-AI-CREATOR-003 | API 集成（真实 PostgreSQL） | 服务端兜底不变：文档不写创建者也放行 | `document-import.integration.test.ts`「整项目导入：初始成员必填且必须含全部负责人；创建者由系统默认补进成员」：名单只写负责人 → `canApply=true`、`project.members` 为 `[创建者, 负责人]`、`summary.memberAddCount=2`；名单只写创建者但负责人不在名单 → 仍是 422 + `ASSIGNEE_NOT_INITIAL_MEMBER` | 本地通过（2026-10-14） |
-| DOC-IMPORT-AI-CREATOR-004 | 浏览器 E2E | 真实弹窗里草稿写出创建者与任务负责人 | `document-import-ai.spec.ts` 的「ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人」（stub 从 system 里取注入的姓名，与文档里的任务负责人一起写名单）：草稿含创建者姓名与负责人登录名、助手结论不含「初始成员缺」、预览 `import-issues` 为 0、导入后跳到模块页；两个 spec **12 例通过（34.9 秒）**（`pnpm build` 之后跑生产构建） | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-003 | API 集成（真实 PostgreSQL） | 服务端兜底不变：文档不写创建者也放行 | `document-import.integration.test.ts`「整项目导入：项目成员必填且必须含全部负责人；创建者由系统默认补进成员」：名单只写负责人 → `canApply=true`、`project.members` 为 `[创建者, 负责人]`、`summary.memberAddCount=2`；名单只写创建者但负责人不在名单 → 仍是 422 + `ASSIGNEE_NOT_INITIAL_MEMBER` | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-004 | 浏览器 E2E | 真实弹窗里草稿写出创建者与任务负责人 | `document-import-ai.spec.ts` 的「ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人」（stub 从 system 里取注入的姓名，与文档里的任务负责人一起写名单）：草稿含创建者姓名与负责人登录名、助手结论不含「项目成员缺」、预览 `import-issues` 为 0、导入后跳到模块页；两个 spec **12 例通过（34.9 秒）**（`pnpm build` 之后跑生产构建） | 本地通过（2026-10-14） |
 | DOC-IMPORT-AI-CREATOR-005 | 门禁 | 本轮整链回归 | 整链 `pnpm check` exit 0（lint / format:check / typecheck 8 workspace / test:unit：web 105 文件 837 例、api 78 文件 499 例、contract 16 文件 102 例、ops 9 文件 60 例、database 15 例、canonical-json 5 例 / `db:migrations:check` 39 个 / `db:seed:check` / `contract:drift` / `contract:validate` 110 条 / `build` / `check:deploy:test` 5 个 image ref / `check:deps` 821 个源文件 / `permissions:check` 110 条操作 110 条路由 / `deps:audit` / `check:secrets` 1243 文件 / `check:docs` 118 个 Markdown）；真实 PostgreSQL 集成 `node scripts/test-integration-local.mjs --skip-migrate`：apps/api 58 文件 560 例、database 2 文件 27 例、apps/ops 2 文件 7 例通过 | 本地通过（2026-10-14） |
-| DOC-IMPORT-AI-CREATOR-006 | 浏览器实测（真实上游 + 演示库，只读） | 创建者不是任何任务负责人、文档也没提到她时，草稿仍写出创建者 | 需求稿删掉「林雨妍」的一切出现（参与人员与全部任务负责人）后粘进「从文档导入整项目」→「交给 AI 整理」（约 40 秒出稿）：草稿「- 初始成员：」第一位是「林雨妍」，共 5 模块 / 8 功能 / 9 任务，助手结论只报 2 条建议（截止时间 ×2）且不提成员缺口；点「预览」（只读）得「AIDEMO2 · 编码可用 · 成员：林雨妍、小邵、小潘、小吴、邵晨宇」、`document-import-issues` 为 0、锁定标签不重复挂；「关闭预览」+「取消」未落库（项目列表仍 7 个、无 AIDEMO2） | 本地通过（2026-10-14） |
+| DOC-IMPORT-AI-CREATOR-006 | 浏览器实测（真实上游 + 演示库，只读） | 创建者不是任何任务负责人、文档也没提到她时，草稿仍写出创建者 | 需求稿删掉「林雨妍」的一切出现（参与人员与全部任务负责人）后粘进「从文档导入整项目」→「交给 AI 整理」（约 40 秒出稿）：草稿「- 项目成员：」第一位是「林雨妍」，共 5 模块 / 8 功能 / 9 任务，助手结论只报 2 条建议（截止时间 ×2）且不提成员缺口；点「预览」（只读）得「AIDEMO2 · 编码可用 · 成员：林雨妍、小邵、小潘、小吴、邵晨宇」、`document-import-issues` 为 0、锁定标签不重复挂；「关闭预览」+「取消」未落库（项目列表仍 7 个、无 AIDEMO2） | 本地通过（2026-10-14） |
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（只定向跑 `document-import.spec.ts` 与 `document-import-ai.spec.ts`，12 例通过）；② E2E 仍是本机回环 stub，但「真实模型也会把创建者写出来」已由 DOC-IMPORT-AI-CREATOR-006 的真实上游实机复测证实（只读核对、未导入）；③ 历史记录里的旧口径（ADR-073 §2.2、`技术设计v1.2.2.md` 相应记述、第一百七十五条条目）按事实保留，由本小节与 ADR-073 §6 标注取代；④ ADR-073 §5 四项仍为已拍板未实现；⑤ 生产镜像构建与 Trivy 扫描未在本批执行；⑥ GitHub Actions 未在本批执行（`test` 分支不触发工作流）。
 
@@ -6542,6 +6542,77 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 口径替代：本节替代上文本批 `RECORD-SUMMARY-AI-004` 行里「底栏出现『已手动改 1 处』……减计数……清零」的表述——计数文案已于 2026-10-15 按用户要求删除，该行保留为 2026-10-14 的历史记录（对应实现已不存在该文案）。
 
 未运行 / 已知偏差（本批）：① 全量 Playwright 未跑（纯样式与层级改动，dev 栈人工核对）；② 生产镜像构建与 Trivy 扫描、GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 「生成总结」补浏览器 E2E（用户「全链路实测再跑一次加上`生成总结`（/records 的 AI 面板）和记录作废/恢复、遗留问题闭环这轮没覆盖，需要」，2026-10-16 本地落库）
+
+用户这句话里三项，「记录作废 / 恢复」已由 `record-lifecycle.spec.ts`（F-21）覆盖、「遗留问题闭环」已由 `issues.spec.ts`（F-20）与 `leftover-task.spec.ts`（F-20）覆盖，**唯一缺口是「生成总结」**（`RecordSummaryModal`，ADR-075 / ADR-076）——`RECORD-SUMMARY-DETAIL-COPY` 一节当时的「未运行」就写着「未新增 Playwright 用例……浏览器关键路径待补」。本批补两条 spec，并把写第二条时暴露出的真 bug 一起修掉；不新增接口 / 路由 / 迁移（仍 119 条 / 44 个）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SUMMARY-AI-E2E-001 | 浏览器 E2E | 取数 → AI 改写 → 逐段编辑 / 回退 → 范围变更丢弃 → 上游限流 | `apps/e2e/tests/record-summary-ai.spec.ts` 1 例（4.2s）：先发布一条带标记的记录 → 「生成总结」弹层底栏显示「已归纳 N 条迭代记录」、正文 `article.summary-doc[data-source="local"]` 的 `h3` 含「年度总结」且含记录标记与遗留项 → 切「查看明细」再「返回总结」正文仍在 → AI 浮层默认态（`role="dialog"`、无对话气泡）→ 用带标记的要求改写，断言 `[data-source="assist"]` 正文**同时**含事实标记与要求标记（证明事实与要求都真的到达了 stub 上游，不是界面自造）→ 点段落改字（`data-edited="true"`）→ hover 后点「回退这句」还原原文 → 「复制正文」读回剪贴板 → 勾 `AIE2ERATELIMIT` 触发上游 429，断言固定文案且正文不变 → 「上次要求」标签点击后拼接进要求 → 切「本月」丢弃改写稿（正文回到 `data-source="local"`） | 本地通过（2026-10-16） |
+| RECORD-SUMMARY-AI-E2E-002 | 浏览器 E2E（F-33 × F-21 交叉） | 生成总结只统计已发布记录：作废退出范围、恢复回到范围 | `apps/e2e/tests/record-summary-void.spec.ts` 1 例（5.8s）：成员发布一条带标记的记录 → 打开「生成总结」记下底栏计数 n 且正文含标记 → 管理员在记录详情作废（作废原因必填、未填时确认按钮 `disabled`）→ 重新打开「生成总结」，`expect.poll` 到底栏计数变 **n-1**、正文不再含标记 → 管理员恢复记录 → 再打开，计数回到 n、正文重现标记。此前 F-21 只覆盖记录自身可见性、F-33 只覆盖取数与 AI 改写，「作废记录与草稿不计入总结」这条不变量没有端到端用例，状态与总结计数不一致时年终总结会把作废内容算进成果 | 本地通过（2026-10-16） |
+| RECORD-SUMMARY-REFRESH-FIX-001 | 前端修复（写第二条 spec 时暴露） | 弹层重新打开必须重取事实；事实变了要丢掉改写稿 | `apps/web/src/features/records/RecordSummaryModal.tsx`：`useRecordSummaryQuery` 在弹层关闭时 `enabled=false` 但保留缓存，重新打开不会按挂载重取——期间新发布 / 作废 / 恢复的记录进不了总结（第二条 spec 首次运行正是红在这里：作废后重开仍是旧计数）。修法：新增 `refetchedOnOpen` ref + effect，每次打开（`open` 由 false 转 true）在 `summary.dataUpdatedAt > 0` 时显式 `refetch()`，首次打开仍由 `enabled` 取数、不重复请求；新增 `assistFacts` 事实快照，重取到的事实与生成改写稿时不同就丢弃改写稿与手动改动（避免「事实是新的、正文是旧的」，与 ADR-076 §2.2 同口径）。`pnpm --filter @inpulse/web exec vitest run src/features/records` **4 文件 45 例通过**（jsdom 没有真实 QueryClient 跨挂载缓存，这条修复不影响现有单测）。**反事实（先红后绿）**：把该文件临时回退到 HEAD 后单跑这条 spec，确定性失败在 `record-summary-void.spec.ts:101` 的 `await expect.poll(async () => summaryCount(second.modal)).toBe(count - 1)`（作废后计数始终不变），恢复修复版后 5.5s 通过 | 本地通过（2026-10-16） |
+| RECORD-SUMMARY-E2E-REG-001 | 门禁 | 本批不回归 | `pnpm test:e2e:local` **88 passed (6.8m)**（上批 87 → 88，本批新增 2 例）；`pnpm test:unit` **web 113 文件 924 例、api 79 文件 509 例、api-contract 16 文件 102 例、ops 9 文件 60 例、database 15 例**；`pnpm check` **除 `deps:audit` 外全部通过**（lint / format:check / typecheck 8 workspace / `db:migrations:check` 44 个 / `db:seed:check` / `contract:drift` / `contract:validate` 119 条 / build / `check:deploy:test` / `check:deps` 868 文件 / `check:frontend:boundaries` 365 模块 1822 依赖 / `permissions:check` 119 操作 119 路由），`check:secrets`（1329 文件）与 `check:docs`（128 个 Markdown）在链条中断后单独复跑通过；`deps:audit` 前两次因 registry `ECONNRESET` 失败，网络恢复后复跑 **exit 0**（1 个 moderate，低于 `--audit-level=high` 阈值） | 本地通过（2026-10-16） |
+
+| RECORD-SUMMARY-AI-REAL-001 | 真实模型实测（演示栈 5173/3000 + 演示库 `app`，只读） | 真实上游链路的端到端效果 | 管理员账号在 `/records` 打开「生成总结」（本年 / 全部项目 / 按项目，确定性正文显示「6 个项目、17 个模块、42 个功能、53 条迭代记录、60 个已完成任务、10 条遗留问题 / 3 条已闭环、4 个缺口」）→ 浮层填写要求「按时间线组织：先给一句总体结论，再分节；保留全部数字、人名与项目名，不要新增事实」→ 真实上游 **45.3s 返回改写稿**：抬头与范围行保留、新增「总体结论」小节，上文全部数字与项目名逐字一致，未出现新事实；全程只读（未导入、未改记录、未写库） | 本地通过（2026-10-16） |
+
+**本次实测暴露的遗留问题（已修复）**：改写稿里模型输出的行内强调 `**用户登录与会话管理**` 在弹窗里**原样显示星号**——本地确定性正文是按结构化块渲染的，而 AI 改写路径的正文单元（标题 / 段落 / 列表）不解析行内 Markdown；stub 上游从不输出 `**`，所以这条只有真实模型才暴露。用户已在「清洗行内标记 / 渲染成 `<strong>` / 提示词要求纯文本」三选一中定案 **清洗行内标记**，实现与验证见下节 `RECORD-SUMMARY-INLINE-MARKER-001` / `002` / `003`。
+
+未运行 / 已知偏差（本批）：① 两条新 spec 走的是本地 stub 上游（`apps/e2e/helpers/ai-assist-stub.mjs` 新增「迭代总结改写」分支，按 system 首句 `InPulse 迭代总结的改写助手` 与文档导入分流）；**真实模型链路**已于 2026-10-16 用演示栈 + 演示库复测（`RECORD-SUMMARY-AI-REAL-001`）；② 生产镜像构建与 Trivy 扫描未执行；③ GitHub Actions 未执行（`test` 分支不触发工作流）；④ 本批改动未提交、未推送；⑤ `RECORD-SUMMARY-DETAIL-COPY` 那节的剩余缺口本批只补了一半——「复制正文」已有浏览器用例，**筛选条件（项目 / 成员 / 自定义日期区间）与「复制明细 Markdown」仍无 Playwright 用例**。
+
+## 成员与设置弹窗（项目主页）视觉校准（用户「这里的 ui 调整一下，包括这里」+ 两张截图，2026-10-16 本地落库）
+
+用户给了两张截图（企业微信项目群卡片、成员与设置弹窗）。先用一个临时 Playwright 探针在真实页面上读了一遍计算样式，锁定三处可复现的不一致：
+
+1. 企微卡片与成员卡片**只有标题带**有 20px 左右内缩（`.settings-panel .calm-section-title` 的 `padding: 16px 20px 14px`），note / 步骤 / 虚线框 / 绑定码 / 成员区全部贴卡片边（实测 `x=79` 对标题的 `x=99`），左边界参差；
+2. 两张卡片之间**零间距**（企微卡片底 469px、成员卡片顶 468px，边框直接相接）；
+3. 成员区是「浅蓝底 `.member-editor` 盒子里再套白底 `.calm-member-card`」的双层容器，「刷新成员」单独占一行页脚；项目信息里的「当前成员」与下方成员列表重复。
+
+修法（只动前端样式与两处 JSX，不改接口 / 数据 / 权限）：
+
+- `.project-wecom-card` / `.project-members-panel` 统一 `padding: 0 20px 15px`，标题带内缩归零（分隔线缩到内容宽度），四块内容左边界全部对齐到 20px；
+- `.project-workspace-modal-body > * + *` 补 14px 相邻间距。**刻意不用 flex 列 + gap**：正文容器高度固定，flex 子项会被压扁（实测企微卡片从 347px 被压到 250px、内容溢出），相邻兄弟外边距不改变子项尺寸；
+- 成员区压成一层：`.member-editor` 去掉浅蓝底与边框、改一条 `border-top` 分隔线；「刷新成员」并入区块标题行（`text-button`）；标题行补「共 N 人」；
+- 删掉与成员列表重复的「当前成员」行（管理员视图与只读视图都删）；
+- 「生成绑定码」由默认白底按钮改为 `soft-blue-button`（浅蓝主操作），与「解绑」的破坏性红分级。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| MEMBERS-SETTINGS-ALIGN-001 | UI 校准（真实页面实测） | 左边界、卡片间距、层级 | 探针实测（改前 → 改后）：`.wecom-binding-note` `x=79 → 99`、`.wecom-binding-steps` `x=79 → 99`、`.wecom-binding-placeholder` `x=79 → 99`、`.member-editor` `x=79 → 99`（`.project-facts` 保持 99）；企微卡片高度 `336 → 347`（flex 压扁的中间态为 250，已回退）；两张卡片间距 `0 → 13px`；`.calm-action-footer` 不再出现（刷新成员并入标题行）；`.project-facts` 高度 `191 → 156`（删掉「当前成员」行） | 本地通过（2026-10-16） |
+| MEMBERS-SETTINGS-ALIGN-002 | 前端单测 | 等待锚点跟随结构调整 | `ProjectMembersPageView.test.tsx` 5 处 `await screen.findByText("开发者 C")` 改为 `await screen.findAllByText(/开发者 C/)`：原锚点靠「当前成员」那一行渲染出的独立文本命中，该行删除后只剩成员卡片里的「开发者 C（创建者）」，精确匹配不再成立（先红后绿：删除行后 5 例失败 → 改锚点后 79 例全过） | 本地通过（2026-10-16） |
+| MEMBERS-SETTINGS-ALIGN-003 | 门禁 | 本批不回归 | `pnpm --filter @inpulse/web test` **113 文件 928 例通过**；`node scripts/test-e2e-local.mjs --skip-migrate tests/project-members.spec.ts` **3 passed (17.6s)**（普通成员只读、管理员增删、组长转交）；`pnpm lint`、`pnpm typecheck`（8 workspace）、`pnpm format:check`、`pnpm check:docs`（128 个 Markdown）通过 | 本地通过（2026-10-16） |
+
+未运行 / 已知偏差（本批）：① 本批是视觉校准，未改接口 / 数据 / 权限，未跑 API 集成与数据库测试；② 只读视图（`ActiveProjectMembers`）与管理员视图同步扁平化，两者共用 `.project-members-panel` 选择器；③ 探针是临时 spec，取到数据后已删除，仓库不留痕；④ 生产镜像构建 / Trivy 扫描与 GitHub Actions 未执行（`test` 分支不触发工作流）。
+## 「生成总结」改写稿清洗行内 Markdown 标记（用户三选一定案「清洗行内标记」，2026-10-16 本地落库）
+
+真实模型实测（`RECORD-SUMMARY-AI-REAL-001`）暴露：改写稿里模型输出的行内强调 `**用户登录与会话管理**` 会在弹窗里原样显示星号。根因是 AI 改写路径的正文单元（标题 / 段落 / 列表项）按纯文本渲染，不解析行内 Markdown；stub 上游从不输出 `**`，所以此前只有真实模型能暴露。用户在三个修法里选定**清洗行内标记**（另两个是渲染成 `<strong>`、提示词约束纯文本）。
+
+修法（只动前端解析层，不改提示词 / 契约 / API / 数据库）：`apps/web/src/features/records/record-summary-assist-document.ts` 新增 `stripAssistInlineMarkers()`，剥掉成对的 `**`、`~~`、行内代码与单 `*`，并由 `parseSummaryAssistMarkdown()` 对标题、列表项、段落三处统一调用。清洗放在解析这一层，是因为段落原文、渲染、编辑比对、单段回退与「复制正文」共用同一份 `orig`，只洗一处才不会口径漂移。**刻意不动下划线**——`snake_case`、`__init__` 这类标识符会被误伤；链接与 HTML 也不处理（V1.2.2 不接受原始 HTML）；用户自己敲进编辑框的标记保持原样。清洗后只剩空白的行不再占段，避免出现空编辑框。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| RECORD-SUMMARY-INLINE-MARKER-001 | 前端单测 | 解析层把模型的行内标记洗成纯文本 | `record-summary-assist-document.test.ts` 新增 `stripAssistInlineMarkers` 4 例，并把既有断言改为清洗后的文本：`**用户登录与会话管理**：已上线` 变成 `用户登录与会话管理：已上线`；`*重点*与~~废弃~~并存` 变成 `重点与废弃并存`；行内代码（反引号包住的 `pnpm check`）变成 `pnpm check`；孤立星号（`本期 9 * 4 条`、`3*4=12`）与标识符下划线（`snake_case`、`__init__`）保持不变；解析出的段落原文与「复制正文」出口都不带标记；`** **` 这类清洗后只剩空白的行不占段 | 本地通过（2026-10-16） |
+| RECORD-SUMMARY-INLINE-MARKER-002 | 浏览器 E2E（真实模型形状） | 弹窗不把 `**` 亮给用户 | `apps/e2e/helpers/ai-assist-stub.mjs` 的迭代总结分支改为按真实模型习惯输出 `- 事实命中：**<标记>**`；`record-summary-ai.spec.ts` 在原有断言后补 `await expect(assist).not.toContainText("**")` | 本地通过（2026-10-16） |
+| RECORD-SUMMARY-INLINE-MARKER-003 | 门禁（反事实，先红后绿） | 新断言必须真的挡得住 | 把 `stripAssistInlineMarkers()` 临时改成 `return text.trim()`：定向单测 **1 文件 7 失败 / 4 通过**（失败集中在解析层清洗用例，例如「清洗后只剩空白的行不占段」收到 1 段而非 0 段），重建 web 后定向 E2E **确定性失败在 `record-summary-ai.spec.ts:97` 的 `await expect(assist).not.toContainText("**")`**；恢复实现后定向单测 **11 例通过**、定向 E2E **1 passed (9.0s)** | 本地通过（2026-10-16） |
+
+未运行 / 已知偏差（本批）：① 本批只跑定向单测（`record-summary-assist-document.test.ts` 11 例）与定向 E2E（`record-summary-ai.spec.ts` 1 例）；全量 `pnpm test:web` 在本批改动后跑过一次 **113 文件 928 例通过**（上批基线 924，本批 +4），**整链 `pnpm check` 与全量 `pnpm test:e2e:local` 未重跑**；② 清洗只覆盖「生成总结」改写路径，文档导入的 Markdown 预览走另一套渲染，本批未动；③ 真实模型链路本轮未复测（沿用 `RECORD-SUMMARY-AI-REAL-001` 的实测），新增的 E2E 断言走 stub 上游的 `**` 形状；④ 生产镜像构建 / Trivy 扫描与 GitHub Actions 未执行（`test` 分支不触发工作流）。
+## E2E 夹具清理漏了 ADR-077 项目群三张表：逻辑备份恢复演练被孤儿行挡红（用户「未跑的跑一下」，2026-10-16 本地落库）
+
+用户口径（原话）：「未跑的跑一下」——补跑上一条日志里如实标注的未运行项时，`pnpm test:integration:local` 的 `apps/ops` 备份恢复用例确定性失败：`pg_restore` 重建 `project_wecom_binding_codes_consumer_user_fk` 时报「Key (consumed_by_user_id)=(664) is not present in table "users"」。这不是测试写法问题——`app_ci` 里确实躺着一族孤儿行（实测：该表 8 行引用的项目已不存在、其中 3 行还引用了已不存在的用户；`project_wecom_groups` 7 行引用的项目已不存在）。
+
+根因：`apps/e2e/helpers/fixture-cleanup.ts` 的「会话外 RESTRICT 引用」清单只列了**个人**企业微信绑定那四张表（`user_wecom_bindings` / `wecom_binding_codes` / `wecom_robot_config` / `ai_assist_settings`），ADR-077（迁移 `0044`）新增的**项目群**三张表没进清单。清理事务跑在 `session_replication_role = replica` 下不校验外键，删掉夹具用户与项目后就把它们留成了悬空引用；逻辑备份恢复演练重建 RESTRICT 约束时必然撞上。
+
+修法（只动 E2E 清理助手，不改产品代码 / 契约 / 迁移）：① 按夹具维度删三张表，顺序为投递 → 绑定 → 待用码；② 把「引用已不存在的项目 / 用户」的兜底抽成 `sweepOrphanReferences()`，并且**在没有夹具用户时也执行**——原来 `fixtureUsers === 0` 直接早退，历史孤儿行只能等到下一次有夹具用户时才被顺手修掉，期间恢复演练一直红；③ 完整性断言新增 `orphan_project_wecom_codes` / `orphan_project_wecom_groups` / `orphan_wecom_deliveries` 三项，必须为 0；④ 报告加 `orphansRemoved`，无夹具数据但清了悬空行时也会打印出来。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| E2E-CLEANUP-WECOM-PROJECT-001 | 复现 + 修复（真实 PostgreSQL） | 恢复演练不再被夹具孤儿行挡红 | 修复前：`pnpm test:integration:local` 的 `apps/ops` 用例「恢复演练：TOC 保留会话表结构、排除会话数据，pg_restore 后会话表为空」确定性失败（`backup.integration.test.ts:515` 抛 `pg_restore failed (status 1)`，FK 违反）；清理 `app_ci` 后 `pnpm --filter @inpulse/ops test:integration` **2 文件 7 例通过**（3.98s），`app_ci` 三张表孤儿计数均为 0 | 本地通过（2026-10-16） |
+| E2E-CLEANUP-WECOM-PROJECT-002 | 真实 PostgreSQL | 跑完一整轮夹具再清理，恢复演练仍绿 | 先 `pnpm test:integration:local`（api 63 文件 610 例等，产生项目群绑定夹具）→ 用 `E2E_DATABASE_URL=…app_ci node apps/e2e/helpers/fixture-cleanup.ts` 清理（删除用户 902、项目 469、业务行 15096、审计行 940）→ 再跑 ops 集成 **7 例通过**；清理后三张表孤儿计数均为 0 | 本地通过（2026-10-16） |
+| GATE-UNRUN-MAKEUP-INT-001 | 真实 PostgreSQL 集成 | 全量集成回归 | `pnpm test:integration:local`：database **2 文件 27 例**、apps/ops **2 文件 7 例**、apps/api **63 文件 610 例**（129.73s）全部通过；另补跑按既定决定未纳入 CI 的 `pnpm test:search:db`（要求 `max_connections ≥ 150`，本机正好 150）**2 文件 19 例通过**（5.60s），跑完已用夹具清理收尾 | 本地通过（2026-10-16） |
+| GATE-UNRUN-MAKEUP-IMG-001 | 门禁（本地等价 CI §12.4 镜像构建） | 五个生产镜像构建 + web 镜像 CSP + Trivy | `docker build --file deploy/docker/{api,migration,web,db-bootstrap,ops}.Dockerfile` **五个镜像全部构建成功**；`scripts/check-web-image-csp.sh` 因本机无 bash（`bash` 只解析到没有发行版的 WSL）未跑原版，改用 PowerShell 等价实现跑通同样 7 项：HTTP 入口 308→HTTPS、入口 HTML 200 + 逐响应 32 位 hex nonce（meta / script 标签一致、占位符已替换）+ 安全头 + no-store、下一次响应换新 nonce、SPA 回退 200 且 no-store、条件请求仍 200、`/api/v1` 代理 502 仍带安全头与 no-store、哈希资源 immutable；Trivy `0.68.2` 按 CI 同参数（`--severity CRITICAL,HIGH --ignore-unfixed --exit-code 1`）扫描五镜像 **全部 exit 0**（web 首次因 `walk dir` 超时未决，加 `--timeout 30m` 重跑得 `Clean (no security findings detected)`） | 本地通过（2026-10-16） |
+| GATE-UNRUN-MAKEUP-CHECK-001 | 门禁 | 整链非数据库门禁（本批改动后重跑） | `pnpm check` → **exit 0**：lint / format:check / typecheck（8 workspace）/ test:unit（web 113 文件 924 例、api 79 文件 509 例、api-contract 16 文件 102 例、ops 9 文件 60 例、database 15 例）/ `db:migrations:check`（44）/ `db:seed:check` / `contract:drift`（6 个生成物）/ `contract:validate`（119 条）/ build / `check:deploy:test` / `check:deps`（868 文件）/ `check:frontend:boundaries`（365 模块 1822 依赖）/ `permissions:check`（119 操作 / 119 路由）/ `deps:audit`（1 个 moderate，低于 `--audit-level=high`）/ `check:secrets`（1329 文件）/ `check:docs`（128 个 Markdown） | 本地通过（2026-10-16） |
+
+未运行 / 已知偏差（本批）：① **AI 上游真实模型链路**本轮已复测（2026-10-16，演示栈 + 演示库，见 `RECORD-SUMMARY-AI-REAL-001`）；新增的两条生成总结 spec 仍走本地 stub 上游；② `deps:audit` 期间有两次因 registry `ECONNRESET` 失败，网络恢复后整链 `pnpm check` **exit 0**（含 `deps:audit`：1 个 moderate 不阻断、`check:secrets` 1329 文件、`check:docs` 128 个 Markdown）；③ GitHub Actions 未执行（`test` 分支不触发工作流，改动也未提交）；④ `scripts/check-web-image-csp.sh` 的 bash 原版没有在本机执行，上面那条是 PowerShell 等价实现（脚本本身未改动）；⑤ 生产环境真实 compose 部署与签名发布清单仍由人工完成。
 
 ## 「AI 辅助转换」主开关拨动即保存（用户「这个关闭就直接显示关闭吧，不用再点击保存了」，2026-10-15 本地落库，第一百九十三条增补）
 

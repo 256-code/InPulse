@@ -82,7 +82,7 @@ test("ADR-067 .docx 本地抽取 → 自动分析 → 草稿预览与导入", as
   await context.close();
 });
 /**
- * ADR-073：整项目导入的初始成员必填、必须含全部任务负责人；创建者（本次导入人）
+ * ADR-073：整项目导入的项目成员必填、必须含全部任务负责人；创建者（本次导入人）
  * 也要写进名单——stub 从 system 提示词里取服务端注入的创建者姓名，与任务负责人一起写；
  * 前端对创建者去重，不会重复显示。
  */
@@ -109,7 +109,7 @@ test("ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人", as
     buffer: docx,
   });
 
-  // 草稿的初始成员先写创建者（服务端注入姓名），再写全部任务负责人；助手不报成员缺口。
+  // 草稿的项目成员先写创建者（服务端注入姓名），再写全部任务负责人；助手不报成员缺口。
   await expect(dialog.getByTestId("document-import-draft")).toContainText(
     runtime.user.name,
   );
@@ -118,13 +118,13 @@ test("ADR-073 整项目 AI 导入：草稿写出创建者与任务负责人", as
   );
   await expect(
     dialog.getByTestId("document-import-assist-verdict"),
-  ).not.toContainText("初始成员缺");
+  ).not.toContainText("项目成员缺");
 
   // 预览放行（成员校验由服务端最终裁决）→ 导入成功。
   await dialog.getByTestId("document-import-preview").click();
   await expect(dialog.getByTestId("document-import-summary")).toBeVisible();
   await expect(dialog.getByTestId("document-import-issues")).toHaveCount(0);
-  // ADR-073：服务端把创建者本人默认算进初始成员，预览名单里就有 TA。
+  // ADR-073：服务端把创建者本人默认算进项目成员，预览名单里就有 TA。
   await expect(dialog.locator(".import-preview-meta")).toContainText(
     runtime.user.name,
   );

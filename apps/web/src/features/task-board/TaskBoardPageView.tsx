@@ -4,6 +4,7 @@ import { createApiClient, type InpulseApiClient } from "@generated/api";
 import { InpulseIcon } from "@features/common/components/InpulseIcon";
 import { GlobalTaskCreateModal } from "@features/tasks/GlobalTaskCreateModal";
 import { TaskDetailOverlay } from "@features/tasks/TaskDetailOverlay";
+import { useActiveProjectMemberIds } from "@features/tasks/detached-assignee";
 import { useTaskMarks } from "@features/tasks/task-marks";
 import type { TaskLocation } from "@features/tasks/task-links";
 
@@ -96,6 +97,8 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
   // 裁决修订 D-2：遗留问题来源标记（hasLeftoverSource）不在看板契约里，
   // 按 R-5 页面级一次批量读取，读取失败时徽章按缺席隐藏。
   const api = useMemo(() => client ?? createApiClient(), [client]);
+  // 负责人是否还在项目成员里：卡片与列表行据此给已移出的人上标记。
+  const activeMemberIds = useActiveProjectMemberIds(api, projectId);
   const boardTaskIds = useMemo(
     () =>
       (data?.modules ?? []).flatMap((lane) =>
@@ -221,6 +224,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
           modules={visibleModules}
           collapsedIds={collapsedIds}
           leftoverIds={leftoverIds}
+          activeMemberIds={activeMemberIds}
           onToggleLane={toggleLane}
           onOpenTask={openTask}
         />
@@ -229,6 +233,7 @@ export const TaskBoardPageView: React.FC<TaskBoardPageViewProps> = ({
           modules={visibleModules}
           collapsedIds={collapsedIds}
           leftoverIds={leftoverIds}
+          activeMemberIds={activeMemberIds}
           onToggleLane={toggleLane}
           onOpenTask={openTask}
         />

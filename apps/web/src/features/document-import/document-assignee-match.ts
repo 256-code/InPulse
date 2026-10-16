@@ -1,5 +1,5 @@
 /**
- * ADR-071 文档导入工作台：把草稿里的负责人 / 初始成员名字与站内账号做确定性匹配。
+ * ADR-071 文档导入工作台：把草稿里的负责人 / 项目成员名字与站内账号做确定性匹配。
  *
  * 唯一数据源是登录用户目录（GET /api/v1/users，只有 id / 姓名 / 头像 / 管理员标记）：
  * 姓名精确命中才算匹配；同名多人、只能找到相近姓名、完全找不到时都算「未匹配」，
@@ -20,7 +20,7 @@ export interface DocumentAssigneeNameUse {
   readonly name: string;
   /** 承载这个名字的标题行行号（任务标题行 / 项目标题行），追问时给用户定位。 */
   readonly lineIndex: number;
-  /** 出现位置的人话标签：任务标题，或「项目初始成员」。 */
+  /** 出现位置的人话标签：任务标题，或「项目成员」。 */
   readonly label: string;
   readonly source: "TASK_ASSIGNEE" | "PROJECT_MEMBER";
 }
@@ -45,8 +45,15 @@ export interface DocumentAssigneeMatchResult {
 
 const CANDIDATE_LIMIT = 5;
 const ASSIGNEE_FIELD_NAME = "负责人";
-/** 项目段里记成员的字段名：模板写「初始成员」，也兼容手写的「成员」。 */
-export const PROJECT_MEMBER_FIELD_NAMES = ["初始成员", "成员"] as const;
+/**
+ * 项目段里记成员的字段名：模板写「项目成员」，兼容上一版模板的「初始成员」与手写的
+ * 「成员」。2026-10-16 用户把「初始成员」这个说法整体改成「项目成员」，旧写法继续认。
+ */
+export const PROJECT_MEMBER_FIELD_NAMES = [
+  "项目成员",
+  "初始成员",
+  "成员",
+] as const;
 
 /** 名字比较用的规整化：去掉所有空白并转小写。 */
 export function normalizeName(name: string): string {
@@ -70,7 +77,7 @@ function readFieldValue(
   return null;
 }
 
-/** 收集草稿里所有需要对应到账号的名字（任务负责人 + 项目初始成员），按出现顺序去重。 */
+/** 收集草稿里所有需要对应到账号的名字（任务负责人 + 项目成员），按出现顺序去重。 */
 export function collectDocumentAssigneeNames(
   view: DocumentDraftView,
 ): readonly DocumentAssigneeNameUse[] {
@@ -96,7 +103,7 @@ export function collectDocumentAssigneeNames(
       pushNames(
         member.value,
         view.project.lineIndex,
-        "项目初始成员",
+        "项目成员",
         "PROJECT_MEMBER",
       );
     }
@@ -248,7 +255,7 @@ export interface DocumentMemberCoverageContext {
 }
 
 export interface DocumentMemberCoverage {
-  /** 整项目导入还没有写「- 初始成员：」。 */
+  /** 整项目导入还没有写「- 项目成员：」。 */
   readonly memberRequired: boolean;
   /** 名单里没有、却被任务指派为负责人的名字（按首次出现顺序去重）。 */
   readonly missingAssignees: readonly string[];
@@ -278,7 +285,7 @@ function fieldText(
 }
 
 /**
- * ADR-072 成员名单校验（整项目导入）：初始成员必填，且必须包含全部任务负责人；
+ * ADR-072 成员名单校验（整项目导入）：项目成员必填，且必须包含全部任务负责人；
  * ADR-073：创建者默认就算成员，名单里写不写都行（写了也不重复），而任务负责人是指派给
  * 创建者本人的时候自然也不再报缺。服务端在预览时按「解析后的账号」判同一件事并把 ERROR
  * 落到行级问题；这里做同一口径的本地预检，让用户在点「预览」之前就看到缺口。本地只认三类
@@ -363,7 +370,7 @@ export function checkDocumentMemberCoverage(
 /** 建议条数上限：够看一屏，又不至于把弹层撑得比字段本身还显眼。 */
 const MEMBER_SUGGESTION_LIMIT = 8;
 
-/** 成员字段（写人名 / 登录名的那些）才有账号建议：初始成员、成员、负责人。 */
+/** 成员字段（写人名 / 登录名的那些）才有账号建议：项目成员、成员、负责人。 */
 export function isDocumentMemberFieldName(name: string): boolean {
   return (
     name === ASSIGNEE_FIELD_NAME ||
@@ -398,7 +405,7 @@ export function serializeMemberTags(
 }
 
 /**
- * 成员字段（`- 初始成员：` / `- 负责人：`）输入框里的账号建议（2026-10-14 用户
+ * 成员字段（`- 项目成员：` / `- 负责人：`）输入框里的账号建议（2026-10-14 用户
  * 「和成员相关的可不可以做到简单的搜索，比如我打名字的其中一个字然后会筛选出来」）。
  *
  * 只看末尾输入框里**正在输入的那一段**（`typedToken`，标签不参与筛选）：用户目录只有

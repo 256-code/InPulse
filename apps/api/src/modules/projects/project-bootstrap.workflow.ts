@@ -76,7 +76,7 @@ export interface ProjectBootstrapDeps {
 
 /**
  * F-04 项目创建单事务编排（技术设计 §6.2）。
- * 只接收显式 `TransactionContext`；创建者/初始成员 ACTIVE 校验、项目、
+ * 只接收显式 `TransactionContext`；创建者/项目成员 ACTIVE 校验、项目、
  * 审计、通知、活动与搜索投影全部在同一事务内。任一成员无效/停用/重复整笔回滚。
  */
 @Injectable()
@@ -134,7 +134,7 @@ export class ProjectBootstrapWorkflow {
       allMemberIds,
     );
     if (activeIds.length !== allMemberIds.length) {
-      throw new ProjectBootstrapValidationError("初始成员必须全部为已启用用户");
+      throw new ProjectBootstrapValidationError("项目成员必须全部为已启用用户");
     }
 
     const memberRecords: {
@@ -144,7 +144,7 @@ export class ProjectBootstrapWorkflow {
       joinedAt: string;
     }[] = [];
     for (const userId of allMemberIds) {
-      // ADR-033：创建者成员行以 LEADER 落库，其余初始成员为 MEMBER。
+      // ADR-033：创建者成员行以 LEADER 落库，其余项目成员为 MEMBER。
       const record = await this.projects.addMember(tx, {
         projectId: project.projectId,
         userId,
@@ -221,7 +221,7 @@ export class ProjectBootstrapWorkflow {
         sourceSequence: sequenceNo,
         notificationType: PROJECT_CREATE_NOTIFICATION_TYPE,
         title: `已加入项目 ${project.name}`,
-        body: "你已成为该项目的初始成员",
+        body: "你已加入该项目，成为项目成员",
         targetPath: `/projects/${project.projectId}/activity`,
         createdAt: occurredAt,
       });

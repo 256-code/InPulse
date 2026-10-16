@@ -18,13 +18,9 @@ import {
 import { projectMemberErrorMessage } from "./project-member-query";
 import { orderMembersLeaderFirst } from "./project-member-order";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 
-const formatMemberDate = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", {
-    hour12: false,
-    timeZone: BEIJING_TIME_ZONE,
-  });
+const formatMemberDate = (value: string) => formatBeijingMinute(value);
 
 /** 与管理视图 `ProjectMembersPageView` 一致的角色标签。 */
 const roleLabel: Record<"MEMBER" | "LEADER", string> = {
@@ -110,7 +106,7 @@ export function ActiveProjectMembers({
           description="项目还没有活跃成员；成员由本项目任意活跃成员在管理页添加。"
         />
       ) : (
-        <section className="panel settings-panel">
+        <section className="panel settings-panel project-members-panel">
           <div className="settings-panel-head">
             <CalmSectionTitle
               title="项目成员"
@@ -129,14 +125,20 @@ export function ActiveProjectMembers({
               <dd>{creatorName ?? "—"}（仅溯源，不授予额外权限）</dd>
               <dt>创建时间</dt>
               <dd>{formatMemberDate(projectDetail.createdAt)}</dd>
-              <dt>当前成员</dt>
-              <dd>{items.map((member) => member.name).join("、")}</dd>
             </dl>
           ) : null}
 
           <div className="member-editor">
             <div className="member-selection-top">
               <strong>成员列表</strong>
+              <div className="member-selection-actions">
+                <Button
+                  className="text-button"
+                  onClick={() => void members.refetch()}
+                >
+                  刷新成员
+                </Button>
+              </div>
             </div>
             <div className="member-history-list">
               {items.map((member) => (
@@ -165,14 +167,6 @@ export function ActiveProjectMembers({
                   </div>
                 </article>
               ))}
-            </div>
-            <div className="calm-action-footer">
-              <Button
-                className="secondary-button"
-                onClick={() => void members.refetch()}
-              >
-                刷新成员
-              </Button>
             </div>
           </div>
         </section>

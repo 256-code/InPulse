@@ -257,7 +257,7 @@ export const routeRegistry = [
     path: "/users",
     operationId: "getUserDirectory",
     summary:
-      "读取全部启用用户的轻量目录，用于创建项目时选择初始成员；只返回 id、姓名、头像与管理员标记。",
+      "读取全部启用用户的轻量目录，用于创建项目时选择项目成员；只返回 id、姓名、头像与管理员标记。",
     request: {
       path: "none",
       query: "none",
@@ -1151,7 +1151,7 @@ export const routeRegistry = [
     path: "/projects",
     operationId: "createProject",
     summary:
-      "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选初始成员；单事务内写审计、通知、活动与搜索投影，不创建任何模块（ADR-030 允许新项目零模块）；初始成员无效/停用/重复则整笔回滚。",
+      "任一启用用户创建项目；创建者自动成为活跃成员且不可取消，可选项目成员；单事务内写审计、通知、活动与搜索投影，不创建任何模块（ADR-030 允许新项目零模块）；项目成员无效/停用/重复则整笔回滚。",
     request: {
       path: "none",
       query: "none",

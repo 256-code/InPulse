@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
@@ -8,6 +8,7 @@ import type {
   TaskBoardCard,
   TaskBoardResponse,
   TaskGroupMembershipItem,
+  UserRef,
 } from "@generated/api";
 import { AuthStateProvider } from "@features/auth/auth-context";
 
@@ -137,6 +138,8 @@ interface RenderOptions {
   readonly response?: TaskBoardResponse;
   readonly filters?: TaskBoardFilters;
   readonly marks?: readonly TaskGroupMembershipItem[];
+  /** 项目活跃成员名单：用来验证负责人被移出项目后的标记。 */
+  readonly activeMembers?: { items: readonly UserRef[] };
   readonly onFiltersChange?: (next: TaskBoardFilters) => void;
   readonly onOpenModules?: () => void;
 }
@@ -162,6 +165,16 @@ function renderView(options: RenderOptions = {}) {
   const listTaskGroupMemberships = vi
     .fn()
     .mockResolvedValue({ items: options.marks ?? [] });
+  // 负责人脱钩判定要读项目活跃成员：默认让夹具里的负责人（9 号张启明、4 号林沐）
+  // 都还在成员名单里，只有用例显式传 activeMembers 时才构造「已移出项目」。
+  const listActiveProjectMembers = vi.fn().mockResolvedValue(
+    options.activeMembers ?? {
+      items: [
+        { id: 9, name: "张启明", avatarUrl: null },
+        { id: 4, name: "林沐", avatarUrl: null },
+      ],
+    },
+  );
   const adapter: TaskBoardAdapter = {
     source: "test",
     notice: "测试看板骨架",
@@ -193,13 +206,23 @@ function renderView(options: RenderOptions = {}) {
           filters={options.filters ?? DEFAULT_TASK_BOARD_FILTERS}
           onFiltersChange={onFiltersChange}
           adapter={adapter}
-          client={{ listTaskGroupMemberships } as unknown as InpulseApiClient}
+          client={
+            {
+              listTaskGroupMemberships,
+              listActiveProjectMembers,
+            } as unknown as InpulseApiClient
+          }
           onOpenModules={options.onOpenModules ?? vi.fn()}
         />
       </AuthStateProvider>
     </QueryClientProvider>,
   );
-  return { fetchTaskBoard, listTaskGroupMemberships, onFiltersChange };
+  return {
+    fetchTaskBoard,
+    listTaskGroupMemberships,
+    listActiveProjectMembers,
+    onFiltersChange,
+  };
 }
 
 describe("TaskBoardPageView", () => {
@@ -369,5 +392,41 @@ describe("TaskBoardPageView", () => {
       name: "打开任务 T-1001 实现任务看板",
     });
     expect(within(plainRow).queryByText("遗留问题")).toBeNull();
+  });
+});
+
+describe("负责人已被移出项目", () => {
+  it("泳道卡片在姓名后标出「已移出项目」", async () => {
+    // 9 号（张启明）已经不在项目活跃成员里，但任务仍挂着他。
+    renderView({ activeMembers: { items: [] } });
+
+    const card = await screen.findByRole("button", {
+      name: /打开任务 T-1001/,
+    });
+    await waitFor(() =>
+      expect(card.textContent).toContain("张启明（已移出项目）"),
+    );
+  });
+
+  it("列表行用同一口径标出「已移出项目」", async () => {
+    renderView({
+      activeMembers: { items: [] },
+      filters: { ...DEFAULT_TASK_BOARD_FILTERS, view: "list" },
+    });
+
+    const row = await screen.findByRole("button", { name: /打开任务 T-1001/ });
+    await waitFor(() =>
+      expect(row.textContent).toContain("张启明（已移出项目）"),
+    );
+  });
+
+  it("人还在项目成员里时不加标记（避免误报）", async () => {
+    renderView();
+
+    const card = await screen.findByRole("button", {
+      name: /打开任务 T-1001/,
+    });
+    expect(card.textContent).toContain("张启明");
+    expect(card.textContent).not.toContain("已移出项目");
   });
 });

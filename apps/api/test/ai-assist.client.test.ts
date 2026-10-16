@@ -90,14 +90,14 @@ describe("DocumentImportAiAssistClient", () => {
     expect(body.messages[0]!.role).toBe("system");
     expect(body.messages[0]!.content).toContain(DOCUMENT_IMPORT_TEMPLATE);
     expect(body.messages[0]!.content).toContain("整项目导入");
-    // ADR-072：初始成员必填，且名单里必须出现文档里的成员与全部负责人。
+    // ADR-072：项目成员必填，且名单里必须出现文档里的成员与全部负责人。
     // ADR-073 修订：创建者也必须写进名单（不管 TA 是不是任务负责人），姓名由服务端注入。
-    expect(body.messages[0]!.content).toContain("「- 初始成员：」必填");
+    expect(body.messages[0]!.content).toContain("「- 项目成员：」必填");
     expect(body.messages[0]!.content).toContain(
       "所有任务的「负责人」都要写进去",
     );
     expect(body.messages[0]!.content).toContain(
-      "创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。",
+      "创建者本人（本次导入的人，也就是提供这份文档的人）必须写进「- 项目成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名是「特哥」，名单里写这个名字。",
     );
     // 「补充说明：」行是写文档的人本人的补充，必须落到草稿上（否则用户看见的就是「AI 没反应」）。
     expect(body.messages[0]!.content).toContain("以「补充说明：」开头");
@@ -121,7 +121,7 @@ describe("DocumentImportAiAssistClient", () => {
       messages: readonly { role: string; content: string }[];
     };
     expect(body.messages[0]!.content).toContain(
-      "必须写进「- 初始成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名未知，不要编造姓名。",
+      "必须写进「- 项目成员：」：TA 是不是任务负责人都不影响。本次导入人的姓名未知，不要编造姓名。",
     );
     expect(body.messages[0]!.content).not.toContain("本次导入人的姓名是");
   });

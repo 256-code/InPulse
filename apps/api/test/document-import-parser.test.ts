@@ -14,7 +14,7 @@ const FULL_DOCUMENT = [
   "# 项目：商城系统",
   "- 项目编码：SHOP",
   "- 项目说明：演示项目",
-  "- 初始成员：wangwu, zhaoliu",
+  "- 项目成员：wangwu, zhaoliu",
   "## 模块：支付",
   "- 说明：支付相关能力",
   "### 功能：退款回调",
@@ -157,6 +157,18 @@ describe("parseDocumentTemplate 语法", () => {
       "修复重复回调",
     );
   });
+  test("上一版模板的「- 初始成员：」仍按成员字段识别（2026-10-16 改名后兼容）", () => {
+    const result = parseDocumentTemplate(
+      [
+        "# 项目：商城系统",
+        "- 项目编码：SHOP",
+        "- 初始成员：wangwu, zhaoliu",
+      ].join("\n"),
+    );
+    expect(result.issues).toEqual([]);
+    expect(result.project?.memberTokens).toEqual(["wangwu", "zhaoliu"]);
+  });
+
   test("说明行与代码围栏行被忽略且不生效（ADR-065）", () => {
     const result = parseDocumentTemplate(
       [

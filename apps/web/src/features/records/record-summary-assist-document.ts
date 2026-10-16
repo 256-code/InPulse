@@ -7,6 +7,9 @@
  *
  * 不引入任何 Markdown 解析依赖：只需要识别标题、列表项与普通段落三类，其余
  * 行按普通段落原样保留（ADR-076 明确不新增依赖）。
+ *
+ * 每段按纯文本渲染，所以模型偶尔带出的行内强调标记在解析这一层就剥掉：渲染、
+ * 逐段编辑、单段回退与「复制正文」共用同一份原文，只洗一处才不会口径漂移。
  */
 
 export type SummaryAssistSegmentKind = "heading" | "paragraph" | "bullet";
@@ -42,43 +45,61 @@ const FENCE = /^\s*```/;
 const HEADING = /^#{1,6}\s+(.*)$/;
 const BULLET = /^[-*+]\s+(.*)$/;
 
-const segmentOf = (
-  index: number,
-  kind: SummaryAssistSegmentKind,
-  text: string,
-): SummaryAssistSegment => ({
-  key: `s${String(index)}`,
-  kind,
-  orig: text,
-});
+/**
+ * 剥掉模型正文里的行内强调标记。
+ *
+ * 弹窗把每段当纯文本渲染（不解析行内 Markdown、不新增依赖），但模型偶尔仍会
+ * 输出 `**加粗**`、`*斜体*`、`~~删除~~` 或行内代码，标记就会原样显示成星号与
+ * 反引号。这里只去掉成对标记符号、保留文字：链接与 HTML 不处理（V1.2.2 不接
+ * 受原始 HTML），下划线也不动，免得误伤 `snake_case`、`__init__` 这类标识符。
+ */
+export function stripAssistInlineMarkers(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/~~([^~\n]+)~~/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/(?<![\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])/g, "$1")
+    .trim();
+}
 
 /**
  * 把模型返回的正文切成段落。防御性地去掉代码围栏（提示词已禁止输出，但模型
  * 偶尔仍会包一层），围栏内的行同样按正文处理而不是丢弃。
+ *
+ * 清洗只做在这一层：段落原文、渲染、编辑比对与「复制正文」都基于它，免得编辑
+ * 视图与复制出口各洗一遍、口径漂移。清洗后只剩空白的行不占段。
  */
 export function parseSummaryAssistMarkdown(
   markdown: string,
 ): SummaryAssistDocument {
   const segments: SummaryAssistSegment[] = [];
+  const push = (kind: SummaryAssistSegmentKind, value: string): void => {
+    const text = stripAssistInlineMarkers(value);
+    if (text === "") return;
+    segments.push({
+      key: `s${String(segments.length)}`,
+      kind,
+      orig: text,
+    });
+  };
   for (const rawLine of markdown.replace(/\r\n?/g, "\n").split("\n")) {
     const text = rawLine.trim();
     if (text === "") continue;
     if (FENCE.test(text)) continue;
     const heading = HEADING.exec(text);
     if (heading !== null && heading[1] !== undefined) {
-      segments.push(segmentOf(segments.length, "heading", heading[1].trim()));
+      push("heading", heading[1]);
       continue;
     }
     const bullet = BULLET.exec(text);
     if (bullet !== null && bullet[1] !== undefined) {
-      segments.push(segmentOf(segments.length, "bullet", bullet[1].trim()));
+      push("bullet", bullet[1]);
       continue;
     }
-    segments.push(segmentOf(segments.length, "paragraph", text));
+    push("paragraph", text);
   }
   return { segments };
 }
-
 /** 连续列表项合成一个渲染单位；标题与段落各自成块。 */
 export function groupSummaryAssistSegments(
   document: SummaryAssistDocument,

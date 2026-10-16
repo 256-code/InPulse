@@ -187,7 +187,7 @@ describe("ProjectMembersPageView", () => {
     const client = baseClient() as unknown as InpulseApiClient;
     mount(client);
 
-    await screen.findByText("开发者 C");
+    await screen.findAllByText(/开发者 C/);
     // 2026-09-23：列表只展示活跃成员，接口返回的 REMOVED 行不再渲染。
     expect(screen.queryByText("已移除成员")).not.toBeInTheDocument();
     expect(screen.queryByText("历史记录已保留")).not.toBeInTheDocument();
@@ -228,7 +228,7 @@ describe("ProjectMembersPageView", () => {
     } as unknown as InpulseApiClient;
     mount(api);
 
-    await screen.findByText("开发者 C");
+    await screen.findAllByText(/开发者 C/);
     fireEvent.click(screen.getByRole("button", { name: "添加成员" }));
     const dialog = await screen.findByRole("dialog", {
       name: "添加项目成员",
@@ -298,7 +298,7 @@ describe("ProjectMembersPageView", () => {
     } as unknown as InpulseApiClient;
     mount(api);
 
-    await screen.findByText("开发者 C");
+    await screen.findAllByText(/开发者 C/);
     fireEvent.click(screen.getByRole("button", { name: /移\s*除/ }));
     const dialog = await screen.findByRole("dialog", {
       name: "移除项目成员",
@@ -405,7 +405,7 @@ describe("ProjectMembersPageView", () => {
     } as unknown as InpulseApiClient;
     mount(api, { isSystemAdmin: true, viewerRole: "MEMBER" });
 
-    await screen.findByText("开发者 C");
+    await screen.findAllByText(/开发者 C/);
     fireEvent.click(screen.getByRole("button", { name: "设置角色" }));
     const dialog = await screen.findByRole("dialog", { name: "设置项目角色" });
     fireEvent.click(within(dialog).getByRole("radio", { name: /组\s*长/ }));
@@ -522,7 +522,7 @@ describe("ProjectMembersPageView", () => {
       isSystemAdmin: false,
       viewerRole: "MEMBER",
     });
-    await screen.findByText("开发者 C");
+    await screen.findAllByText(/开发者 C/);
     expect(
       screen.queryByRole("button", { name: "设置角色" }),
     ).not.toBeInTheDocument();

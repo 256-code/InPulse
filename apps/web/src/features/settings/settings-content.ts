@@ -29,10 +29,10 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
     feature: "创建项目",
     admin: true,
     member: true,
-    note: "创建者自动成为初始成员且不可取消",
+    note: "创建者自动成为项目成员且不可取消",
   },
   {
-    feature: "创建项目时选择初始成员",
+    feature: "创建项目时选择项目成员",
     admin: true,
     member: true,
     note: "创建表单中创建者默认勾选且不可取消",

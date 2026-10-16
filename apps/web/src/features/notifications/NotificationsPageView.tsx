@@ -19,7 +19,7 @@ import {
 } from "./notification-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 import { routePreloadHandlers } from "@shared/routing/route-preload";
-import { BEIJING_TIME_ZONE } from "@features/common/beijing-time";
+import { formatBeijingMinute } from "@features/common/beijing-time";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -51,19 +51,9 @@ const notificationTypeLabels: Readonly<Record<string, string>> = {
   PROJECT_ARCHIVE_REJECTED: "归档驳回",
 };
 
+/** 全站时间统一走 beijing-time 的横杠格式（2026-10-16 口径）。 */
 function formatNotificationTime(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: BEIJING_TIME_ZONE,
-  });
+  return formatBeijingMinute(value);
 }
 
 function notificationTypeLabel(type: string): string {

@@ -36,7 +36,7 @@ function namesOf(document: string) {
 const DOCUMENT = [
   "# 项目：商城结算系统",
   "- 项目编码：MALL",
-  "- 初始成员：林雨、陈昊",
+  "- 项目成员：林雨、陈昊",
   "## 模块：购物车",
   "### 功能：数量调整",
   "#### 任务：数量调整交互",
@@ -110,7 +110,7 @@ describe("ADR-071 草稿成员名字与账号的确定性匹配", () => {
     expect(result.matched.get("ZHANG SAN")?.id).toBe(3);
   });
 
-  it("收集名字时含项目初始成员，同名只追问一次", () => {
+  it("收集名字时含项目成员，同名只追问一次", () => {
     const uses = namesOf(DOCUMENT);
     expect(uses.map((use) => use.name)).toEqual([
       "林雨",
@@ -119,7 +119,7 @@ describe("ADR-071 草稿成员名字与账号的确定性匹配", () => {
       "张三",
     ]);
     expect(uses[0]?.source).toBe("PROJECT_MEMBER");
-    expect(uses[0]?.label).toBe("项目初始成员");
+    expect(uses[0]?.label).toBe("项目成员");
   });
 
   it("追问文案区分「有相近的人」与「找不到相近的人」", () => {
@@ -145,7 +145,7 @@ describe("ADR-071 草稿成员名字与账号的确定性匹配", () => {
   });
 });
 
-describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员）", () => {
+describe("ADR-072 项目成员名单校验（ADR-073 起创建者默认算成员）", () => {
   const creator: DocumentMemberCoverageContext["creator"] = {
     id: 9,
     name: "特哥",
@@ -167,7 +167,7 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     );
   }
 
-  it("没写初始成员时只报「缺初始成员」，不叠加负责人一条", () => {
+  it("没写项目成员时只报「缺项目成员」，不叠加负责人一条", () => {
     const result = coverage(
       [
         "# 项目：商城结算系统",
@@ -184,11 +184,25 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     });
   });
 
-  it("缺任务负责人照旧报出，同一人按首次出现去重", () => {
+  it("旧模板写「- 初始成员：」时按同一字段识别，不再报缺项目成员", () => {
     const result = coverage(
       [
         "# 项目：商城结算系统",
         "- 初始成员：林雨",
+        "## 模块：购物车",
+        "### 功能：数量调整",
+        "#### 任务：数量调整交互",
+        "- 负责人：林雨",
+      ].join("\n"),
+    );
+    expect(result).toEqual({ memberRequired: false, missingAssignees: [] });
+  });
+
+  it("缺任务负责人照旧报出，同一人按首次出现去重", () => {
+    const result = coverage(
+      [
+        "# 项目：商城结算系统",
+        "- 项目成员：林雨",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -201,11 +215,11 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     expect(result.missingAssignees).toEqual(["陈昊"]);
   });
 
-  it("名单里没写创建者本人也不算缺口（ADR-073：创建者默认就在初始成员里）", () => {
+  it("名单里没写创建者本人也不算缺口（ADR-073：创建者默认就在项目成员里）", () => {
     const result = coverage(
       [
         "# 项目：商城结算系统",
-        "- 初始成员：林雨, 陈昊",
+        "- 项目成员：林雨, 陈昊",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -219,7 +233,7 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     const result = coverage(
       [
         "# 项目：商城结算系统",
-        "- 初始成员：林雨",
+        "- 项目成员：林雨",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -233,7 +247,7 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     const result = coverage(
       [
         "# 项目：商城结算系统",
-        "- 初始成员：特哥, xiaowu",
+        "- 项目成员：特哥, xiaowu",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -247,7 +261,7 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     const result = coverage(
       [
         "# 项目：商城结算系统",
-        "- 初始成员：林雨",
+        "- 项目成员：林雨",
         "## 模块：购物车",
         "### 功能：数量调整",
         "#### 任务：数量调整交互",
@@ -275,7 +289,7 @@ describe("ADR-072 初始成员名单校验（ADR-073 起创建者默认算成员
     expect(
       checkDocumentMemberCoverage(
         buildDocumentDraftView(
-          parseDocumentDraft("# 项目：商城系统\n- 初始成员：林雨"),
+          parseDocumentDraft("# 项目：商城系统\n- 项目成员：林雨"),
         ),
         "NEW_PROJECT",
         { creator: null, directory: [] },
@@ -296,8 +310,9 @@ describe("成员字段的账号搜索建议（2026-10-14）", () => {
     { id: 5, name: "小吴" },
   );
 
-  it("只认成员字段：负责人 / 初始成员 / 成员，其他字段不给建议", () => {
+  it("只认成员字段：负责人 / 项目成员 / 成员；旧模板的「初始成员」仍认", () => {
     expect(isDocumentMemberFieldName("负责人")).toBe(true);
+    expect(isDocumentMemberFieldName("项目成员")).toBe(true);
     expect(isDocumentMemberFieldName("初始成员")).toBe(true);
     expect(isDocumentMemberFieldName("成员")).toBe(true);
     expect(isDocumentMemberFieldName("项目编码")).toBe(false);

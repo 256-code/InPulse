@@ -572,7 +572,7 @@ export const schemaRegistry = {
   CreateProjectRequest: {
     schema: createProjectRequestSchema,
     summary:
-      "创建项目请求；创建者由服务端 Session 解析，memberIds 为可选初始成员",
+      "创建项目请求；创建者由服务端 Session 解析，memberIds 为可选项目成员",
     sensitiveFieldPaths: [],
   },
   CreateProjectHeaders: {
@@ -718,7 +718,7 @@ export const schemaRegistry = {
   UserDirectoryItem: {
     schema: userDirectoryItemSchema,
     summary:
-      "用户目录公开条目（含组织归属），用于创建项目时按组织或按人选择初始成员",
+      "用户目录公开条目（含组织归属），用于创建项目时按组织或按人选择项目成员",
     sensitiveFieldPaths: [],
   },
   UserDirectoryResponse: {

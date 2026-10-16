@@ -16,8 +16,8 @@ test("F-32 从文档导入整项目：预览、创建、模块可见与重复导
     `# 项目：${name}`,
     `- 项目编码：${code}`,
     "- 项目说明：由 Playwright 文档导入创建，验证整项目导入关键路径。",
-    // ADR-072/071：初始成员必填、必须含全部任务负责人；创建者写不写都行（写了也不重复）。
-    `- 初始成员：${runtime.user.loginName}, ${runtime.member.loginName}`,
+    // ADR-072/071：项目成员必填、必须含全部任务负责人；创建者写不写都行（写了也不重复）。
+    `- 项目成员：${runtime.user.loginName}, ${runtime.member.loginName}`,
     "",
     "## 模块：文档导入模块",
     "- 说明：整项目导入的模块。",
@@ -316,7 +316,7 @@ test("F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻
     `# 项目：成员建议 ${suffix}`,
     `- 项目编码：MEMBERS${suffix}`,
     // 写成员姓名（不是登录名）：目录里只有姓名，建议按姓名子串筛。
-    `- 初始成员：${runtime.user.name}`,
+    `- 项目成员：${runtime.user.name}`,
     "",
     "## 模块：成员建议模块",
     "",
@@ -331,9 +331,9 @@ test("F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻
   await dialog.getByLabel("导入文档内容").fill(document);
   await dialog.getByRole("button", { name: "内容梳理" }).click();
 
-  // 点「初始成员」的值变标签行：已写定的名字各是一个标签，末尾输入框只装正在输入的那一段。
-  await dialog.getByRole("button", { name: "项目：初始成员" }).click();
-  const editor = dialog.getByLabel("项目：初始成员");
+  // 点「项目成员」的值变标签行：已写定的名字各是一个标签，末尾输入框只装正在输入的那一段。
+  await dialog.getByRole("button", { name: "项目：项目成员" }).click();
+  const editor = dialog.getByLabel("项目：项目成员");
   await expect(editor).toHaveValue("");
   await expect(
     dialog.getByRole("button", { name: `移除 ${runtime.user.name}` }),
@@ -357,7 +357,7 @@ test("F-32 成员字段按姓名筛账号：选完成一个标签、候选常驻
 
   await editor.press("Enter");
   await expect(dialog.getByLabel("导入文档内容")).toHaveValue(
-    new RegExp(`- 初始成员：${runtime.user.name}、${runtime.member.name}`),
+    new RegExp(`- 项目成员：${runtime.user.name}、${runtime.member.name}`),
   );
 
   await context.close();

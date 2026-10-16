@@ -858,7 +858,7 @@ describe("C-3 任务详情弹窗标签页", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: "任务详情" });
     const tabs = within(dialog).getByRole("tablist", { name: "任务内容" });
-    // 默认停在任务信息：描述与「迭代记录草稿」入口首屏可见。
+    // 默认停在任务信息：描述与「打开迭代记录」入口首屏可见。
     expect(within(tabs).getByRole("tab", { name: "任务信息" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -870,7 +870,7 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(tabStrip.nextElementSibling).toHaveClass("task-modal-grid");
     // jsdom 下弹窗首帧动画 opacity 为 0，仓库统一用 toBeInTheDocument 断言弹窗内容。
     expect(
-      within(dialog).getByRole("link", { name: "迭代记录草稿" }),
+      within(dialog).getByRole("link", { name: "打开迭代记录" }),
     ).toHaveAttribute("href", "/records?projectId=2&moduleId=3&taskId=1");
     fireEvent.click(within(tabs).getByRole("tab", { name: "迭代记录" }));
     // 迭代记录标签页按设计师稿列出本任务已发布记录与草稿；两者皆空时给空态与草稿入口。
@@ -882,7 +882,7 @@ describe("C-3 任务详情弹窗标签页", () => {
       within(dialog).getByText("该任务还没有迭代记录"),
     ).toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("link", { name: "迭代记录草稿" }),
+      within(dialog).queryByRole("link", { name: "打开迭代记录" }),
     ).toBeNull();
     // 记录一次迭代不再跳转记录页，而是与记录页共用草稿弹窗就地打开。
     const draftEntry = within(dialog).getByRole("button", {
@@ -1297,5 +1297,46 @@ describe("C-3 任务详情弹窗标签页", () => {
     expect(
       within(dialog).queryByRole("button", { name: /查看主任务/ }),
     ).toBeNull();
+  });
+});
+
+describe("负责人已被移出项目", () => {
+  const detachedClient = () =>
+    client({
+      // 人被移出项目：任务指派人候选与项目活跃成员里都没有 5 号。
+      listTaskAssignees: vi.fn().mockResolvedValue({ items: [] }),
+      listActiveProjectMembers: vi.fn().mockResolvedValue({ items: [] }),
+      // 全站用户目录仍能解析出姓名：必须显示「小潘（已移出项目）」，不是「用户 #5」。
+      getUserDirectory: vi.fn().mockResolvedValue({
+        items: [{ id: 5, name: "小潘", avatarUrl: null, isAdmin: false }],
+      }),
+    });
+
+  it("卡片与详情写出「已移出项目」，并提示重新分配，不再回退成内部编号", async () => {
+    mount(detachedClient());
+    const card = await screen.findByRole("article", {
+      name: /^查看任务详情/,
+    });
+    await waitFor(() =>
+      expect(screen.getByText("小潘（已移出项目）")).toBeTruthy(),
+    );
+    expect(screen.queryByText(/用户 #5/)).toBeNull();
+
+    fireEvent.click(card);
+    const dialog = await screen.findByRole("dialog", { name: "任务详情" });
+    expect(within(dialog).getByText("小潘（已移出项目）")).toBeTruthy();
+    expect(
+      within(dialog).getByText("已不在项目成员中，请重新分配"),
+    ).toBeTruthy();
+  });
+
+  it("编辑任务的负责人下拉把离职的人标出来并说明要重新分配", async () => {
+    mount(detachedClient());
+    fireEvent.click(
+      await screen.findByRole("article", { name: /^查看任务详情/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "编辑任务" }));
+    const editor = within(screen.getByRole("dialog", { name: "编辑任务" }));
+    expect(editor.getByText("小潘（已移出项目）")).toBeTruthy();
   });
 });

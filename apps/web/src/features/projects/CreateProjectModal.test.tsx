@@ -165,7 +165,7 @@ describe("CreateProjectModal", () => {
     await fillForm(dialog);
     const user = userEvent.setup();
     const trigger = within(dialog)
-      .getByLabelText("选择初始成员")
+      .getByLabelText("选择项目成员")
       .closest(".ant-select");
     expect(trigger).not.toBeNull();
     fireEvent.mouseDown(trigger as HTMLElement);
@@ -302,7 +302,7 @@ describe("CreateProjectModal", () => {
     const dialog = await screen.findByRole("dialog", { name: "新建项目" });
     await screen.findByRole("button", { name: /全选组织 研发一组/ });
     const trigger = within(dialog)
-      .getByLabelText("选择初始成员")
+      .getByLabelText("选择项目成员")
       .closest(".ant-select");
     expect(trigger).not.toBeNull();
     fireEvent.mouseDown(trigger as HTMLElement);

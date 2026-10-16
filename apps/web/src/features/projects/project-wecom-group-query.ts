@@ -28,7 +28,15 @@ export function projectWecomGroupErrorMessage(error: unknown): string {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 403)
       return "只有项目组长或系统管理员可以管理企业微信项目群。";
-    if (error.status === 404) return "项目不存在或你已不是项目成员。";
+    if (error.status === 404) {
+      // 服务端没部署这条路由时，框架兜底 404 的 code 是 NOT_FOUND；业务侧
+      // 「项目不存在 / 已不是成员」是 PROJECT_WECOM_GROUP_NOT_FOUND。2026-10-16 实测踩坑：
+      // dev API 是旧进程，卡片把「功能还没上线」说成了「你已不是项目成员」，
+      // 让用户误以为自己的成员关系出了问题。
+      if (error.code === "NOT_FOUND")
+        return "当前服务还没有企业微信项目群功能，请让管理员更新后端服务后重试。";
+      return "项目不存在或你已不是项目成员。";
+    }
     if (error.status === 409)
       return "该请求与先前的操作冲突，请刷新页面后重试。";
     if (error.status === 422) return "请求参数校验失败，请刷新页面后重试。";

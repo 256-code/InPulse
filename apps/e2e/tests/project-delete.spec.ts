@@ -32,7 +32,7 @@ test("普通成员在编辑项目弹窗里看不到删除入口", async ({ brows
   });
   const page = await memberContext.newPage();
   try {
-    // 创建项目时把 runtime.member 加为初始成员（角色 MEMBER）。
+    // 创建项目时把 runtime.member 加为项目成员（角色 MEMBER）。
     await loginViaUi(page, runtime, runtime.member);
     await page.goto("/projects");
     const card = page
