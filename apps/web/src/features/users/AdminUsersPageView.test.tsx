@@ -271,6 +271,44 @@ describe("F-03 settings sections", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("filters members by name, login name or email and clears back to the full list", async () => {
+    const wu: AdminUserItem = {
+      ...admin,
+      id: 4,
+      loginName: "wmj",
+      name: "吴孟杰",
+      email: "wumengjie@example.com",
+      isAdmin: false,
+      rowVersion: 1,
+    };
+    const listAdminUsers = vi
+      .fn()
+      .mockResolvedValue({ items: [admin, member, wu] });
+    mount({ listAdminUsers } as unknown as InpulseApiClient);
+    await screen.findByText("Alice");
+
+    const search = screen.getByRole("textbox", { name: "搜索成员" });
+    fireEvent.change(search, { target: { value: "孟杰" } });
+    expect(screen.getByText("吴孟杰")).toBeInTheDocument();
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bob")).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "wmj" } });
+    expect(screen.getByText("吴孟杰")).toBeInTheDocument();
+    expect(screen.queryByText("Bob")).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "ALICE@EXAMPLE.COM" } });
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.queryByText("吴孟杰")).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "不存在" } });
+    expect(screen.getByText("没有匹配的成员")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清空搜索" }));
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+    expect(screen.getByText("吴孟杰")).toBeInTheDocument();
+  });
+
   it("管理员可打开 AI 辅助转换页签并加载配置", async () => {
     const listAdminUsers = vi
       .fn()

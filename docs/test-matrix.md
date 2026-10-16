@@ -6600,9 +6600,9 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | WECOM-GROUP-UI-006 | Web 单测 | 复制 | 「复制机器人链接」与「复制绑定码」写入剪贴板（后者写入一次性明文码） | 本地通过（2026-10-15） |
 | WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 119 条操作 / 119 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |
 
-## 项目星标按账号分仓（2026-10-16 本地落库，第二百零八条）
+## 项目星标按账号分仓（2026-10-16 本地落库，第二百一十条）
 
-定案见开发日志第二百零八条：星标由「一台浏览器一份」改为「一个登录账号一份」——存储 key 从 `inpulse.projects.starred` 改为 `inpulse.projects.starred.<userId>`，`useProjectStars()` 从 `useAuth()` 读当前登录用户 id；拿不到用户 id 时不读也不写；首版全局 key 只被第一个打开项目列表的账号接管一次并随即删除。展示行为不变（自己点亮的项目排在自己列表前面），路由 / 迁移数不变（119 条路由 / 44 个迁移）。
+定案见开发日志第二百一十条：星标由「一台浏览器一份」改为「一个登录账号一份」——存储 key 从 `inpulse.projects.starred` 改为 `inpulse.projects.starred.<userId>`，`useProjectStars()` 从 `useAuth()` 读当前登录用户 id；拿不到用户 id 时不读也不写；首版全局 key 只被第一个打开项目列表的账号接管一次并随即删除。展示行为不变（自己点亮的项目排在自己列表前面），路由 / 迁移数不变（119 条路由 / 44 个迁移）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
