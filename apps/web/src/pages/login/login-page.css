@@ -184,6 +184,21 @@
   color: #96700a;
 }
 
+/* ADR-080：匿名访问即发起统一身份认证，跳转期间展示品牌加载态 */
+.login-transition {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 34px 0 10px;
+}
+
+.login-transition-text {
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
+}
+
 .login-card-footer {
   display: flex;
   align-items: center;
@@ -252,56 +267,4 @@
   .login-card-brand {
     font-size: 17px;
   }
-}
-/* ADR-036 登录方式切换：分隔文案 + 统一身份认证图标入口 */
-.login-sso-section {
-  margin-top: 20px;
-  text-align: center;
-}
-
-.login-card .login-sso-divider.ant-divider {
-  margin: 0 0 18px;
-  border-block-start-color: #edeef1;
-}
-
-.login-card .login-sso-divider .ant-divider-inner-text {
-  color: #9aa0aa;
-  font-size: 13px;
-}
-
-.login-sso-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  border: 1px solid var(--login-border);
-  border-radius: 999px;
-  background: #ffffff;
-  color: #6b7280;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.login-sso-icon-image {
-  display: block;
-  width: 30px;
-  height: 30px;
-}
-
-.login-sso-icon-button:hover {
-  border-color: var(--login-yellow);
-  background: #fffdf2;
-  color: #96700a;
-  box-shadow: 0 8px 20px rgba(247, 200, 0, 0.18);
-}
-
-.login-sso-icon-button:focus-visible {
-  outline: 2px solid var(--login-yellow);
-  outline-offset: 2px;
 }

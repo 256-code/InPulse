@@ -95,9 +95,9 @@
 - 成员关系不得缓存到 Session 或长生命周期对象；搜索和动态查询必须先取得服务端生成的 `AuthorizedProjectScope`，并在 SQL 层过滤。
 - 资源不存在和无权访问统一返回 404，避免泄露资源存在性；已登录但缺少全局权限时返回 403。
 - Session、CSRF 和预认证 Token 在数据库中只保存 Hash；Cookie、CSRF 和安全响应头必须遵守技术设计。
-- 单点登录（[ADR-032](./docs/adr/ADR-032.md)，前端入口经 [ADR-036](./docs/adr/ADR-036.md) 修订）是并列登录入口：`/login` 默认展示本地口令表单，登录框下方的「或以统一身份认证登录」图标入口整页跳转 `GET /api/v1/auth/sso/start`；该路由只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
+- 单点登录（[ADR-032](./docs/adr/ADR-032.md)，前端入口经 [ADR-036](./docs/adr/ADR-036.md)、[ADR-080](./docs/adr/ADR-080.md) 修订）是默认登录入口：匿名访问 `/login`（含 `?from=`）即刻整页跳转 `GET /api/v1/auth/sso/start`，不再默认呈现本地口令表单；该路由只保存 state 的 HMAC 并下发 `__Host-sso-state`，`GET /api/v1/auth/sso/callback` 必须同时匹配 URL `state` 与该 Cookie 后才一次性消费；nonce 与 PKCE verifier 由服务端从 state 派生、不落库；token 交换与 JWKS 验签禁止放进数据库事务；只允许用 `sub`/`Name`/`DisplayName`/`Email` 映射本地账号，Casdoor 的 `isAdmin` 等 claim 一律不得影响 InPulse 权限。
 - SSO 首次登录 JIT 开通 `password_hash=NULL`、无任何项目成员关系的账号：平台已有账号时 `is_admin=false`；平台此前没有任何账号（`app.users` 无行，含停用账号也算有）时，第一个完成 SSO 登录的账号自动授予 `is_admin=true`（[ADR-075](./docs/adr/ADR-075.md)，判定与 INSERT 用固定键 `pg_advisory_xact_lock` 在同一事务内串行化，审计 payload 记 `grantedAdmin`）；映射优先级固定为 `sso_subject` 命中 → 登录名命中且未绑定且邮箱一致时绑定 → JIT；邮箱不一致或 subject 已绑定其它账号必须按冲突拒绝，禁止静默接管同名账号。无口令账号在本地入口必须干净地返回 401，不得抛错或 500。
-- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed：点击统一身份认证入口后由服务端 302 回 `/login?local=1&sso=disabled`，登录页提示未启用并隐藏入口；`/login?local=1` 是管理员应急口令入口，渲染与默认登录页一致。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`，也不得新增 SSO 状态查询接口。
+- `SSO_ENABLED` 非真值即整体关闭；配置非法时 fail closed：访问登录页后由服务端 302 回 `/login?local=1&sso=disabled`，登录页提示未启用并展示本地口令表单（不自动跳转）；`/login?local=1` 是管理员应急口令入口（隐藏、不自动跳转）；`?sso_error=` 回落只显示错误与手动「重新登录」。SSO start/callback 是 302-only 路由，不参与生成客户端；前端只做同源整页跳转，不得为此新增裸 `fetch`/`axios`，也不得新增 SSO 状态查询接口。
 - 登录只接受匿名预认证 Session 及其 CSRF Token；已有普通、受限或完整认证 Session 必须先登出，再签发新的预认证 CSRF。停用用户的旧 Session 按无效处理；受保护或业务接口返回 401，但 `issueCsrfToken` 与无效 Session 的同源 `logout` 可按匿名安全语义执行且不得恢复身份。
 - 管理员高风险接口只要求当前有效的完整管理员 Session（`AUTHENTICATED`）、`is_admin`、写操作 CSRF、数据库级幂等与审计留痕；[ADR-031](./docs/adr/ADR-031.md) 起不再要求管理员密码与 TOTP 重认证，`reauthenticated_at`/`mfa_verified_at` 不再作为门禁条件。
 - 认证 Session 的状态必须由每条签发路径显式赋值，不得默认成为完整认证态；[ADR-031](./docs/adr/ADR-031.md) 起 `user_sessions.auth_state` 只写入 `AUTHENTICATED`，历史取值不得作为有效认证态参与鉴权。
@@ -1135,3 +1135,7 @@
 - 数据同步走 `deploy/test-vm/README.md` 的 pg_dump/pg_restore 手册流程，不引入双向或定时同步。
 - VM 侧只在排障时允许临时热修；热修后必须立即把改动回灌本地（以本地为唯一源重建），并在开发日志写明，不得把 VM 临时状态当作正式状态。
 - 2026-10-15 核对事实：桥接源码在本地 staging 与 VM `/home/libiao/inpulse-deploy/wecom-bridge/` 两侧哈希一致；此前「不同步」的根源是源码未进仓库、更新靠手工复制。本批归档 15 个文件（`README.md` 只在仓库、不上传 VM；`node_modules` 不入库）并新增同步脚本。
+
+## 2026-10-16 登录页直达单点登录说明
+
+用户要求「以后只用单点登录，登录页面呈现的直接就是单点登录的登录页」，经 [ADR-080](./docs/adr/ADR-080.md) 修订 ADR-036：`/login`（含 `?from=`）在匿名态立即整页跳转 `/api/v1/auth/sso/start`（跳转期间展示品牌加载态），不再默认渲染本地口令表单；`?local=1`（管理员应急）与服务端 fail closed 回落的 `?sso=disabled` 分支渲染本地口令表单且都不自动跳转；`?sso_error=` 只显示错误与手动「重新登录」，不自动重跳。退出登录与「前往登录」仍回 `/login`，随后自动进入统一身份认证（IdP 会话有效时无感重登属预期）。本地口令登录路由、`PasswordService`、`securityFlow` 五条 allowlist 与两条 302-only 路由均保留不变；ADR-036 及本文件上文历史条目中「默认展示本地口令表单」为当时事实，与本节冲突时以 ADR-080 与本节的现行规则为准。

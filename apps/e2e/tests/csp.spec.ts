@@ -43,7 +43,9 @@ async function readMetaNonce(page: Page): Promise<string | null> {
 test("HTML 入口为每个响应签发与 CSP 头一致的脚本/样式 nonce", async ({
   page,
 }) => {
-  const first = await page.goto("/login");
+  // 登录页（ADR-080）默认自动跳转统一身份认证；用隐藏应急入口渲染本地表单，
+  // 确保这里读到的就是本页 HTML 的响应头与 nonce。
+  const first = await page.goto("/login?local=1");
   expect(first?.status()).toBe(200);
 
   const policy = first?.headers()["content-security-policy"] ?? "";
@@ -74,7 +76,7 @@ test("HTML 入口为每个响应签发与 CSP 头一致的脚本/样式 nonce", 
   expect(scriptNonces.length).toBeGreaterThan(0);
   expect(scriptNonces.every((value) => value === scriptNonce)).toBe(true);
 
-  const second = await page.goto("/login");
+  const second = await page.goto("/login?local=1");
   const secondPolicy = second?.headers()["content-security-policy"] ?? "";
   const secondNonce = policyNonce(secondPolicy, "script-src");
   expect(secondNonce).not.toBe(scriptNonce);

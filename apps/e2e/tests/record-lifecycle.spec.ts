@@ -41,7 +41,7 @@ test("F21 管理员作废、发现VOID与恢复，成员重新可读旧版本", 
     await expect(
       memberDetail.getByRole("button", { name: "作废记录" }),
     ).toHaveCount(0);
-    await page.goto("/login");
+    await page.goto("/login?local=1");
     await page.getByLabel("登录名").fill(admin.account.loginName);
     await page.getByLabel("密码").fill(admin.account.password);
     await page

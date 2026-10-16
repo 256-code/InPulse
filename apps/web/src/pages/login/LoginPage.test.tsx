@@ -40,7 +40,7 @@ function renderLoginPage(
   );
 }
 
-describe("LoginPage 登录入口（ADR-036）", () => {
+describe("LoginPage 登录入口（ADR-080 直达单点登录）", () => {
   beforeEach(() => {
     Object.defineProperty(window, "location", {
       configurable: true,
@@ -62,62 +62,63 @@ describe("LoginPage 登录入口（ADR-036）", () => {
     });
   });
 
-  it("默认展示本地口令表单与统一身份认证入口，不再自动跳转", () => {
+  it("匿名访问默认整页跳转统一身份认证并携带原始目标", () => {
     renderLoginPage("?from=%2Fprojects%2F7");
-
-    expect(window.location.replace).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
-    expect(screen.getByLabelText("密码")).toBeInTheDocument();
-    expect(screen.getByText("或以统一身份认证登录")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "使用统一身份认证登录" }),
-    ).toBeInTheDocument();
-  });
-
-  it("点击统一身份认证图标入口时整页跳转并携带原始目标", () => {
-    renderLoginPage("?from=%2Fprojects%2F7");
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "使用统一身份认证登录" }),
-    );
 
     expect(window.location.replace).toHaveBeenCalledWith(
       "/api/v1/auth/sso/start?returnTo=%2Fprojects%2F7",
     );
+    expect(screen.getByTestId("login-transition")).toBeInTheDocument();
+    expect(screen.getByText("正在跳转到统一身份认证…")).toBeInTheDocument();
+    expect(screen.queryByLabelText("登录名")).toBeNull();
   });
 
-  it("local=1 与默认渲染一致，同样不自动跳转", () => {
+  it("缺少 from 时默认回到站点根路径", () => {
+    renderLoginPage("");
+
+    expect(window.location.replace).toHaveBeenCalledWith(
+      "/api/v1/auth/sso/start?returnTo=%2F",
+    );
+  });
+
+  it("登录状态未知时先展示加载态且不自动跳转", () => {
+    renderLoginPage("", "loading");
+
+    expect(window.location.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("正在确认登录状态…")).toBeInTheDocument();
+    expect(screen.queryByLabelText("登录名")).toBeNull();
+  });
+
+  it("local=1 渲染本地应急口令表单且不自动跳转", () => {
     renderLoginPage("?local=1&from=%2Fprojects");
 
     expect(window.location.replace).not.toHaveBeenCalled();
     expect(screen.getByLabelText("登录名")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "使用统一身份认证登录" }),
-    ).toBeInTheDocument();
-  });
-
-  it("sso=disabled 时提示未启用并隐藏统一身份认证入口", () => {
-    renderLoginPage("?local=1&sso=disabled");
-
-    expect(screen.getByText(/统一身份认证未启用/)).toBeInTheDocument();
-    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
+    expect(screen.getByLabelText("密码")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "使用统一身份认证登录" }),
     ).toBeNull();
   });
 
-  it("sso_error 时展示失败提示、保留本地表单与重试入口", () => {
-    renderLoginPage("?sso_error=account-conflict&from=%2Fsearch");
+  it("sso=disabled 回落显示未启用提示与本地表单且不自动跳转", () => {
+    renderLoginPage("?local=1&sso=disabled&from=%2Fprojects");
+
+    expect(window.location.replace).not.toHaveBeenCalled();
+    expect(screen.getByText(/统一身份认证未启用/)).toBeInTheDocument();
+    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
+  });
+
+  it("sso_error 回落只显示错误与手动重试，点击后才重新发起 SSO", () => {
+    renderLoginPage("?sso_error=account-conflict");
 
     expect(window.location.replace).not.toHaveBeenCalled();
     expect(screen.getByText(/冲突/)).toBeInTheDocument();
-    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
+    expect(screen.queryByLabelText("登录名")).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "使用统一身份认证登录" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "重新登录" }));
+
     expect(window.location.replace).toHaveBeenCalledWith(
-      "/api/v1/auth/sso/start?returnTo=%2Fsearch",
+      "/api/v1/auth/sso/start?returnTo=%2F",
     );
   });
 
@@ -130,12 +131,16 @@ describe("LoginPage 登录入口（ADR-036）", () => {
     expect(window.location.replace).not.toHaveBeenCalled();
   });
 
-  it("登录状态异常时展示错误并保留本地入口", () => {
+  it("登录状态异常时展示错误与手动重试且不自动跳转", () => {
     renderLoginPage("", "error");
 
+    expect(window.location.replace).not.toHaveBeenCalled();
     expect(
       screen.getByText("无法确认登录状态，请刷新页面后重试。"),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("登录名")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重新登录" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("登录名")).toBeNull();
   });
 });
