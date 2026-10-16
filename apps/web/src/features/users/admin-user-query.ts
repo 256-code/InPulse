@@ -59,7 +59,10 @@ function mutationHeaders(
   return headers;
 }
 
-export function useAdminUsers(client?: InpulseApiClient) {
+export function useAdminUsers(
+  client?: InpulseApiClient,
+  options: { readonly enabled?: boolean } = {},
+) {
   const api = useMemo(() => client ?? createApiClient(), [client]);
   const cache = useQueryClient();
   const retryKey = useRef<{ signature: string; key: string } | null>(null);
@@ -68,6 +71,7 @@ export function useAdminUsers(client?: InpulseApiClient) {
     queryKey: ["admin-users"],
     queryFn: ({ signal }) => api.listAdminUsers({ signal }),
     retry: false,
+    enabled: options.enabled ?? true,
   });
 
   const mutation = useMutation({

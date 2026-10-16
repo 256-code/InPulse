@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Alert, Button, Input, Space, Switch } from "antd";
+import { Alert, Button, Checkbox, Input, Space, Switch } from "antd";
 import { AppModal as Modal } from "@features/common/components/AppModal";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -18,6 +18,13 @@ import { WecomRobotSettingsPanel } from "@features/settings/WecomRobotSettingsPa
 import { NotificationPolicyPanel } from "@features/settings/NotificationPolicyPanel";
 import { PermissionMatrixPanel } from "@features/settings/PermissionMatrixPanel";
 import { adminUserErrorMessage, useAdminUsers } from "./admin-user-query";
+import { MyOrganizationPanel } from "./MyOrganizationPanel";
+import { OrganizationManagerModal } from "./OrganizationManagerModal";
+import {
+  organizationErrorMessage,
+  useOrganizationMutations,
+  useOrganizations,
+} from "./organization-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
 type LifecycleAction = "disable" | "enable" | "forceLogout";
@@ -31,6 +38,48 @@ type EditorValues = {
   readonly email: string;
   readonly isAdmin: boolean;
 };
+
+interface MemberGroup {
+  readonly organizationId: number | null;
+  readonly members: readonly AdminUserItem[];
+}
+
+/**
+ * ADR-081：同组织成员放在同一分组，组间按「当前账号所在组织置顶、
+ * 其余组织 id 升序、未分配最后」排列；组内保持调用方传入的顺序。
+ */
+function groupMembersByOrganization(
+  members: readonly AdminUserItem[],
+  selfOrganizationId: number | null,
+): readonly MemberGroup[] {
+  const groups = new Map<number | null, AdminUserItem[]>();
+  const order: (number | null)[] = [];
+  for (const user of members) {
+    const key = user.organizationId ?? null;
+    const bucket = groups.get(key);
+    if (bucket === undefined) {
+      groups.set(key, [user]);
+      order.push(key);
+    } else {
+      bucket.push(user);
+    }
+  }
+  const rank = (key: number | null) => {
+    if (selfOrganizationId !== null && key === selfOrganizationId) return 0;
+    if (key === null) return 2;
+    return 1;
+  };
+  order.sort((left, right) => {
+    const diff = rank(left) - rank(right);
+    if (diff !== 0) return diff;
+    if (left === null || right === null) return 0;
+    return left - right;
+  });
+  return order.map((key) => ({
+    organizationId: key,
+    members: groups.get(key) ?? [],
+  }));
+}
 
 const lifecycleCopy: Readonly<
   Record<LifecycleAction, { title: string; description: string }>
@@ -54,8 +103,9 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   currentUserId,
   onOpenProjects,
   initialTab,
+  isAdmin = false,
 }) => {
-  const { query, mutation } = useAdminUsers(client);
+  const { query, mutation } = useAdminUsers(client, { enabled: isAdmin });
   const [editor, setEditor] = useState<AdminUserItem | null>(null);
   const [lifecycle, setLifecycle] = useState<{
     action: LifecycleAction;
@@ -70,6 +120,16 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   );
   const [memberSearch, setMemberSearch] = useState("");
   const submitting = useRef(false);
+  const organizations = useOrganizations(client, { enabled: isAdmin });
+  const organizationMutation = useOrganizationMutations(client);
+  const [selectedUserIds, setSelectedUserIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const [assignDialog, setAssignDialog] = useState<null | {
+    readonly mode: "join" | "remove";
+  }>(null);
+  const [organizationManagerOpen, setOrganizationManagerOpen] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
   const {
     control,
     handleSubmit,
@@ -204,9 +264,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const selfAdmin = (user: AdminUserItem) =>
     currentUserId !== undefined && user.id === currentUserId;
 
-  const selfIsAdmin =
-    query.data?.items.find((item) => item.id === currentUserId)?.isAdmin ??
-    false;
+  const selfIsAdmin = isAdmin;
 
   // 非管理员不展示管理员专属页签；深链命中时回退到成员页。
   const effectiveTab: SettingsTab =
@@ -235,6 +293,70 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
             user.loginName.toLocaleLowerCase().includes(memberKeyword) ||
             (user.email ?? "").toLocaleLowerCase().includes(memberKeyword),
         );
+
+  const organizationName = (organizationId: number | null | undefined) => {
+    if (organizationId === null || organizationId === undefined) {
+      return "未分配";
+    }
+    return (
+      organizations.data?.items.find((item) => item.id === organizationId)
+        ?.name ?? "组织 " + organizationId
+    );
+  };
+
+  const selfOrganizationId =
+    members.find((user) => user.id === currentUserId)?.organizationId ?? null;
+  const memberGroups = groupMembersByOrganization(
+    visibleMembers,
+    selfOrganizationId,
+  );
+
+  const toggleUserSelection = (userId: number, checked: boolean) => {
+    setSelectedUserIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  };
+
+  const allVisibleSelected =
+    visibleMembers.length > 0 &&
+    visibleMembers.every((user) => selectedUserIds.has(user.id));
+  const someVisibleSelected = visibleMembers.some((user) =>
+    selectedUserIds.has(user.id),
+  );
+
+  const toggleAllVisible = (checked: boolean) => {
+    setSelectedUserIds((current) => {
+      const next = new Set(current);
+      for (const user of visibleMembers) {
+        if (checked) next.add(user.id);
+        else next.delete(user.id);
+      }
+      return next;
+    });
+  };
+
+  const assignSelectedTo = async (
+    organizationId: number | null,
+    successText: string,
+  ) => {
+    if (selectedUserIds.size === 0) return;
+    const userIds = [...selectedUserIds];
+    try {
+      await organizationMutation.mutateAsync({
+        action: "assign",
+        userIds,
+        organizationId,
+      });
+      setSuccess(successText);
+      setSelectedUserIds(new Set());
+      setAssignDialog(null);
+    } catch {
+      // 失败详情由 organizationMutation.error 统一渲染。
+    }
+  };
 
   return (
     <>
@@ -317,7 +439,11 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           <WecomRobotSettingsPanel {...(client ? { client } : {})} />
         ) : null}
 
-        {effectiveTab === "members" ? (
+        {effectiveTab === "members" && !isAdmin ? (
+          <MyOrganizationPanel client={client} currentUserId={currentUserId} />
+        ) : null}
+
+        {effectiveTab === "members" && isAdmin ? (
           <section className="panel settings-panel">
             <CalmSectionTitle
               title="成员与角色"
@@ -337,6 +463,77 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
                 </div>
               ) : null}
             </CalmSectionTitle>
+
+            <div className="member-toolbar">
+              {batchMode ? (
+                <>
+                  <Checkbox
+                    indeterminate={!allVisibleSelected && someVisibleSelected}
+                    checked={allVisibleSelected}
+                    onChange={(event) => toggleAllVisible(event.target.checked)}
+                  >
+                    全选当前结果
+                  </Checkbox>
+                  <span className="member-toolbar-info">
+                    {selectedUserIds.size > 0
+                      ? "已选 " + selectedUserIds.size + " 人"
+                      : "勾选成员后可批量加入或移出组织"}
+                  </span>
+                  <span className="member-toolbar-actions">
+                    <Button
+                      className="secondary-button"
+                      disabled={selectedUserIds.size === 0}
+                      onClick={() => setAssignDialog({ mode: "join" })}
+                    >
+                      加入组织
+                    </Button>
+                    <Button
+                      className="secondary-button"
+                      disabled={selectedUserIds.size === 0}
+                      onClick={() => setAssignDialog({ mode: "remove" })}
+                    >
+                      移出组织
+                    </Button>
+                    <Button
+                      className="text-button"
+                      disabled={selectedUserIds.size === 0}
+                      onClick={() => setSelectedUserIds(new Set())}
+                    >
+                      清空选择
+                    </Button>
+                    <Button
+                      className="secondary-button"
+                      onClick={() => {
+                        setBatchMode(false);
+                        setSelectedUserIds(new Set());
+                      }}
+                    >
+                      退出批量
+                    </Button>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="member-toolbar-info">
+                    需要把多名成员加入或移出组织时，进入批量管理勾选成员。
+                  </span>
+                  <span className="member-toolbar-actions">
+                    <Button
+                      className="secondary-button"
+                      onClick={() => setBatchMode(true)}
+                    >
+                      批量管理
+                    </Button>
+                    <Button
+                      className="secondary-button"
+                      onClick={() => setOrganizationManagerOpen(true)}
+                    >
+                      组织管理
+                    </Button>
+                  </span>
+                </>
+              )}
+            </div>
 
             {success ? (
               <div className="permission-note note-success" role="status">
@@ -381,66 +578,100 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
               </CalmEmptyState>
             ) : (
               <div className="member-list">
-                {visibleMembers.map((user) => (
-                  <div className="member-row" key={user.id}>
-                    <span className="person-avatar">
-                      {user.name.trim().charAt(0) || "成"}
-                    </span>
-                    <div className="member-id">
-                      <strong>
-                        {user.name}
-                        {selfAdmin(user) ? (
-                          <span className="member-self">（当前账号）</span>
-                        ) : null}
-                      </strong>
-                      <small>
-                        {user.loginName}
-                        {user.email ? ` · ${user.email}` : ""}
-                      </small>
+                {memberGroups.map((group) => (
+                  <React.Fragment key={group.organizationId ?? "unassigned"}>
+                    <div className="member-group-title">
+                      {organizationName(group.organizationId)} ·{" "}
+                      {group.members.length} 人
                     </div>
-                    <div className="member-meta">
-                      <CalmBadge tone={user.isAdmin ? "blue" : "gray"}>
-                        {user.isAdmin ? "系统管理员" : "项目成员"}
-                      </CalmBadge>
-                      <span
+                    {group.members.map((user) => (
+                      <div
                         className={
-                          "member-status" +
-                          (user.status === "ACTIVE" ? "" : " is-disabled")
+                          "member-row" + (batchMode ? " is-selectable" : "")
                         }
+                        key={user.id}
                       >
-                        {user.status === "ACTIVE" ? "启用" : "停用"}
-                      </span>
-                    </div>
-                    <div className="member-actions">
-                      <Button
-                        className="text-button"
-                        onClick={() => openUpdate(user)}
-                      >
-                        编辑
-                      </Button>
-                      {!selfAdmin(user) && (
-                        <Button
-                          className="text-button"
-                          onClick={() =>
-                            openLifecycle(
-                              user.status === "ACTIVE" ? "disable" : "enable",
-                              user,
-                            )
-                          }
-                        >
-                          {user.status === "ACTIVE" ? "停用" : "启用"}
-                        </Button>
-                      )}
-                      {!selfAdmin(user) && (
-                        <Button
-                          className="text-button"
-                          onClick={() => openLifecycle("forceLogout", user)}
-                        >
-                          强制退出
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+                        {batchMode ? (
+                          <Checkbox
+                            aria-label={"选择 " + user.name}
+                            checked={selectedUserIds.has(user.id)}
+                            onChange={(event) =>
+                              toggleUserSelection(user.id, event.target.checked)
+                            }
+                          />
+                        ) : null}
+                        <span className="person-avatar">
+                          {user.name.trim().charAt(0) || "成"}
+                        </span>
+                        <div className="member-id">
+                          <strong>
+                            {user.name}
+                            {selfAdmin(user) ? (
+                              <span className="member-self">（当前账号）</span>
+                            ) : null}
+                          </strong>
+                          <small>
+                            {user.loginName}
+                            {user.email ? " · " + user.email : ""}
+                          </small>
+                        </div>
+                        <div className="member-meta">
+                          <CalmBadge tone={user.isAdmin ? "blue" : "gray"}>
+                            {user.isAdmin ? "系统管理员" : "项目成员"}
+                          </CalmBadge>
+                          <CalmBadge
+                            tone={
+                              user.organizationId === null ||
+                              user.organizationId === undefined
+                                ? "gray"
+                                : "cyan"
+                            }
+                          >
+                            {organizationName(user.organizationId)}
+                          </CalmBadge>
+                          <span
+                            className={
+                              "member-status" +
+                              (user.status === "ACTIVE" ? "" : " is-disabled")
+                            }
+                          >
+                            {user.status === "ACTIVE" ? "启用" : "停用"}
+                          </span>
+                        </div>
+                        <div className="member-actions">
+                          <Button
+                            className="text-button"
+                            onClick={() => openUpdate(user)}
+                          >
+                            编辑
+                          </Button>
+                          {!selfAdmin(user) && (
+                            <Button
+                              className="text-button"
+                              onClick={() =>
+                                openLifecycle(
+                                  user.status === "ACTIVE"
+                                    ? "disable"
+                                    : "enable",
+                                  user,
+                                )
+                              }
+                            >
+                              {user.status === "ACTIVE" ? "停用" : "启用"}
+                            </Button>
+                          )}
+                          {!selfAdmin(user) && (
+                            <Button
+                              className="text-button"
+                              onClick={() => openLifecycle("forceLogout", user)}
+                            >
+                              强制退出
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </React.Fragment>
                 ))}
               </div>
             )}
@@ -606,6 +837,88 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
           </>
         )}
       </Modal>
+
+      <Modal
+        className="catalog-modal"
+        open={assignDialog !== null}
+        eyebrow="批量调整组织"
+        title={assignDialog?.mode === "join" ? "加入组织" : "移出组织"}
+        body
+        onCancel={() => setAssignDialog(null)}
+        mask={{ closable: !organizationMutation.isPending }}
+      >
+        {assignDialog?.mode === "join" ? (
+          <>
+            <p>把已选 {selectedUserIds.size} 名成员加入：</p>
+            {(organizations.data?.items ?? []).length === 0 ? (
+              <p>还没有组织，先到「组织管理」里创建。</p>
+            ) : (
+              <div className="organization-pick-list">
+                {(organizations.data?.items ?? []).map((item) => (
+                  <Button
+                    key={item.id}
+                    className="secondary-button"
+                    disabled={organizationMutation.isPending}
+                    onClick={() =>
+                      void assignSelectedTo(
+                        item.id,
+                        "已把 " +
+                          selectedUserIds.size +
+                          " 名成员加入「" +
+                          item.name +
+                          "」",
+                      )
+                    }
+                  >
+                    {item.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <p>
+            将已选 {selectedUserIds.size}{" "}
+            名成员移出所在组织（变为未分配），操作立即生效。
+          </p>
+        )}
+        {organizationMutation.isError ? (
+          <Alert
+            type="error"
+            title={organizationErrorMessage(organizationMutation.error)}
+          />
+        ) : null}
+        <Space style={{ marginTop: 16 }}>
+          {assignDialog?.mode === "remove" ? (
+            <Button
+              type="primary"
+              loading={organizationMutation.isPending}
+              onClick={() =>
+                void assignSelectedTo(
+                  null,
+                  "已把 " + selectedUserIds.size + " 名成员移出组织",
+                )
+              }
+            >
+              确认移出
+            </Button>
+          ) : null}
+          <Button
+            onClick={() => setAssignDialog(null)}
+            disabled={organizationMutation.isPending}
+          >
+            取消
+          </Button>
+        </Space>
+      </Modal>
+
+      <OrganizationManagerModal
+        open={organizationManagerOpen}
+        onClose={() => setOrganizationManagerOpen(false)}
+        members={members}
+        client={client}
+        onChanged={(message) => setSuccess(message)}
+      />
     </>
   );
 };
@@ -615,4 +928,5 @@ export interface AdminUsersPageViewProps {
   readonly currentUserId?: number | undefined;
   readonly onOpenProjects?: (() => void) | undefined;
   readonly initialTab?: SettingsTab | undefined;
+  readonly isAdmin?: boolean | undefined;
 }

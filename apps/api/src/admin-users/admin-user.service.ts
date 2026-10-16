@@ -269,6 +269,7 @@ export class AdminUserService {
       email: user.email,
       avatarUrl: user.avatarUrl,
       isAdmin: user.isAdmin,
+      organizationId: user.organizationId,
       status: user.status,
       rowVersion: user.rowVersion,
     };

@@ -306,6 +306,36 @@ export const permissionMatrix = [
     },
   },
   {
+    operationId: "getMyOrganizationMembers",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "allow" },
+      其他项目成员: { kind: "allow" },
+      已移除成员: { kind: "allow" },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  ...(
+    [
+      "listOrganizations",
+      "createOrganization",
+      "updateOrganization",
+      "deleteOrganization",
+      "assignUsersOrganization",
+    ] as const
+  ).map((operationId): PermissionMatrixEntry => ({
+    operationId,
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: { kind: "deny", status: 403 },
+      其他项目成员: { kind: "deny", status: 403 },
+      已移除成员: { kind: "deny", status: 403 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  })),
+  {
     operationId: "listAdminUsers",
     outcomes: {
       匿名: { kind: "deny", status: 401 },

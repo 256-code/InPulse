@@ -84,6 +84,7 @@ export type AdminUserItem = {
   readonly email: (string | null);
   readonly avatarUrl: (string | null);
   readonly isAdmin: boolean;
+  readonly organizationId: (number | null);
   readonly status: ("ACTIVE" | "DISABLED");
   readonly rowVersion: number;
   readonly disabledAt: (string | null);
@@ -821,6 +822,21 @@ export type ModuleVersionHeaders = {
   readonly "if-match": string;
 };
 
+export type MyOrganizationMemberItem = {
+  readonly id: number;
+  readonly name: string;
+  readonly avatarUrl: (string | null);
+  readonly isAdmin: boolean;
+};
+
+export type MyOrganizationMembersResponse = {
+  readonly organization: ({
+    readonly id: number;
+    readonly name: string;
+  } | null);
+  readonly items: readonly MyOrganizationMemberItem[];
+};
+
 export type MyRecordDraftItem = {
   readonly draft: RecordDraftItem;
   readonly projectName: string;
@@ -943,6 +959,57 @@ export type NotificationReplayContext = {
 
 export type NotificationUnreadCountResponse = {
   readonly unreadCount: number;
+};
+
+export type OrganizationAssignReplayContext = {
+  readonly actorUserId: number;
+  readonly organizationId: (number | null);
+  readonly userIds: readonly number[];
+};
+
+export type OrganizationAssignRequest = {
+  readonly userIds: readonly number[];
+  readonly organizationId: (number | null);
+};
+
+export type OrganizationAssignResponse = {
+  readonly updatedCount: number;
+};
+
+export type OrganizationCreateRequest = {
+  readonly name: string;
+};
+
+export type OrganizationItem = {
+  readonly id: number;
+  readonly name: string;
+  readonly rowVersion: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type OrganizationListResponse = {
+  readonly items: readonly OrganizationItem[];
+};
+
+export type OrganizationMutationHeaders = {
+  readonly "x-csrf-token": string;
+};
+
+export type OrganizationPath = {
+  readonly organizationId: number;
+};
+
+export type OrganizationReplayContext = {
+  readonly actorUserId: number;
+  readonly organizationId: (number | null);
+};
+
+export type OrganizationUpdateRequest = OrganizationCreateRequest;
+
+export type OrganizationVersionHeaders = {
+  readonly "x-csrf-token": string;
+  readonly "if-match": string;
 };
 
 export type ProjectCode = string;

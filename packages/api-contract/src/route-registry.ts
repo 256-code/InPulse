@@ -21,6 +21,7 @@ import { taskRoutes, moduleTaskRoutes } from "./task-routes.js";
 import { apiBasePath, type RouteDefinition } from "./route-definition.js";
 import { moduleRoutes } from "./module-routes.js";
 import { adminUserRoutes } from "./user-admin-routes.js";
+import { organizationRoutes } from "./organization-routes.js";
 import { projectMemberRoutes } from "./project-member-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import {
@@ -40,6 +41,7 @@ export * from "./route-definition.js";
 export const routeRegistry = [
   ...externalLinkRoutes,
   ...adminUserRoutes,
+  ...organizationRoutes,
   ...wecomBindingRoutes,
   ...wecomRobotRoutes,
   ...projectWecomGroupRoutes,

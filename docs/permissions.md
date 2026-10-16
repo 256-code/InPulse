@@ -318,3 +318,16 @@ listChangeRecords 默认 PUBLISHED，管理员显式 status=VOID 才列出作废
 | `deleteProjectWecomGroup` | 401 | 403（普通成员）/ 允许（组长） | 404 | 404 | 401 | 允许 | 解绑（数据库级幂等 1.0.0，重放复核同一组长 / 管理员门禁与实时成员关系）：作废待用码并把 ACTIVE 绑定置 REVOKED（不物理删除）；写审计 `project.wecomGroup.unbind`；重复执行自然幂等 |
 
 三条路由都以项目为资源：成员关系与组长身份由服务端在同一事务内实时读取（ADR-039 例外清单新增 ADR-077），非成员一律 404。绑定兑换发生在长连接桥接侧调用 `app.redeem_project_wecom_binding_code`（锁序：码行 → 发送者个人绑定行 → 群绑定行，先 chat 后 project；错误码 PWG01～PWG08；系统管理员豁免成员校验）：一个项目至多一个 ACTIVE 群、一个群至多绑定一个项目，换绑 = 旧行 REVOKED + 新行 ACTIVE，投递历史按绑定行保留。群推送与个人单聊并存（个人继续 `chat_type:1`、项目群 `chat_type:2`），本批只落数据面与交互面，不产生任何群投递；桥接改造为第二批。路由总数 116 → 119（`permissions:check` 119 条操作 / 119 条路由，2026-10-15）。
+
+## ADR-081 组织（部门）成员分组、批量归属与同组织可见（2026-10-16）
+
+| operationId | 匿名 | 活跃成员 | 其他项目成员 | 已移除成员 | 停用用户 | 系统管理员 | 约束 |
+|---|---|---|---|---|---|---|---|
+| `listOrganizations` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session；返回全部组织（id / name / rowVersion / createdAt / updatedAt），按 id 升序；只读，无 CSRF 与幂等；响应 `no-store` |
+| `createOrganization` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + CSRF + 数据库级幂等（契约 1.0.0）；`name` 1～100 字符，按 `lower(btrim(name))` 函数唯一索引去重；重名 409 `ORGANIZATION_NAME_CONFLICT`；审计 `admin.organization.create` |
+| `updateOrganization` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + CSRF + 幂等（1.0.0）+ `If-Match`（`row_version`）；404 `ORGANIZATION_NOT_FOUND`；409 `ORGANIZATION_VERSION_CONFLICT` / `ORGANIZATION_NAME_CONFLICT`；审计 `admin.organization.update` |
+| `deleteOrganization` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + CSRF + 幂等（1.0.0）+ `If-Match`；204 无 body；同一事务先显式清空成员归属（递增 `row_version`，数据库级 `ON DELETE SET NULL` 兜底）再删组织；审计 `admin.organization.delete`（只记成员数） |
+| `assignUsersOrganization` | 401 | 403 | 403 | 403 | 401 | 允许 | 完整管理员 Session + CSRF + 幂等（1.0.0）；`userIds` 1～200 去重、`organizationId` 为正整数或 `null`；按用户 ID 升序 `FOR UPDATE` 逐行切换归属；目标组织不存在 422 `ORGANIZATION_NOT_FOUND`；重复调用 `updatedCount = 0` 自然幂等；审计 `admin.user.organizations.assign` |
+| `getMyOrganizationMembers` | 401 | 允许 | 允许 | 允许 | 401 | 允许 | 任意有效会话：返回当前用户所属组织与该组织 ACTIVE 成员（`id` / `name` / `avatarUrl` / `isAdmin`，最多 300 条；不返回登录名、邮箱与停用状态）；未分配返回空列表；只读，响应 `no-store` |
+
+六条路由承载 ADR-081 的组织（部门）能力：组织是全局平铺配置，一名成员至多归属一个组织（未分配为 `NULL`，删除组织即回到未分配），组织不代表任何项目权限；建 / 改 / 删 / 批量归属为系统管理员专属，沿用 ADR-031 只要求当前有效的完整管理员 Session；`getMyOrganizationMembers` 是本批新增的最小只读可见面，只暴露当前用户自己组织内的脱敏字段，不放宽 `getUserDirectory` 等既有授权。路由总数 119 → 125，`permissions:check` 125 条操作 / 125 条路由通过（2026-10-16 实测）；真实 PostgreSQL 集成用例 `apps/api/test/organizations-api.integration.test.ts` 3 例本地通过；迁移 `0046_organizations.sql`。

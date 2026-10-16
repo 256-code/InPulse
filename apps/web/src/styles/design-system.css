@@ -1644,7 +1644,7 @@ td small {
   padding: 14px 20px;
   border-top: 1px solid #edf1f5;
 }
-.member-row > div:nth-child(2) {
+.member-row > .member-id {
   flex: 1;
 }
 .member-row strong,

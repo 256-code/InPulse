@@ -6615,3 +6615,20 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | PROJECT-STAR-ACCOUNT-E2E-001 | 浏览器 E2E（生产构建 + `app_ci`） | 整站回归 | `pnpm test:e2e:local` **85 通过 / 1 失败（6.7 分钟）**：失败项为 `project-members.spec.ts:12` 的 `.settings-panel` 严格模式冲突，根因是本批合并进来的 `ProjectWecomGroupCard` 在成员页多渲染了一个 `.panel.settings-panel`，与本批星标改动无关（本批未改成员页任何文件）；其余 85 例（含项目创建、项目删除、可视化迁移）无回归 | 本地通过（本批范围）／1 例上游回归待修（2026-10-16） |
 
 未运行 / 已知偏差（本批）：① 星标仍只存浏览器本地，跨设备 / 跨浏览器不同步，清 localStorage 即丢失；跨设备需要新表 + `listProjects` 契约 + 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 首版全局 key 的接管是一次性过渡，接管后原 key 已删除、不可回滚。③ `project-members.spec.ts:12` 的 `.settings-panel` 选择器需要收窄到成员面板（上游企业微信卡片批次带进来的 E2E 回归，其条目只记了单测与集成、未跑全量 E2E），本批**未修**，留给该批次或后续单独一条。④ 生产镜像构建与 Trivy 扫描未执行；⑤ GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 组织（部门）成员分组、批量归属与同组织可见（ADR-081，2026-10-16 本地落库）
+
+需求原话要点：「管理员在成员设置可通过建立组织或部门把成员分开，成员可以看同一组织的其他成员，指派成员时可以选择一整个组织或组织里面选人」「拉取成员进入组织不能一个一个来（需批量）」「不要直接能勾选成员可批量加入或移除组织，设置一个按钮，点这个按钮才会有」「相同部门的成员要放一块」。本批落库迁移 `0046`（`app.organizations` + `app.users.organization_id`）与 6 条路由（119 → 125）；指派选择器的组织视图为第二批，不在本批。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| ORGANIZATION-API-001 | 真实 PostgreSQL 集成（真实 HTTP） | 组织 CRUD、批量归属、幂等重放与审计 | 创建 200、重名（含大小写/空白差异）409 `ORGANIZATION_NAME_CONFLICT`；同 Key 重放返回同一 id；改名 rowVersion + 1、旧版本 `If-Match` 409 `ORGANIZATION_VERSION_CONFLICT`；批量加入返回真实变化行数、同 Key 重放同一结果、换 Key 重复调用 `updatedCount = 0`、`userIds` 重复去重；移出（`organizationId: null`）与删除 204 后成员归属为 `NULL`；`audit_logs` 出现 `admin.organization.create/update/delete` 与 `admin.user.organizations.assign` | 本地通过（2026-10-16） |
+| ORGANIZATION-API-002 | 真实 PostgreSQL 集成（真实 HTTP） | 同组织可见与脱敏 | 同组织成员互相可见、跨组织不可见；未分配返回 `organization: null` 与空列表；成员条目仅含 `id / name / avatarUrl / isAdmin`（不含登录名、邮箱与停用状态）；匿名 401、普通成员读管理员列表 403 | 本地通过（2026-10-16） |
+| ORGANIZATION-API-003 | 真实 PostgreSQL 集成（真实 HTTP） | 拒绝越权、越界与不存在资源 | 普通成员写管理员路由 403、匿名 401、无效 CSRF 401、`name` 空白 422、不存在组织 PATCH 404、批量归属目标组织不存在 422 `ORGANIZATION_NOT_FOUND`；错误体不泄露 SQL 细节 | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-001 | Web 单元 | 批量管理按钮进入模式 | 默认渲染不含勾选框与全选；点「批量管理」后才出现勾选框 / 全选 / 加入组织 / 移出组织 / 清空选择 / 退出批量；提交携带 CSRF 与 `organization-` 前缀幂等 Key | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-002 | Web 单元 | 同组织分组显示 | 列表按组织分组（`.member-group-title` 显示名称与人数），当前账号所在组织置顶、其余按组织 id 升序、未分配最后；组内保持原有顺序 | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-003 | Web 单元 | 普通成员只读视图 | 非管理员不调用 `listAdminUsers`；只渲染同组织成员（脱敏）且看不到「组织管理」按钮；未分配显示「尚未加入组织」 | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-004 | Web 单元 | 组织管理弹窗新建 | 打开弹窗、填写名称、点「新建组织」提交（CSRF + `organization-` 前缀幂等 Key） | 本地通过（2026-10-16） |
+| ORGANIZATION-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 类型 | `contract:validate` 125 条；`permissions:check` 125 条操作 / 125 条路由；`contract:drift` 5 产物无漂移；全 workspace typecheck / lint / format:check 通过；迁移 `0046` 已在 `app_ci` 应用通过 | 本地通过（2026-10-16） |
+
+未运行 / 已知偏差（本批）：① 组织管理弹窗的改名、删除二次确认与「按组织批量拉人」只有实现路径，无专门自动化用例（后续可补）；② 指派选择器「一键选中整个组织 / 按组织选人」为第二批，未实现；③ Playwright E2E 未新增组织场景，全量 E2E 未在本批复跑；④ `pnpm check` 整链未运行、GitHub Actions 未执行。

@@ -33,6 +33,12 @@
       "fingerprint": "b1905da65954165a5fa8be9fb052a021d34435c345f1c6392d35a1ee4d539712"
     }
   ],
+  "assignUsersOrganization": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "9680b893728c38713c10c76648a19622d45d538140d6f89230c05964676147e7"
+    }
+  ],
   "changeProjectStatus": [
     {
       "version": "1.0.0",
@@ -165,6 +171,12 @@
       "fingerprint": "ed3ba71fc4d637ce0a7a2a193c39694daea7241cbe7095c84f65c2f8617386a8"
     }
   ],
+  "createOrganization": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "3afb444c505644d6ff022e1725fd35c5b443670d4acaeb4cf2e868e150f3c8cd"
+    }
+  ],
   "createProject": [
     {
       "version": "1.0.0",
@@ -225,6 +237,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "8749b92d265b2df55eea1d561654dd7a0a809c2174fa636b8f0e6698a9c439c7"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "f295d99cbadc91b843c880678b018eb79577ab2d7bd21e2d39c023e947e8a24f"
     }
   ],
   "deleteFeature": [
@@ -243,6 +259,12 @@
     {
       "version": "1.0.0",
       "fingerprint": "6c33bd7958e90dd4da6d5215199e3c97f7249fee0e043593e20eb6b243c1a616"
+    }
+  ],
+  "deleteOrganization": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "dfb42a79f5bba6ffbc5b90578176563e2bca7b8ff5559f8a7adcd6bbb4032c87"
     }
   ],
   "deleteProject": [
@@ -519,6 +541,12 @@
       "fingerprint": "a98a0f95a42161b25107d66a316f3a547bd8509288d1a7df073c1d0a6a80546e"
     }
   ],
+  "updateOrganization": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "8799722d5c7857caefc2da2f101a8a98950cf05215700020e94e35aefbfe1f56"
+    }
+  ],
   "updateProject": [
     {
       "version": "1.0.0",
@@ -581,6 +609,10 @@
     {
       "version": "1.0.0",
       "fingerprint": "2009dfbfe32276348c93d22cf698ffc83445a8b939d977db14746a9a8e9ee545"
+    },
+    {
+      "version": "1.1.0",
+      "fingerprint": "caea4f588fef400f52968b4f71c047450b01fd1792dca4e35f034601e191b58f"
     }
   ],
   "updateWecomRobotConfig": [

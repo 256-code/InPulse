@@ -16,6 +16,7 @@ const user: AdminUserItem = {
   email: "alice@example.com",
   avatarUrl: null,
   isAdmin: true,
+  organizationId: null,
   status: "ACTIVE",
   rowVersion: 3,
   disabledAt: null,

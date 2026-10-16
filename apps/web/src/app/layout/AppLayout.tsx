@@ -41,7 +41,7 @@ const deliveryNavigation: readonly NavigationItem[] = [
   { key: "issues", label: "遗留问题", path: "/issues", icon: "alert" },
 ];
 
-/** 全局导航：通知与搜索已收敛到侧栏底部工具条，成员与设置、审计仅管理员可见。 */
+/** 全局导航：通知与搜索已收敛到侧栏底部工具条；成员与设置对全体开放（普通成员只读），审计仅管理员可见。 */
 const globalNavigation: readonly NavigationItem[] = [
   {
     key: "activity",
@@ -54,7 +54,6 @@ const globalNavigation: readonly NavigationItem[] = [
     label: "成员与设置",
     path: "/settings",
     icon: "settings",
-    adminOnly: true,
   },
   {
     key: "audit",

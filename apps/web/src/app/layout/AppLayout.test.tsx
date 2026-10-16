@@ -116,8 +116,8 @@ describe("AppLayout", () => {
     expect(screen.getByText("迭代记录")).toBeInTheDocument();
     expect(screen.getByText("遗留问题")).toBeInTheDocument();
     expect(screen.getByText("项目动态")).toBeInTheDocument();
-    // 成员与设置属于系统管理员专属入口，普通成员不渲染。
-    expect(screen.queryByText("成员与设置")).not.toBeInTheDocument();
+    // 成员与设置对全体登录用户开放（普通成员只读），审计日志仍仅管理员可见。
+    expect(screen.getByText("成员与设置")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "打开全局搜索" }),
     ).toBeInTheDocument();
@@ -155,7 +155,7 @@ describe("AppLayout", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText("审计日志")).not.toBeInTheDocument();
-    expect(screen.queryByText("成员与设置")).not.toBeInTheDocument();
+    expect(screen.getByText("成员与设置")).toBeInTheDocument();
   });
 
   it("renders the current project group and the task board entry on project routes", async () => {

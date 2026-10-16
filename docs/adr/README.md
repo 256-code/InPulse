@@ -94,6 +94,7 @@
 | [ADR-078](ADR-078.md) | Accepted | 更换机器人（botId 变化）时自动解除全部企业微信绑定：`updateWecomRobotConfig` 在同一事务内经迁移 `0045` 新增的 `SECURITY DEFINER` 函数 `app.revoke_wecom_bindings_on_robot_change()` 把 `app.user_wecom_bindings` 与 `app.project_wecom_groups` 的 ACTIVE 行全部置 REVOKED（保留历史、计数返回、PUBLIC 回收与部署断言），响应新增可空 `revokedUserBindings` / `revokedProjectGroups`（未更换为 null、更换为计数含 0、GET 恒 null），幂等契约 1.1.0 → 1.2.0，审计增加 `robotChanged` 与两计数；仅轮换 Secret / 修改机器人链接不触发；不改桥接、路由数不变（119） |
 | [ADR-079](ADR-079.md) | Accepted | 未绑定企业微信的提醒弹窗（忽略 / 不再提醒）与机器人可用标记：`WecomBindingStatus` 新增 `robotConfigured`（机器人是否已配置，未配置不提示绑定）；已登录且 UNBOUND 时弹「绑定企业微信，及时收到任务提醒」——「去绑定」打开既有绑定弹窗、忽略按会话记 sessionStorage、不再提醒按账号记 localStorage（均只存浏览器本地，不入库不写审计）；PENDING / BOUND / 未配置 / 读取失败静默不弹；无新增路由（119）、无迁移 |
 | [ADR-080](ADR-080.md) | Accepted | 登录页直达单点登录（修订 ADR-036 / ADR-032 决策 7 的前端入口）：`/login`（含 `?from=`）匿名态立即整页跳转 `/api/v1/auth/sso/start?returnTo=...`，`?local=1` 管理员应急与服务端 fail closed 回落的 `?sso=disabled` 渲染本地口令表单且不自动跳转，`?sso_error=` 只显示错误与手动重试；退出登录仍回 `/login` 后自动进入 SSO；服务端路由 / 契约 / 迁移 / 依赖 / 权限矩阵不变 |
+| [ADR-081](ADR-081.md) | Accepted | 组织（部门）成员分组：管理员建立组织、成员至多归属一个组织（可未分配）、批量归属（1～200 人）、同组织成员只读可见；新增 6 条路由（119 → 125）与迁移 `0046`；指派选择器组织视图为第二批 |
 
 ## 关联基线
 

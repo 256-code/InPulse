@@ -27,6 +27,7 @@ const item = {
   email: "member@example.com",
   avatarUrl: null,
   isAdmin: false,
+  organizationId: null,
   status: "ACTIVE",
   rowVersion: 1,
   disabledAt: null,

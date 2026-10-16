@@ -171,6 +171,12 @@ export const permissionMatrixRows: readonly PermissionMatrixRow[] = [
   },
   { feature: "用户账号管理", admin: true, member: false, note: "—" },
   {
+    feature: "组织管理",
+    admin: true,
+    member: false,
+    note: "新建/改名/删除组织与批量调整成员归属；成员可查看同组织成员",
+  },
+  {
     feature: "系统配置",
     admin: true,
     member: false,

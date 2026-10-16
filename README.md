@@ -50,6 +50,8 @@ InPulse 面向国内单企业、单实例的软件研发团队，目标规模为
 
 > 2026-10-15 空库首个 SSO 账号自动成为系统管理员（用户要求，[ADR-075](./docs/adr/ADR-075.md) 修订 ADR-032 决策 5）：平台此前没有任何账号（`app.users` 无行）时，第一个完成单点登录并 JIT 开通的账号自动获得 `is_admin=true`；此后任何情况（含仅剩停用账号）维持 `is_admin=false`。判定与 INSERT 由固定键 `pg_advisory_xact_lock` 在同一事务内串行化，并发首登只有先提交者成为管理员；审计 `auth.sso_account_provisioned` payload 增加 `grantedAdmin`。已绑定映射、Casdoor claim 映射、会话、路由、契约、迁移与权限矩阵均无改动；离线预置管理员仍可行且优先于 SSO 首登。验证：新增 `apps/api/test/sso-first-admin.integration.test.ts` 3 例（真实 PostgreSQL 临时库全量迁移 + 桩 IdP）定向通过；未提交、未推送。
 
+> 2026-10-16 组织（部门）成员管理（用户要求，[ADR-081](./docs/adr/ADR-081.md)）：「成员与设置」对全体登录用户开放——系统管理员可建立组织（部门）、改名、删除（成员回到未分配），并在成员列表批量归属（默认无勾选框，点「批量管理」进入选择模式，含全选当前搜索结果与加入 / 移出组织）；成员列表按组织分组显示（相同部门放一块，当前账号所在组织置顶、其余按组织 id 升序、未分配最后）；普通成员只读查看同组织成员（脱敏：不含登录名、邮箱与停用状态）。新增迁移 `0046` 与 6 条路由（`listOrganizations` / `createOrganization` / `updateOrganization` / `deleteOrganization` / `assignUsersOrganization` / `getMyOrganizationMembers`），路由总数 119 → 125（`permissions:check` 125/125）；指派选择器的「一键选中整个组织」为第二批。
+
 下列根级命令已真实可运行，并与 GitHub Actions 的 `CI / workspace` job 按[技术设计 §12.4](./技术设计v1.2.2.md#124-ci-门禁)顺序执行同一组命令；五个生产容器镜像（API/Migration/Web/DB-bootstrap/Ops）的构建与 Trivy 扫描已在 main CI（[run 34620173140](https://github.com/256-code/InPulse/actions/runs/34620173140)）实际通过，基础镜像 digest 已按 [ADR-017](./docs/adr/ADR-017.md) 固定；§12.4 中其余 Playwright 完整关键路径 E2E（`/audit` 审计页已补齐，见[测试矩阵](./docs/test-matrix.md)）、真实镜像 Tag/digest 绑定与签名发布清单、以及生产加密备份的真实全新主机恢复演练与启用仍未落库，补齐前请勿假设这些检查已执行。
 
 当前可运行的根级命令（§12.4 顺序）：

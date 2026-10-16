@@ -2836,3 +2836,54 @@
   gap: 10px;
   margin-bottom: 14px;
 }
+
+/* ADR-081 成员批量归属：工具条与组织列。 */
+.member-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 20px 14px;
+  padding: 10px 12px;
+  background: #f6f9fc;
+  border-radius: 10px;
+}
+
+.member-toolbar-info {
+  color: #61788e;
+  font-size: 12px;
+}
+
+.member-toolbar-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-row.is-selectable {
+  gap: 10px;
+}
+
+.organization-pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ADR-081 成员列表按组织分组：组标题把同组织成员聚成一块。 */
+.member-group-title {
+  padding: 12px 20px 4px;
+  color: #61788e;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: #fbfdff;
+  border-top: 1px solid #edf1f5;
+}
+
+.member-list > .member-group-title:first-child {
+  border-top: none;
+  padding-top: 6px;
+}

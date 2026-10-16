@@ -54,6 +54,7 @@ export const adminUserItemSchema = z
     email: z.string().min(3).max(320).nullable(),
     avatarUrl: z.string().min(1).max(2048).nullable(),
     isAdmin: z.boolean(),
+    organizationId: z.number().int().positive().max(2147483647).nullable(),
     status: z.enum(["ACTIVE", "DISABLED"]),
     rowVersion: z.number().int().positive(),
     disabledAt: z.iso.datetime().nullable(),

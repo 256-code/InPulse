@@ -4,6 +4,7 @@ import { wecomBindingSchemas } from "./contracts/wecom-binding.zod.js";
 import { adminAiAssistSchemas } from "./contracts/admin-ai-assist.zod.js";
 import { wecomRobotSchemas } from "./contracts/wecom-robot.zod.js";
 import { projectWecomGroupSchemas } from "./contracts/project-wecom-group.zod.js";
+import { organizationSchemas } from "./contracts/organization.zod.js";
 import { documentImportSchemas } from "./contracts/document-import.zod.js";
 import {
   auditLogItemSchema,
@@ -180,6 +181,7 @@ export const schemaRegistry = {
   ...adminAiAssistSchemas,
   ...wecomRobotSchemas,
   ...projectWecomGroupSchemas,
+  ...organizationSchemas,
   TaskCenterQuery: {
     schema: taskCenterQuerySchema,
     summary: "授权范围内任务中心筛选",

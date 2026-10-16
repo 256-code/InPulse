@@ -32,6 +32,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ client }) => {
     <>
       <AdminUsersPageView
         currentUserId={user?.id}
+        isAdmin={user?.isAdmin === true}
         onOpenProjects={() => setSelectProject(true)}
         {...(initialTab ? { initialTab } : {})}
         {...(client ? { client } : {})}

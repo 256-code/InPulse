@@ -22,6 +22,7 @@ const safeUserFields = [
   "email",
   "avatarUrl",
   "isAdmin",
+  "organizationId",
   "status",
   "rowVersion",
   "disabledAt",
@@ -67,6 +68,16 @@ const writePolicy = {
 const noBodyWritePolicy = {
   ...writePolicy,
   idempotencyReplayPolicy: noBodyReplayPolicy,
+} as const;
+
+/**
+ * createUser / updateUser 的响应为 AdminUserItem：ADR-081 为它新增
+ * organizationId 字段后响应 Schema 变化，按契约要求把这两条路由的
+ * 幂等契约版本升级到 1.1.0（旧 Key 在新契约下返回 409）。
+ */
+const userBodyWritePolicy = {
+  ...writePolicy,
+  idempotencyContractVersion: "1.1.0",
 } as const;
 
 const versionedWritePolicy = {
@@ -148,7 +159,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: [],
-    ...writePolicy,
+    ...userBodyWritePolicy,
     ...createWritePolicy,
     auditAction: "admin.user.create",
   },
@@ -176,7 +187,7 @@ export const adminUserRoutes: readonly RouteDefinition[] = [
     csrfPolicy: "required",
     idempotencyPolicy: "idempotencyRequired",
     behaviorHeaders: ["If-Match"],
-    ...writePolicy,
+    ...userBodyWritePolicy,
     ...versionedWritePolicy,
     auditAction: "admin.user.update",
   },

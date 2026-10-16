@@ -24,6 +24,7 @@ const admin: AdminUserItem = {
   email: "alice@example.com",
   avatarUrl: null,
   isAdmin: true,
+  organizationId: null,
   status: "ACTIVE",
   rowVersion: 1,
   disabledAt: null,
@@ -41,7 +42,17 @@ const member: AdminUserItem = {
   rowVersion: 1,
 };
 
-function mount(client: InpulseApiClient, currentUserId = 1) {
+function mount(
+  client: InpulseApiClient,
+  currentUserId = 1,
+  options: { readonly isAdmin?: boolean } = {},
+) {
+  const merged = {
+    ...client,
+    listOrganizations:
+      (client as { readonly listOrganizations?: unknown }).listOrganizations ??
+      vi.fn().mockResolvedValue({ items: [] }),
+  } as unknown as InpulseApiClient;
   return render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <AuthStateProvider>
@@ -50,7 +61,11 @@ function mount(client: InpulseApiClient, currentUserId = 1) {
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <AdminUsersPageView client={client} currentUserId={currentUserId} />
+          <AdminUsersPageView
+            client={merged}
+            currentUserId={currentUserId}
+            isAdmin={options.isAdmin ?? true}
+          />
         </QueryClientProvider>
       </AuthStateProvider>
     </ConfigProvider>,
@@ -343,11 +358,185 @@ describe("F-03 settings sections", () => {
     const listAdminUsers = vi
       .fn()
       .mockResolvedValue({ items: [admin, member] });
-    mount({ listAdminUsers } as unknown as InpulseApiClient, member.id);
-    await screen.findByText("Bob");
+    const getMyOrganizationMembers = vi
+      .fn()
+      .mockResolvedValue({ organization: null, items: [] });
+    mount(
+      {
+        listAdminUsers,
+        getMyOrganizationMembers,
+      } as unknown as InpulseApiClient,
+      member.id,
+      { isAdmin: false },
+    );
+    await screen.findByText("尚未加入组织");
     const rail = screen.getByRole("navigation", { name: "成员与设置导航" });
     expect(
       within(rail).queryByRole("button", { name: "AI 辅助转换" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ADR-081 organizations", () => {
+  it("renders the read-only same-organization view for regular members", async () => {
+    const getMyOrganizationMembers = vi.fn().mockResolvedValue({
+      organization: { id: 7, name: "研发一组" },
+      items: [
+        { id: 2, name: "Bob", avatarUrl: null, isAdmin: false },
+        { id: 9, name: "Alice", avatarUrl: null, isAdmin: false },
+      ],
+    });
+    const listAdminUsers = vi.fn();
+    mount(
+      {
+        listAdminUsers,
+        getMyOrganizationMembers,
+      } as unknown as InpulseApiClient,
+      2,
+      { isAdmin: false },
+    );
+    await screen.findByText("Bob");
+    expect(listAdminUsers).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/研发一组/).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "组织管理" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("bob")).not.toBeInTheDocument();
+  });
+
+  it("shows the unassigned hint when the member has no organization", async () => {
+    const getMyOrganizationMembers = vi
+      .fn()
+      .mockResolvedValue({ organization: null, items: [] });
+    mount({ getMyOrganizationMembers } as unknown as InpulseApiClient, 2, {
+      isAdmin: false,
+    });
+    await screen.findByText("尚未加入组织");
+  });
+
+  it("shows the organization column and supports batch join", async () => {
+    const organization = {
+      id: 7,
+      name: "研发一组",
+      rowVersion: 1,
+      createdAt: "2026-10-16T00:00:00.000Z",
+      updatedAt: "2026-10-16T00:00:00.000Z",
+    };
+    const assignUsersOrganization = vi
+      .fn()
+      .mockResolvedValue({ updatedCount: 1 });
+    const issueCsrfToken = vi
+      .fn()
+      .mockResolvedValue({ csrfToken: "a".repeat(43) });
+    const client = {
+      listAdminUsers: vi.fn().mockResolvedValue({ items: [admin, member] }),
+      listOrganizations: vi.fn().mockResolvedValue({ items: [organization] }),
+      issueCsrfToken,
+      assignUsersOrganization,
+    } as unknown as InpulseApiClient;
+    mount(client);
+    await screen.findByText("Bob");
+    expect(within(userCard("Bob")).getByText("未分配")).toBeInTheDocument();
+    // 默认不进入批量模式：勾选框与全选只在点击「批量管理」后出现。
+    expect(screen.queryByLabelText("选择 Bob")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "批量管理" }));
+    fireEvent.click(screen.getByLabelText("选择 Bob"));
+    fireEvent.click(screen.getByRole("button", { name: "加入组织" }));
+    const dialog = await screen.findByRole("dialog", { name: /加入组织/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "研发一组" }));
+    await waitFor(() =>
+      expect(assignUsersOrganization).toHaveBeenCalledTimes(1),
+    );
+    expect(assignUsersOrganization).toHaveBeenCalledWith(
+      { userIds: [2], organizationId: 7 },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "Idempotency-Key": expect.stringContaining("organization-"),
+        }),
+      }),
+    );
+    await screen.findByText(/已把 1 名成员加入「研发一组」/);
+  });
+
+  it("groups members by organization with self organization first", async () => {
+    const firstOrganization = {
+      id: 3,
+      name: "先建部门",
+      rowVersion: 1,
+      createdAt: "2026-10-16T00:00:00.000Z",
+      updatedAt: "2026-10-16T00:00:00.000Z",
+    };
+    const selfOrganization = {
+      id: 7,
+      name: "研发一组",
+      rowVersion: 1,
+      createdAt: "2026-10-16T00:00:00.000Z",
+      updatedAt: "2026-10-16T00:00:00.000Z",
+    };
+    const client = {
+      listAdminUsers: vi.fn().mockResolvedValue({
+        items: [
+          { ...admin, organizationId: 7 },
+          {
+            ...member,
+            id: 3,
+            loginName: "carol",
+            name: "Carol",
+            organizationId: 3,
+          },
+          { ...member, organizationId: null },
+        ],
+      }),
+      listOrganizations: vi
+        .fn()
+        .mockResolvedValue({ items: [firstOrganization, selfOrganization] }),
+    } as unknown as InpulseApiClient;
+    mount(client, admin.id);
+    await screen.findByText("Carol");
+    const titles = [...document.querySelectorAll(".member-group-title")].map(
+      (element) => element.textContent,
+    );
+    expect(titles).toEqual([
+      "研发一组 · 1 人",
+      "先建部门 · 1 人",
+      "未分配 · 1 人",
+    ]);
+    const rendered = [...document.querySelectorAll(".member-row")].map(
+      (row) => row.querySelector("strong")?.textContent ?? "",
+    );
+    expect(rendered).toEqual(["Alice（当前账号）", "Carol", "Bob"]);
+  });
+
+  it("opens the organization manager and creates an organization", async () => {
+    const createOrganization = vi.fn().mockResolvedValue({
+      id: 8,
+      name: "研发二组",
+      rowVersion: 1,
+      createdAt: "2026-10-16T00:00:00.000Z",
+      updatedAt: "2026-10-16T00:00:00.000Z",
+    });
+    const client = {
+      listAdminUsers: vi.fn().mockResolvedValue({ items: [admin, member] }),
+      listOrganizations: vi.fn().mockResolvedValue({ items: [] }),
+      issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "a".repeat(43) }),
+      createOrganization,
+    } as unknown as InpulseApiClient;
+    mount(client);
+    await screen.findByText("Bob");
+    fireEvent.click(screen.getByRole("button", { name: "组织管理" }));
+    const dialog = await screen.findByRole("dialog", { name: /组织管理/ });
+    fireEvent.change(within(dialog).getByLabelText("新组织名称"), {
+      target: { value: "研发二组" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "新建组织" }));
+    await waitFor(() => expect(createOrganization).toHaveBeenCalledTimes(1));
+    expect(createOrganization).toHaveBeenCalledWith(
+      { name: "研发二组" },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "Idempotency-Key": expect.stringContaining("organization-"),
+        }),
+      }),
+    );
   });
 });
