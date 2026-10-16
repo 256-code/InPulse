@@ -789,4 +789,36 @@ describe("ADR-068 管理员 AI 辅助转换配置（真实 PostgreSQL + stub 上
       stubResponder = () => ({ status: 200, payload: probePayload() });
     }
   });
+
+  test("PUT：根地址自动补全 /chat/completions，测试连接可直接使用", async () => {
+    const admin = await adminActor();
+    const base = upstreamEndpoint().replace(/\/chat\/completions$/, "");
+    const before = upstreamCalls.length;
+    const response = await request(ADMIN_PATH, "PUT", {
+      actor: admin,
+      body: {
+        enabled: true,
+        endpoint: base,
+        model: "db-model",
+        timeoutMs: 30_000,
+        maxTokens: 4_096,
+        apiKey: KEY_VALUE,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ endpoint: upstreamEndpoint() });
+
+    const row = await readSettingsRow();
+    expect(row!.endpoint).toBe(upstreamEndpoint());
+
+    const probe = await request(ADMIN_TEST_PATH, "POST", { actor: admin });
+    expect(probe.status).toBe(200);
+    expect(await probe.json()).toEqual({
+      ok: true,
+      reason: null,
+      model: "stub-chat-model",
+    });
+    expect(upstreamCalls.length).toBe(before + 1);
+  });
 });

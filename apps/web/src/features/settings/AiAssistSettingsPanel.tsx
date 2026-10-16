@@ -259,7 +259,7 @@ export const AiAssistSettingsPanel: React.FC<AiAssistSettingsPanelProps> = ({
                 <Input
                   id="ai-assist-endpoint"
                   {...field}
-                  placeholder="https://api.example.com/v1/chat/completions"
+                  placeholder="https://api.example.com/v1"
                 />
               )}
             />
@@ -267,9 +267,8 @@ export const AiAssistSettingsPanel: React.FC<AiAssistSettingsPanelProps> = ({
               <small role="alert">{errors.endpoint.message}</small>
             ) : (
               <small className="form-hint">
-                请填写完整的 chat/completions 地址（例如
-                https://xxx/v1/chat/completions）；只填根地址 /v1
-                会导致测试连接失败。
+                可填根地址（例如 https://xxx/v1），保存或测试连接时自动补全
+                /chat/completions；也可直接填写完整地址。
               </small>
             )}
           </div>

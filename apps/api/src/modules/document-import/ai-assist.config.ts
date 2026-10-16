@@ -88,7 +88,9 @@ export function loadAiAssistConfig(
 
 /**
  * 端点规则（ADR-067 / ADR-068 共用）：必须是绝对 https URL；仅非 production
- * 的回环 http 放行（本地 stub 与测试）。非法时抛错，由调用方 fail closed。
+ * 的回环 http 放行（本地 stub 与测试）。校验通过后返回自动补全的规范化端点：
+ * 允许只填根地址（如 https://xxx/v1 或裸域名），已以 /chat/completions 结尾
+ * 的地址原样保留。非法时抛错，由调用方 fail closed。
  */
 export function validateAiAssistEndpoint(
   value: string,
@@ -100,16 +102,31 @@ export function validateAiAssistEndpoint(
     throw new Error(`${variableName} must be an absolute URL`);
   }
   if (parsed.protocol === "https:") {
-    return value;
+    return completeChatCompletionsPath(value, parsed);
   }
   if (
     parsed.protocol === "http:" &&
     isLoopbackHost(parsed.hostname) &&
     env["NODE_ENV"] !== "production"
   ) {
-    return value;
+    return completeChatCompletionsPath(value, parsed);
   }
   throw new Error(`${variableName} must be an absolute https URL`);
+}
+
+/**
+ * chat/completions 路径补全：`value` 已通过 URL 解析。已以 /chat/completions
+ * 结尾（容忍尾斜杠）时原样返回输入，避免改写既有配置；否则在路径末尾补
+ * /chat/completions，裸域名先补 /v1；query 与其余部分保持不变。
+ */
+function completeChatCompletionsPath(value: string, parsed: URL): string {
+  const path = parsed.pathname.replace(/\/+$/, "");
+  if (path.endsWith("/chat/completions")) {
+    return value;
+  }
+  parsed.pathname =
+    path.length === 0 ? "/v1/chat/completions" : `${path}/chat/completions`;
+  return parsed.toString();
 }
 
 function normalizeEndpoint(
