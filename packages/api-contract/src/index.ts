@@ -43,4 +43,5 @@ export * from "./contracts/task-create.zod.js";
 export * from "./contracts/wecom-binding.zod.js";
 export * from "./contracts/admin-ai-assist.zod.js";
 export * from "./contracts/wecom-robot.zod.js";
+export * from "./contracts/project-wecom-group.zod.js";
 export * from "./contracts/document-import.zod.js";

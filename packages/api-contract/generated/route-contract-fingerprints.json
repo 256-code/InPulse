@@ -255,6 +255,12 @@
       "fingerprint": "8d860264617a2c53fabb8791cb587772cf06b9b846e85a029f0f23916a65393b"
     }
   ],
+  "deleteProjectWecomGroup": [
+    {
+      "version": "1.0.0",
+      "fingerprint": "72844228338dc21fb6afa1850dca263cee9dfd99acee5db05d2549ee08466542"
+    }
+  ],
   "deleteRecordDraft": [
     {
       "version": "1.0.0",
@@ -585,6 +591,10 @@
     {
       "version": "1.1.0",
       "fingerprint": "21876dcc905d82acc425c919275bc9a5864a119250c7369a9cd8f4643d0c83ef"
+    },
+    {
+      "version": "1.2.0",
+      "fingerprint": "7751ee5772e2ba990cde6fe4cd7f30ed9d2801041fbbaeabae867669f58756d3"
     }
   ],
   "voidChangeRecord": [

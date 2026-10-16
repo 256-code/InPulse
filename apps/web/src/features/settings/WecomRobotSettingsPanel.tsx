@@ -61,15 +61,28 @@ export const WecomRobotSettingsPanel: React.FC<
     }
     try {
       const botProfileUrl = values.botProfileUrl.trim();
-      await save.mutateAsync({
+      const result = await save.mutateAsync({
         botId: values.botId.trim(),
         secret: secret.length === 0 ? null : secret,
         botProfileUrl: botProfileUrl.length === 0 ? null : botProfileUrl,
       });
       setValue("secret", "");
-      setSuccess(
-        "企业微信机器人配置已保存；桥接进程会在下一次轮询时自动重连新机器人。",
-      );
+      if (
+        result.revokedUserBindings !== null ||
+        result.revokedProjectGroups !== null
+      ) {
+        setSuccess(
+          "已更换机器人：解除了 " +
+            (result.revokedUserBindings ?? 0) +
+            " 个成员绑定、" +
+            (result.revokedProjectGroups ?? 0) +
+            " 个项目群绑定；相关成员与企业微信群需要重新绑定（新机器人需要先在企业微信里对话一次激活）。",
+        );
+      } else {
+        setSuccess(
+          "企业微信机器人配置已保存；桥接进程会在下一次轮询时自动重连新机器人。",
+        );
+      }
     } catch {
       // 失败详情由 save 状态统一渲染。
     }
@@ -191,7 +204,7 @@ export const WecomRobotSettingsPanel: React.FC<
               <small role="alert">{errors.botId.message}</small>
             ) : (
               <small className="form-hint">
-                在企业微信管理后台的机器人详情页复制；更换机器人时填写新机器人的值。
+                在企业微信管理后台的机器人详情页复制；更换机器人（填写新机器人的值）保存时会自动解除全部成员绑定与项目群绑定，相关成员需重新绑定。
               </small>
             )}
           </div>

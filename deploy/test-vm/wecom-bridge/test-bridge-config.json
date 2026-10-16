@@ -1,0 +1,12 @@
+{
+  "databaseUrl": "",
+  "recipients": {},
+  "forwardTypes": ["*"],
+  "commandFile": "/tmp/test-commands.txt",
+  "stateFile": "/tmp/test-state.json",
+  "pollIntervalMs": 3000,
+  "dryRun": true,
+  "maxIterations": 2,
+  "startFromId": 22142,
+  "cardActionUrl": "https://test-inpulse.libiaorobot.com/"
+}

@@ -34,6 +34,12 @@ export interface WecomRobotConfigMutationMeta {
   readonly userAgent?: string | null;
 }
 
+/** 更换机器人时同一事务解除的绑定计数（供响应展示与审计留痕）。 */
+interface WecomRobotBindingRevocation {
+  readonly revokedUserBindings: number;
+  readonly revokedProjectGroups: number;
+}
+
 const BOT_ID_MAX = 128;
 const SECRET_MAX = 256;
 
@@ -137,6 +143,30 @@ export class WecomRobotConfigService {
       botProfileUrl,
       updatedBy: meta.actorId,
     });
+
+    // ADR-078：botId 与已存值不同即「更换机器人」。企业微信智能机器人要求
+    // 成员先主动对话激活，换机器人后旧绑定必然投递失败，因此在同一事务内
+    // 解除全部 ACTIVE 绑定（个人 + 项目群），让成员重新走绑定码流程。
+    const robotChanged = current !== undefined && current.botId !== botId;
+    let revocation: WecomRobotBindingRevocation | null = null;
+    if (robotChanged) {
+      const rows = (await tx.sql`
+        SELECT revoked_user_bindings AS "revokedUserBindings",
+               revoked_project_groups AS "revokedProjectGroups"
+          FROM app.revoke_wecom_bindings_on_robot_change()
+      `) as unknown as readonly WecomRobotBindingRevocation[];
+      const counts = rows[0];
+      if (counts === undefined) {
+        throw new Error(
+          "app.revoke_wecom_bindings_on_robot_change returned no counts",
+        );
+      }
+      revocation = {
+        revokedUserBindings: counts.revokedUserBindings,
+        revokedProjectGroups: counts.revokedProjectGroups,
+      };
+    }
+
     const updated = await this.repository.find(tx);
     await this.audit.append(tx, {
       projectId: null,
@@ -149,15 +179,25 @@ export class WecomRobotConfigService {
         before: this.summary(current),
         after: this.summary(updated),
         secretChanged,
+        robotChanged,
+        revokedUserBindings: revocation?.revokedUserBindings ?? null,
+        revokedProjectGroups: revocation?.revokedProjectGroups ?? null,
       },
       requestId: meta.requestId,
       ipAddress: meta.ipAddress ?? null,
       userAgent: meta.userAgent ?? null,
     });
-    return this.toItem(updated);
+    return this.toItem(updated, revocation);
   }
 
-  private toItem(row: WecomRobotConfigRecord | undefined): WecomRobotConfig {
+  private toItem(
+    row: WecomRobotConfigRecord | undefined,
+    revocation?: WecomRobotBindingRevocation | null,
+  ): WecomRobotConfig {
+    const revocationFields = {
+      revokedUserBindings: revocation?.revokedUserBindings ?? null,
+      revokedProjectGroups: revocation?.revokedProjectGroups ?? null,
+    };
     if (row === undefined) {
       return {
         configured: false,
@@ -170,6 +210,7 @@ export class WecomRobotConfigService {
         botProfileUrl: null,
         updatedAt: null,
         updatedByName: null,
+        ...revocationFields,
       };
     }
     const failure = this.classify(row);
@@ -184,6 +225,7 @@ export class WecomRobotConfigService {
       botProfileUrl: row.botProfileUrl,
       updatedAt: row.updatedAt,
       updatedByName: row.updatedByName,
+      ...revocationFields,
     };
   }
 

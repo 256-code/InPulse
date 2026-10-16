@@ -410,6 +410,66 @@ export const permissionMatrix = [
       },
     },
   },
+  // ADR-077：项目企微群绑定。读路径对本项目全体活跃成员开放（非成员 404）；
+  // 签发绑定码与解绑是新增的组长/系统管理员专属门禁（ADR-039 例外清单）；
+  // 绑定兑换发生在桥接侧，要求发送者是项目成员或系统管理员并已绑定个人账号。
+  {
+    operationId: "getProjectWecomGroup",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen: "ADR-077：目标项目当前活跃成员（实时成员关系）",
+        deniedWith: 404,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: { kind: "allow" },
+    },
+  },
+  {
+    operationId: "createProjectWecomGroupCode",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-077：系统管理员或本项目组长可签发一次性绑定码（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与同源必填；ADR-023 allowlist securityFlow，每次调用重签并立即作废旧码",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；CSRF 与同源必填；ADR-023 allowlist securityFlow（不进入通用幂等记录）",
+        deniedWith: 403,
+      },
+    },
+  },
+  {
+    operationId: "deleteProjectWecomGroup",
+    outcomes: {
+      匿名: { kind: "deny", status: 401 },
+      活跃成员: {
+        kind: "conditional",
+        allowedWhen:
+          "ADR-077：系统管理员或本项目组长可解绑（普通成员 403 PROJECT_WECOM_GROUP_FORBIDDEN）；CSRF 与 Idempotency-Key 必填；作废待用码并把 ACTIVE 绑定置 REVOKED（不物理删除），写审计 project.wecomGroup.unbind",
+        deniedWith: 403,
+      },
+      其他项目成员: { kind: "deny", status: 404 },
+      已移除成员: { kind: "deny", status: 404 },
+      停用用户: { kind: "deny", status: 401 },
+      系统管理员: {
+        kind: "conditional",
+        allowedWhen:
+          "完整系统管理员 Session；CSRF 与 Idempotency-Key 必填；写审计 project.wecomGroup.unbind",
+        deniedWith: 403,
+      },
+    },
+  },
   {
     operationId: "getSearch",
     outcomes: {

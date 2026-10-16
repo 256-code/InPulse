@@ -65,6 +65,24 @@ export const wecomRobotConfigSchema = z
       .max(200)
       .nullable()
       .describe("最近一次保存人的显示名；用于管理页核对变更来源"),
+    revokedUserBindings: z
+      .number()
+      .int()
+      .min(0)
+      .max(2147483647)
+      .nullable()
+      .describe(
+        "本次保存是否因更换机器人触发解绑：未更换为 null，更换时为本事务解除的个人绑定数（可能为 0）",
+      ),
+    revokedProjectGroups: z
+      .number()
+      .int()
+      .min(0)
+      .max(2147483647)
+      .nullable()
+      .describe(
+        "本次保存是否因更换机器人触发解绑：未更换为 null，更换时为本事务解除的项目群绑定数（可能为 0）",
+      ),
   })
   .strict()
   .meta({ id: "WecomRobotConfig" });

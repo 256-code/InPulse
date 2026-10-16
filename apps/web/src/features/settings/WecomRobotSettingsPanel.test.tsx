@@ -23,6 +23,8 @@ const unconfigured: WecomRobotConfig = {
   botProfileUrl: null,
   updatedAt: null,
   updatedByName: null,
+  revokedUserBindings: null,
+  revokedProjectGroups: null,
 };
 
 const configured: WecomRobotConfig = {
@@ -37,11 +39,14 @@ const configured: WecomRobotConfig = {
     "https://work.weixin.qq.com/wework_admin/common/openBotProfile/test-only",
   updatedAt: "2026-10-13T06:00:00.000Z",
   updatedByName: "邵晨宇",
+  revokedUserBindings: null,
+  revokedProjectGroups: null,
 };
 
 function mount(options: {
   readonly configs: readonly WecomRobotConfig[];
   readonly configError?: ApiError | undefined;
+  readonly updateResult?: WecomRobotConfig | undefined;
 }) {
   let call = 0;
   const getWecomRobotConfig = vi.fn().mockImplementation(async () => {
@@ -50,7 +55,9 @@ function mount(options: {
     call += 1;
     return config;
   });
-  const updateWecomRobotConfig = vi.fn().mockResolvedValue(configured);
+  const updateWecomRobotConfig = vi
+    .fn()
+    .mockResolvedValue(options.updateResult ?? configured);
   const issueCsrfToken = vi
     .fn()
     .mockResolvedValue({ csrfToken: "a".repeat(43) });
@@ -208,5 +215,32 @@ describe("WecomRobotSettingsPanel（ADR-070）", () => {
     mount({ configs: [], configError: new ApiError(500, {}) });
     expect(await screen.findByText(/无法读取配置/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("更换机器人后展示解绑计数提示（ADR-078）", async () => {
+    const { updateWecomRobotConfig } = mount({
+      configs: [configured],
+      updateResult: {
+        ...configured,
+        botId: "aib-new-bot",
+        revokedUserBindings: 2,
+        revokedProjectGroups: 1,
+      },
+    });
+    await screen.findByText(/已配置，桥接可用/);
+
+    fireEvent.change(screen.getByLabelText("机器人 botId"), {
+      target: { value: "aib-new-bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() =>
+      expect(updateWecomRobotConfig).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      await screen.findByText(
+        /已更换机器人：解除了 2 个成员绑定、1 个项目群绑定/,
+      ),
+    ).toBeInTheDocument();
   });
 });

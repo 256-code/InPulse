@@ -11,6 +11,7 @@ import {
 import { useProjectTier } from "@features/common/project-tier-context";
 import { NotificationBell } from "@features/notifications/NotificationBell";
 import { WecomBindingModal } from "@features/settings/WecomBindingModal";
+import { WecomBindingPromptModal } from "@features/settings/WecomBindingPromptModal";
 import { ProjectTree } from "@features/project-tree/ProjectTree";
 import {
   preloadRoutePath,
@@ -548,6 +549,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <WecomBindingModal
         open={wecomOpen}
         onClose={() => setWecomOpen(false)}
+        {...(notificationClient ? { client: notificationClient } : {})}
+      />
+      {/* ADR-079：未绑定企业微信的主动提醒；「去绑定」复用上面的绑定弹窗。 */}
+      <WecomBindingPromptModal
+        enabled={status === "authenticated" && !isLoggingOut}
+        userId={user?.id ?? null}
+        onGoBind={() => setWecomOpen(true)}
         {...(notificationClient ? { client: notificationClient } : {})}
       />
       <CommandPalette

@@ -10,10 +10,11 @@ import { ProjectMembersQueryPort } from "./project-members-query.port.js";
 /**
  * ADR-039：项目内管理操作（成员增删、项目状态变更）对全体活跃成员开放，
  * `LEADER` 只是身份标识，不再单独授予管理权；
- * 例外只有三处：ADR-053 组长可以转移组长身份（`roleSetterRole`），
+ * 例外清单固定为：ADR-053 组长可以转移组长身份（`roleSetterRole`），
  * ADR-049/ADR-062 只有组长与系统管理员可以删除项目（`projectDeleterRole`，
  * 删除自 ADR-062 起是物理且不可撤销的），ADR-059 只有组长与系统管理员可以
- * 删除模块与功能（`scopeDeleterRole`）。
+ * 删除模块与功能（`scopeDeleterRole`），ADR-077 只有组长与系统管理员可以
+ * 签发/解绑项目企微群绑定（`wecomGroupBinderRole`）。
  */
 export type ProjectManageRole = "SYSTEM_ADMIN" | "MEMBER" | "LEADER";
 
@@ -117,5 +118,23 @@ export class ProjectRoleGateService {
     projectId: number,
   ): Promise<"SYSTEM_ADMIN" | "LEADER" | "MEMBER" | "NOT_MEMBER"> {
     return this.scopeDeleterRole(tx, actorUserId, projectId);
+  }
+
+  /**
+   * ADR-077 项目企微群绑定门禁：只有系统管理员与本项目组长可以签发一次性
+   * 绑定码或解绑（普通成员 403 `PROJECT_WECOM_GROUP_FORBIDDEN`，非成员
+   * 404）。与删除门禁同源但单独成方法，避免绑定权限被未来的「成员可管理」
+   * 改动顺带放大；解绑幂等重放复用同一方法，因此重放时组长被转移、成员被
+   * 移除或项目已删除一律拒绝，系统管理员保持放行。
+   */
+  async wecomGroupBinderRole(
+    tx: TransactionContext,
+    actorUserId: number,
+    projectId: number,
+  ): Promise<"SYSTEM_ADMIN" | "LEADER" | "MEMBER" | "NOT_MEMBER"> {
+    const role = await this.manageRole(tx, actorUserId, projectId);
+    if (role === "SYSTEM_ADMIN" || role === "LEADER") return role;
+    if (role === "NOT_MEMBER") return "NOT_MEMBER";
+    return "MEMBER";
   }
 }

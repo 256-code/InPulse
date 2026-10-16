@@ -90,6 +90,9 @@
 | [ADR-074](ADR-074.md) | Accepted | api 容器增加仅出站 `egress` 网络（Casdoor SSO 与 AI 辅助的外联前提，测试环境拓扑并入仓库基线） |
 | [ADR-075](ADR-075.md) | Accepted | 空库首个 SSO 登录账号自动成为系统管理员（修订 ADR-032 决策 5 的 JIT 默认权限：判定以 `app.users` 是否有行为准、事务级 advisory lock 串行化、审计 payload 增加 `grantedAdmin`）；无新增路由 / 迁移 / 依赖 / 权限矩阵变化 |
 | [ADR-076](ADR-076.md) | Accepted | 迭代记录「生成总结」内嵌 AI 改写：新增 `assistRecordSummary`（`POST /api/v1/record-summaries/assist`）——不是对话式，而是「一句话要求 → 生成 → 生成后逐段手改」（改过的段落橙点 + 单句回退 + 全量撤销）；事实由前端当前范围的确定性正文给出，服务端只转发一次改写、不查库不写库、不写审计、不解析筛选意图、不建会话状态；复用 ADR-067 / ADR-068 的配置与密钥通道（`AI_ASSIST_ENABLED` 仍是急停）；走纯校验 allowlist（csrf / idempotency none）、路由 115 → 116、无迁移、无新依赖、无权限变化 |
+| [ADR-077](ADR-077.md) | Accepted | 企业微信项目群绑定（项目 ↔ 群，第一批）：新增 `getProjectWecomGroup` / `createProjectWecomGroupCode` / `deleteProjectWecomGroup` 三条项目级路由（116 → 119），组长 + 系统管理员签发一次性绑定码 / 解绑（`wecomGroupBinderRole`，ADR-039 例外清单扩展；签发加入 ADR-023 allowlist securityFlow 第七条）；迁移 `0044`（`app.project_wecom_binding_codes` + `app.project_wecom_groups` 一项目一群 / 一群一项目 + `app.wecom_group_deliveries` 投递去重表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08），群推送与个人单聊并存、默认投递「任务派发 + 全部 MEMBER 可见动态」；长连接桥接 `chat_type:2` 投递改造为第二批 |
+| [ADR-078](ADR-078.md) | Accepted | 更换机器人（botId 变化）时自动解除全部企业微信绑定：`updateWecomRobotConfig` 在同一事务内经迁移 `0045` 新增的 `SECURITY DEFINER` 函数 `app.revoke_wecom_bindings_on_robot_change()` 把 `app.user_wecom_bindings` 与 `app.project_wecom_groups` 的 ACTIVE 行全部置 REVOKED（保留历史、计数返回、PUBLIC 回收与部署断言），响应新增可空 `revokedUserBindings` / `revokedProjectGroups`（未更换为 null、更换为计数含 0、GET 恒 null），幂等契约 1.1.0 → 1.2.0，审计增加 `robotChanged` 与两计数；仅轮换 Secret / 修改机器人链接不触发；不改桥接、路由数不变（119） |
+| [ADR-079](ADR-079.md) | Accepted | 未绑定企业微信的提醒弹窗（忽略 / 不再提醒）与机器人可用标记：`WecomBindingStatus` 新增 `robotConfigured`（机器人是否已配置，未配置不提示绑定）；已登录且 UNBOUND 时弹「绑定企业微信，及时收到任务提醒」——「去绑定」打开既有绑定弹窗、忽略按会话记 sessionStorage、不再提醒按账号记 localStorage（均只存浏览器本地，不入库不写审计）；PENDING / BOUND / 未配置 / 读取失败静默不弹；无新增路由（119）、无迁移 |
 
 ## 关联基线
 

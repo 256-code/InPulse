@@ -30,6 +30,11 @@ export const wecomBindingStatusSchema = z
       .describe(
         "管理员配置的机器人资料链接；未配置为 null；用于指引成员在企业微信中打开机器人",
       ),
+    robotConfigured: z
+      .boolean()
+      .describe(
+        "管理员是否已配置企微机器人（单行配置表是否存在）；未配置时绑定不可用，前端不得提示绑定（ADR-079）",
+      ),
   })
   .strict()
   .meta({ id: "WecomBindingStatus" });
@@ -73,7 +78,8 @@ export type WecomBindingReplayContext = z.infer<
 export const wecomBindingSchemas = {
   WecomBindingStatus: {
     schema: wecomBindingStatusSchema,
-    summary: "当前用户的企微机器人绑定状态、待用码过期时间与机器人资料链接",
+    summary:
+      "当前用户的企微机器人绑定状态、待用码过期时间、机器人资料链接与机器人是否已配置",
     sensitiveFieldPaths: [],
   },
   WecomBindingCode: {

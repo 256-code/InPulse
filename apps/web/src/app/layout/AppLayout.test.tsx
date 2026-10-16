@@ -1,4 +1,5 @@
 import React from "react";
+import { ConfigProvider } from "antd";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,6 +12,10 @@ import {
   type AuthStatus,
 } from "@features/auth/auth-context";
 import { RequireAuth } from "../auth/auth-guard";
+import {
+  WECOM_BINDING_PROMPT_SESSION_KEY,
+  WECOM_BINDING_PROMPT_STORAGE_KEY,
+} from "@features/settings/wecom-binding-prompt";
 import { AppLayout } from "./AppLayout";
 
 function CurrentLocationProbe() {
@@ -44,6 +49,13 @@ describe("AppLayout", () => {
     }),
     issueCsrfToken: vi.fn().mockResolvedValue({ csrfToken: "csrf-1" }),
     readNotification: vi.fn().mockResolvedValue(undefined),
+    getWecomBinding: vi.fn().mockResolvedValue({
+      state: "BOUND",
+      boundAt: "2026-10-13T02:00:00.000Z",
+      codeExpiresAt: null,
+      botProfileUrl: null,
+      robotConfigured: true,
+    }),
   } as unknown as InpulseApiClient;
 
   function renderLayout(
@@ -52,31 +64,33 @@ describe("AppLayout", () => {
     authValue: Partial<AuthContextValue> = {},
   ) {
     return render(
-      <QueryClientProvider
-        client={
-          new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          })
-        }
-      >
-        <AuthStateProvider
-          value={{
-            status: "authenticated",
-            user: {
-              id: 1,
-              loginName: "developer",
-              name: "开发者 C",
-              email: null,
-              avatarUrl: null,
-              isAdmin,
-              status: "ACTIVE",
-            },
-            ...authValue,
-          }}
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <QueryClientProvider
+          client={
+            new QueryClient({
+              defaultOptions: { queries: { retry: false } },
+            })
+          }
         >
-          {ui}
-        </AuthStateProvider>
-      </QueryClientProvider>,
+          <AuthStateProvider
+            value={{
+              status: "authenticated",
+              user: {
+                id: 1,
+                loginName: "developer",
+                name: "开发者 C",
+                email: null,
+                avatarUrl: null,
+                isAdmin,
+                status: "ACTIVE",
+              },
+              ...authValue,
+            }}
+          >
+            {ui}
+          </AuthStateProvider>
+        </QueryClientProvider>
+      </ConfigProvider>,
     );
   }
 
@@ -504,6 +518,120 @@ describe("AppLayout", () => {
     expect(document.querySelector(".project-tree")).toBeNull();
     expect(screen.queryByText("当前项目")).not.toBeInTheDocument();
   });
+  describe("企业微信绑定提醒（ADR-079）", () => {
+    function unboundClient(): {
+      readonly client: InpulseApiClient;
+      readonly getWecomBinding: ReturnType<typeof vi.fn>;
+    } {
+      const getWecomBinding = vi.fn().mockResolvedValue({
+        state: "UNBOUND",
+        boundAt: null,
+        codeExpiresAt: null,
+        botProfileUrl: null,
+        robotConfigured: true,
+      });
+      return {
+        client: {
+          ...notificationClient,
+          getWecomBinding,
+        } as unknown as InpulseApiClient,
+        getWecomBinding,
+      };
+    }
+
+    /** 断言提醒弹窗已关闭：antd 关闭后保留隐藏 DOM，按可见性判断。 */
+    async function expectPromptClosed(): Promise<void> {
+      await waitFor(() => {
+        const title = screen.queryByText("绑定企业微信，及时收到任务提醒");
+        if (title !== null) {
+          expect(title).not.toBeVisible();
+        }
+      });
+    }
+
+    it("未绑定且机器人已配置时弹出提醒，点击「去绑定」打开绑定弹窗", async () => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      const user = userEvent.setup();
+      const { client } = unboundClient();
+      renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={client} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(
+        await screen.findByText("绑定企业微信，及时收到任务提醒"),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "去绑定" }));
+
+      // 提醒弹窗关闭后打开账户菜单里的绑定弹窗（同一 WecomBindingModal）。
+      await expectPromptClosed();
+      expect(
+        await screen.findByText("绑定后即可在手机上收到提醒"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "生成绑定码" }),
+      ).toBeInTheDocument();
+      expect(
+        JSON.parse(
+          window.sessionStorage.getItem(WECOM_BINDING_PROMPT_SESSION_KEY) ??
+            "[]",
+        ),
+      ).toEqual([1]);
+    });
+
+    it("选择「不再提醒」后按账号持久记录，重新挂载不再弹也不请求", async () => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      const user = userEvent.setup();
+      const { client } = unboundClient();
+      const view = renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={client} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await screen.findByText("绑定企业微信，及时收到任务提醒");
+      await user.click(screen.getByRole("button", { name: "不再提醒" }));
+      await expectPromptClosed();
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(WECOM_BINDING_PROMPT_STORAGE_KEY) ?? "[]",
+        ),
+      ).toEqual([1]);
+
+      // 重新挂载（模拟刷新）：持久关闭后不再弹、也不再请求绑定状态。
+      view.unmount();
+      const { client: remountClient, getWecomBinding } = unboundClient();
+      renderLayout(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={<AppLayout notificationClient={remountClient} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(getWecomBinding).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("绑定企业微信，及时收到任务提醒"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("退出登录", () => {
     it("退出登录后回到登录页而不是直接跳转统一身份认证", async () => {
       const user = userEvent.setup();

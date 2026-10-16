@@ -6144,7 +6144,7 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 
 ## 企业微信机器人绑定（ADR-069，阶段一）
 
-用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。2026-10-13 扩展（迁移 `0043`，ADR-070）：绑定状态随机器人配置回传 `botProfileUrl`，弹窗（含待用码状态）展示机器人链接并提示去企业微信打开。
+用户需求（原话要点）：「我想通过企业微信的智能机器人和这个项目的通知接上」「当任务被指派到某个人，那个人会收到消息」「现在在这里做个绑定企微机器人的功能」。本批落地阶段一（自助绑定）；投递（长连接桥接推送站内通知）为阶段二、未实现。2026-10-13 扩展（迁移 `0043`，ADR-070）：绑定状态随机器人配置回传 `botProfileUrl`，弹窗（含待用码状态）展示机器人链接并提示去企业微信打开。2026-10-15 扩展（ADR-079）：绑定状态新增 `robotConfigured`（机器人是否已配置）；已登录且未绑定（UNBOUND）时弹「绑定提醒」——去绑定（打开绑定弹窗）/ 忽略（本次浏览器会话）/ 不再提醒（按账号持久），都只存浏览器本地；机器人未配置、PENDING、BOUND 或读取失败时一律不弹。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6158,13 +6158,16 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-BIND-UI-001 | Web 单测 | 弹窗三态与生成 | UNBOUND 引导；点「生成绑定码」只签发 CSRF（携带 `x-csrf-token`、无幂等 Key）、展示一次性明文码；生成后失效重取第二次 GET 为 BOUND 时自动「已绑定」；PENDING 无明文时提示有效期并引导重新生成；读取失败错误提示且生成按钮禁用 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-002 | Web 单测 | 解绑与复制 | 已绑定显示绑定时间；Popconfirm 确认后调用 DELETE（携带 `x-csrf-token` 与 `wecom-unbind-` 前缀幂等 Key），成功后回到未绑定视图；「复制绑定码」写入剪贴板并提示 | 本地通过（2026-10-13） |
 | WECOM-BIND-UI-003 | Web 单测 | 弹窗机器人链接展示与复制 | 服务端下发链接时展示链接与「用上面的链接在企业微信中打开机器人；」步骤文案，「复制机器人链接」写入剪贴板并提示；待用码存在（明文不在客户端）时同样展示链接块；未配置链接时回落原引导且不渲染链接块 | 本地通过（2026-10-13） |
+| WECOM-BIND-API-007 | 真实 PostgreSQL 集成 | 机器人可用标记（ADR-079） | 配置表为空时 `robotConfigured=false`（UNBOUND 精确响应体含该字段）；管理员配置机器人后同接口返回 `robotConfigured=true`（配置行经 bootstrap 连接确定性清空） | 本地通过（2026-10-15） |
+| WECOM-BIND-UI-004 | Web 单测 | 未绑定提醒弹窗（ADR-079） | UNBOUND 且 `robotConfigured=true` 才弹「绑定企业微信，及时收到任务提醒」；`robotConfigured=false` / BOUND / PENDING / 读取失败静默不弹；「忽略」写 sessionStorage、「不再提醒」写 localStorage（均按用户 ID）、「去绑定」回调且按忽略处理；未登录 / 已忽略 / 已不再提醒都不发起请求；`AppLayout` 集成：弹窗出现、「去绑定」打开绑定弹窗、「不再提醒」持久后重新挂载不弹不请求 | 本地通过（2026-10-15） |
+| WECOM-BIND-GATE-002 | 静态门禁 | ADR-079 契约 / 门禁 | `contract:generate` 6 产物、`contract:drift` 无漂移、`contract:validate` 119 条、`permissions:check` 119 / 119、`check:frontend:boundaries`、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-15） |
 | WECOM-BIND-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 113 条、`contract:drift`（6 产物）、`permissions:check` 113 / 113、`db:migrations:check` 40 个、`lint` / `typecheck` / `format:check` / `check:docs` 通过（完整清单见开发日志） | 本地通过（2026-10-13） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 阶段二投递（长连接桥接按绑定关系推送、失败重试与可观测性）未实现、未测试；③ 未做浏览器 E2E（绑定需真实企微侧发送绑定码，E2E 只覆盖到 Web 单测；如需 E2E 需引入企微长连接 stub）。
 
 ## 企业微信机器人配置（ADR-070）
 
-用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。2026-10-13 扩展（迁移 `0043`）：管理员可再填写「机器人链接」（`bot_profile_url`），成员「绑定企业微信」弹窗（含待用码状态）展示该链接并提示去企业微信打开机器人。
+用户需求（原话要点）：「给管理员一个口子页面管理机器人，然后填写需要的信息来更改机器人」「如果后面更换机器人了需要有哪些更改」。管理员在「成员与设置 → 企业微信机器人」在线保存 botId / secret 更换机器人；凭据密文落库（AES-256-GCM，主密钥只从 `/run/secrets/wecom_robot_encryption_key` 读取）；桥接侧读取解密与投递改造为下一批、未实现。2026-10-13 扩展（迁移 `0043`）：管理员可再填写「机器人链接」（`bot_profile_url`），成员「绑定企业微信」弹窗（含待用码状态）展示该链接并提示去企业微信打开机器人。2026-10-15 扩展（ADR-078，迁移 `0045`）：更换机器人（botId 变化）时同一事务解除全部个人绑定与项目群绑定并在保存响应返回解绑计数（未更换为 null、更换为计数含 0）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6178,7 +6181,11 @@ PGroonga 单字可行性实测（演示库 `app`，`search_projection` 435 行�
 | WECOM-ROBOT-UNIT-001 | API 单测 | keyring 解析与加解密 | 多版本解析（注释 / 空行 / 空白）、fail closed（非法版本 / 非法行 / 短键 / 重复版本 / 空 / 缺当前版本）、AES-256-GCM 往返（nonce‖tag‖body）、篡改与换版本解密被拒、过短密文、`/run/secrets` 路径防线、尾 4 位提示 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UI-001 | Web 单测 | 面板三态与提交 | 未配置提示 + 首次缺 Secret 本地拦截；首次保存先签发 CSRF 再携带一次性幂等 Key；已配置回填 botId 与尾号、留空提交 secret=null；主密钥不可用文案；读取失败错误 + 重试按钮 | 本地通过（2026-10-13） |
 | WECOM-ROBOT-UI-002 | Web 单测 | 机器人链接输入与校验 | 已配置回填链接；清空后提交 `botProfileUrl: null`；非 https 本地校验拦截提交并提示 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-API-006 | 真实 PostgreSQL 集成 | 更换机器人自动解绑（ADR-078） | 换 botId：响应返回 `revokedUserBindings` / `revokedProjectGroups` 实际计数，个人绑定与项目群绑定全部 REVOKED（`revoked_at` 非空、`row_version` +1），无绑定时返回 0 / 0；同 Key 重放返回原响应且不重复解绑；GET 恒 null；审计 payload 含 `robotChanged:true` 与两计数 | 本地通过（2026-10-15） |
+| WECOM-ROBOT-API-007 | 真实 PostgreSQL 集成 | 仅换 Secret 不解绑（ADR-078） | 同 botId 轮换 Secret：响应计数保持 null，绑定仍 ACTIVE | 本地通过（2026-10-15） |
+| WECOM-ROBOT-UI-003 | Web 单测 | 更换机器人提示（ADR-078） | 保存响应含解绑计数时展示「已更换机器人：解除了 N 个成员绑定、M 个项目群绑定」提示；计数为 null 时维持原成功文案 | 本地通过（2026-10-15） |
 | WECOM-ROBOT-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 文档 | `contract:validate` 115 条、`contract:drift`（6 产物）、`permissions:check` 115 / 115、契约单测 102 例、`db:migrations:check` 42 个；`lint` / `typecheck` / `format:check` / `check:docs` 见开发日志 | 本地通过（2026-10-13） |
+| WECOM-ROBOT-GATE-002 | 静态门禁 | ADR-078 契约 / 迁移 / 权限 | `contract:validate` 119 条、`contract:drift`（6 产物）、`permissions:check` 119 / 119、契约单测 102 例、`db:migrations:check` 44 个（含 0045）；`lint` / `format:check` / `typecheck` / `check:docs` / `check:deps` / `check:secrets` 通过 | 本地通过（2026-10-15） |
 
 未运行 / 已知偏差：① GitHub Actions 未运行（`test` 分支不触发）；② 桥接侧读取数据库凭据与配置变化重连、阶段二投递未实现、未测试；③ 未做机器人配置页浏览器 E2E。
 ## 文档导入工作台（ADR-071，用户指示，2026-10-13 本地落库）
@@ -6560,9 +6567,9 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 未运行 / 已知偏差（本批）：① 星标不含后端：跨设备 / 跨浏览器不同步，`localStorage` 被清即丢失；跨设备需要新表 + `listProjects` 契约（当前 `query: "none"`）+ 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 排序用稳定 `sort`，点亮后卡片落到星标组内它原本的相对位置（不会顶到组内第一）。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）；⑤ 整链 `pnpm check` 未跑，本批实际执行的门禁见开发日志第一百九十五条。
 
-## 站点图标 favicon 接入 + E2E 夹具清理补齐（2026-10-15 本地落库，第一百九十六、一百九十七条）
+## 站点图标 favicon 接入 + E2E 夹具清理补齐（2026-10-15 本地落库，第二百零五、二百零六条）
 
-定案见开发日志第一百九十六、一百九十七条：① 站点此前没有任何 favicon，本次把用户提供的 iV 图标（512×512，圆角矩形外为纯黑且整图不透明）按「黑角=透明」反预乘处理后落到 `apps/web/public/favicon.png`，并在 `apps/web/index.html` 加 `<link rel="icon" type="image/png" href="/favicon.png" />`；不改登录页 / 侧栏的既有三个 PNG，不改接口 / 契约 / 迁移 / 权限（仍 116 条路由 / 42 个迁移）。② `apps/e2e/helpers/fixture-cleanup.ts` 补齐 4 张对 `app.users` 为 RESTRICT / NO ACTION 引用的表的清理（`wecom_robot_config.updated_by`、`ai_assist_settings.updated_by`、`user_wecom_bindings.user_id`、`wecom_binding_codes.user_id`）并增加「引用不存在的用户」孤儿扫描；清理事务跑在 replica 模式下不拦外键，漏删会让 `apps/ops` 逻辑备份恢复演练在重建 RESTRICT 约束时失败。
+定案见开发日志第二百零五、二百零六条：① 站点此前没有任何 favicon，本次把用户提供的 iV 图标（512×512，圆角矩形外为纯黑且整图不透明）按「黑角=透明」反预乘处理后落到 `apps/web/public/favicon.png`，并在 `apps/web/index.html` 加 `<link rel="icon" type="image/png" href="/favicon.png" />`；不改登录页 / 侧栏的既有三个 PNG，不改接口 / 契约 / 迁移 / 权限（仍 116 条路由 / 42 个迁移）。② `apps/e2e/helpers/fixture-cleanup.ts` 补齐 4 张对 `app.users` 为 RESTRICT / NO ACTION 引用的表的清理（`wecom_robot_config.updated_by`、`ai_assist_settings.updated_by`、`user_wecom_bindings.user_id`、`wecom_binding_codes.user_id`）并增加「引用不存在的用户」孤儿扫描；清理事务跑在 replica 模式下不拦外键，漏删会让 `apps/ops` 逻辑备份恢复演练在重建 RESTRICT 约束时失败。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6570,3 +6577,25 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | WEB-FAVICON-001 | 本地核对 + 构建产物 | favicon 接入且改动面仅限黑角 | 处理后四角 `alpha=0`、内部 `(16,37,62,255)`、中心 `(254,194,5,255)` 与源图逐值相同，透明占比 2.91% 等于源图黑角占比；`GET /favicon.png` → 200 / image/png / 49004 bytes，dev 返回 HTML 与页面 DOM 均含 `link[rel=icon]=/favicon.png`；`pnpm --filter @inpulse/web build` 通过且 `dist/favicon.png` 与带 link 的 `dist/index.html` 落盘；`prettier --check` 通过 | 本地通过（2026-10-15，无自动化断言） |
 
 未运行 / 已知偏差（本批）：① favicon 属纯静态资源与 `<head>` 标签，未新增自动化用例；2026-10-15 的 Playwright 86 例是在夹具补丁之后、favicon 改动之前跑的（6.7 分钟），favicon 改动后又于 2026-10-16 复跑一次 `pnpm test:e2e:local` **86 例通过（6.6 分钟）**，随后 `pnpm test:integration:local` 全绿（database 2 文件 27 例、apps/ops 2 文件 7 例、apps/api 62 文件 597 例），跑完查库 `app.users` 0 行且四张表行数与悬空计数全为 0。② 夹具清理的根因是「夹具写入 + 后续删夹具用户」组合：日后新增引用 `app.users` 且非 CASCADE 的表必须同步进清理清单，按 `pg_constraint` 动态生成覆盖列表属更大改造，未做。③ 生产镜像构建与 Trivy 扫描未执行；④ GitHub Actions 未执行（`test` 分支不触发工作流）。
+
+## 项目企微群绑定（ADR-077，第一批）
+
+需求原话要点：「机器人能做到项目和群聊绑定吗，就是项目里面有变动或者任务派发就发送到对应项目群聊里」「项目组长 + 系统管理员生成绑定码/解绑，先默认发『任务派发 + 全部 MEMBER 可见动态』，群推送与现有个人单聊并存，一个项目一个群、一个群一个项目」。本批落库迁移 `0044`（三张表 + `SECURITY DEFINER` 兑换函数 `app.redeem_project_wecom_binding_code`，PWG01–PWG08）与三条项目级路由（116 → 119）；长连接桥接的 `chat_type:2` 投递改造为第二批、未实现，本批不产生任何群投递。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| WECOM-GROUP-API-001 | 真实 PostgreSQL 集成（真实 HTTP） | 三态与读取权限 | 匿名 GET 401；非成员 / 已移除成员 404；活跃成员与组长 200 且 `Cache-Control: no-store`；普通成员签发 403 `PROJECT_WECOM_GROUP_FORBIDDEN`、非成员签发 404、组长签发 201 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-002 | 真实 PostgreSQL 集成 | 签发与哈希 | 码匹配 `^[0-9A-HJKMNP-TV-Z]{4}(-...){3}$`；库内只有一行且 `code_hash` 与明文 SHA-256 逐字节相等；GET 转 PENDING 且 `codeExpiresAt` 一致；重新签发返回新码并立即作废旧码（旧码兑换 PWG01） | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-003 | 真实 PostgreSQL 集成 | 兑换与同群幂等 | 成员发送者兑换成功返回 `project_id` / `project_name` / `rebound=false`，GET 转 BOUND、`boundByName` 为发送者姓名；同码重复兑换 PWG02；重签后在同一群发送幂等成功、不产生新绑定行 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-004 | 真实 PostgreSQL 集成 | 换绑与群唯一性 | 同群绑定第二个项目 PWG05；换绑返回 `rebound=true`、旧行 REVOKED、新行 ACTIVE；释放后的群可被另一个项目绑定 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-005 | 真实 PostgreSQL 集成 | 兑换边界与管理员豁免 | 无个人绑定 PWG03；有个人绑定但非成员 PWG04；停用用户 PWG03（不产生绑定）；过期码 PWG06；无效码 PWG01；非法 `chatid` PWG07；系统管理员非成员也可完成绑定 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-006 | 真实 PostgreSQL 集成 | 解绑与幂等重放 | DELETE 204、绑定转 REVOKED、GET 回 UNBOUND；解绑同一事务作废待用码（兑换 PWG02）；`audit_logs` 出现 `project.wecomGroup.unbind`（actor / target 正确）；同 Key 重放 204 | 本地通过（2026-10-15） |
+| WECOM-GROUP-API-007 | 真实 PostgreSQL 集成 | 解绑门禁与重放复核 | 普通成员 403、非成员 404、缺 CSRF 头 422、格式合法未知 Token 401、缺 Idempotency-Key 400；组长被转移降级为普通成员后同 Key 重放 403（实时成员关系复核） | 本地通过（2026-10-15） |
+| WECOM-GROUP-DB-001 | 真实 PostgreSQL 集成 | 最小授权探针 | `app_runtime` 对三张表 DELETE 42501、不能 `SET ROLE app_owner`；`app_backup` 只读（UPDATE 42501）；迁移内 `DO $$` 部署断言随 0044 通过；database 集成「已应用迁移清单」含 0044 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-001 | Web 单测 | 未绑定只读与引导 | 普通成员见三步引导（拉群 / @机器人 / 请组长或管理员生成）与只读提示，无「生成绑定码」按钮 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-002 | Web 单测 | 签发与倒计时 | 组长点「生成绑定码」只签发 CSRF（`x-csrf-token`、无幂等 Key），展示一次性明文码、剩余有效时间与「先让群里任意成员 @机器人」提示 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-003 | Web 单测 | 已绑定与解绑 | 展示绑定时间 / 操作人 / 桥接侧最近投递失败；Popconfirm 确认（`确认解绑`）后调用 DELETE（`x-csrf-token` + `pwg-unbind-` 前缀幂等 Key），成功后回到未绑定视图 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-004 | Web 单测 | 普通成员只读 | 已绑定状态普通成员看不到解绑与重新生成按钮 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-005 | Web 单测 | 待用码无明文 | 客户端没有明文时展示「已有一个待用绑定码」与有效期，组长可见「重新生成绑定码」 | 本地通过（2026-10-15） |
+| WECOM-GROUP-UI-006 | Web 单测 | 复制 | 「复制机器人链接」与「复制绑定码」写入剪贴板（后者写入一次性明文码） | 本地通过（2026-10-15） |
+| WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 119 条操作 / 119 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |

@@ -29,6 +29,7 @@ import {
   useProjectMembers,
 } from "./project-member-query";
 import { orderMembersLeaderFirst } from "./project-member-order";
+import { ProjectWecomGroupCard } from "./ProjectWecomGroupCard";
 import { useProjects } from "./project-query";
 import { CalmSkeleton } from "@features/common/components/CalmSkeleton";
 
@@ -323,6 +324,13 @@ export const ProjectMembersPageView: React.FC<ProjectMembersPageViewProps> = ({
           title={success}
         />
       ) : null}
+
+      {/* ADR-077：组长 / 系统管理员可签发绑定码与解绑，普通成员只读。 */}
+      <ProjectWecomGroupCard
+        projectId={projectId}
+        canManage={isSystemAdmin || viewerRole === "LEADER"}
+        client={client}
+      />
 
       {query.isPending ? (
         <CalmSkeleton variant="list" rows={4} label="正在加载项目成员" />
