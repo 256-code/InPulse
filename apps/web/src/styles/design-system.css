@@ -2149,6 +2149,11 @@ td small {
   .settings-layout {
     grid-template-columns: 1fr;
   }
+  /* 成员与角色标题带内含本地搜索框（2026-10-16）：窄屏下允许换行，搜索框整行不挤压标题。 */
+  .settings-panel .calm-section-title {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
   .settings-nav {
     flex-direction: row;
     overflow-x: auto;

@@ -68,6 +68,7 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab ?? "members",
   );
+  const [memberSearch, setMemberSearch] = useState("");
   const submitting = useRef(false);
   const {
     control,
@@ -223,6 +224,18 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
     return [...items].sort((left, right) => rank(left) - rank(right));
   }, [query.data, currentUserId]);
 
+  // 本地搜索（2026-10-16 用户指示）：按姓名、登录名或邮箱筛选当前成员列表，不走全局搜索。
+  const memberKeyword = memberSearch.trim().toLocaleLowerCase();
+  const visibleMembers =
+    memberKeyword === ""
+      ? members
+      : members.filter(
+          (user) =>
+            user.name.toLocaleLowerCase().includes(memberKeyword) ||
+            user.loginName.toLocaleLowerCase().includes(memberKeyword) ||
+            (user.email ?? "").toLocaleLowerCase().includes(memberKeyword),
+        );
+
   return (
     <>
       <div className="page-header">
@@ -311,7 +324,19 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
               hint={
                 query.data ? `共 ${members.length} 位成员` : "正在加载成员列表"
               }
-            />
+            >
+              {members.length > 0 ? (
+                <div className="task-search">
+                  <InpulseIcon name="search" size={15} />
+                  <input
+                    aria-label="搜索成员"
+                    placeholder="搜索姓名、登录名或邮箱"
+                    value={memberSearch}
+                    onChange={(event) => setMemberSearch(event.target.value)}
+                  />
+                </div>
+              ) : null}
+            </CalmSectionTitle>
 
             {success ? (
               <div className="permission-note note-success" role="status">
@@ -341,9 +366,22 @@ export const AdminUsersPageView: React.FC<AdminUsersPageViewProps> = ({
                 title="暂无用户"
                 description="账号由统一身份认证在首次登录时自动创建，无需在此新增。"
               />
+            ) : !visibleMembers.length ? (
+              <CalmEmptyState
+                icon="search"
+                title="没有匹配的成员"
+                description="调整关键词后重试，或清空搜索查看全部成员。"
+              >
+                <Button
+                  className="secondary-button"
+                  onClick={() => setMemberSearch("")}
+                >
+                  清空搜索
+                </Button>
+              </CalmEmptyState>
             ) : (
               <div className="member-list">
-                {members.map((user) => (
+                {visibleMembers.map((user) => (
                   <div className="member-row" key={user.id}>
                     <span className="person-avatar">
                       {user.name.trim().charAt(0) || "成"}
