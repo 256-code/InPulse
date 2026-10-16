@@ -717,7 +717,8 @@ export const schemaRegistry = {
   },
   UserDirectoryItem: {
     schema: userDirectoryItemSchema,
-    summary: "用户目录公开条目，用于创建项目时选择初始成员",
+    summary:
+      "用户目录公开条目（含组织归属），用于创建项目时按组织或按人选择初始成员",
     sensitiveFieldPaths: [],
   },
   UserDirectoryResponse: {

@@ -10,17 +10,22 @@ import {
 } from "../helpers/auth-context.js";
 import { loadRuntime, requiredE2eDatabaseUrl } from "../helpers/runtime.js";
 
-test("普通成员不能访问用户管理页面", async ({ browser }) => {
+test("普通成员可进入成员与设置并只读查看同组织成员", async ({ browser }) => {
   test.setTimeout(60_000);
   const runtime = await loadRuntime();
   const { context, page } = await createAuthenticatedContext(browser, runtime);
   try {
     await page.goto("/settings");
-    await expect(page.getByTestId("admin-forbidden")).toBeVisible();
-    await expect(page.getByText("无权访问", { exact: true })).toBeVisible();
+    // ADR-081：入口对全体成员开放；普通成员只读查看自己组织，不出现管理员专属视图。
     await expect(
-      page.getByText("此区域仅限系统管理员访问。", { exact: true }),
+      page.getByRole("heading", { name: "成员与设置" }),
     ).toBeVisible();
+    await expect(page.getByTestId("admin-forbidden")).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "成员与角色" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "组织管理" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "批量管理" })).toHaveCount(0);
   } finally {
     await context.close();
   }

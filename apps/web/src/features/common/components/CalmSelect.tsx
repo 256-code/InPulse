@@ -34,6 +34,11 @@ export interface CalmSelectOption {
     | undefined;
   /** member：头像地址；缺省用姓名首字色块。 */
   readonly avatarUrl?: string | null | undefined;
+  /**
+   * 分组标题（ADR-081）：相同文本的选项在弹层中按首次出现顺序聚成一组，
+   * 组标题即该文本；缺省表示不分组、平铺展示。
+   */
+  readonly group?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
 
@@ -177,6 +182,45 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
       }
     }
     return map;
+  }, [options]);
+
+  /**
+   * antd 弹层选项：出现 group 时按首次出现顺序成组（组标题为分组文本），
+   * 未分组的选项平铺在最后；无任何 group 时保持原有平铺行为不变。
+   */
+  const antdOptions = React.useMemo(() => {
+    const toLeaf = (option: CalmSelectOption) => ({
+      ...option,
+      disabled: option.disabled ?? false,
+    });
+    const hasGroups = options.some(
+      (option) => (option.group ?? "").trim().length > 0,
+    );
+    if (!hasGroups) {
+      return options.map(toLeaf);
+    }
+    const order: string[] = [];
+    const buckets = new Map<string, CalmSelectOption[]>();
+    const ungrouped: CalmSelectOption[] = [];
+    for (const option of options) {
+      const group = (option.group ?? "").trim();
+      if (group.length === 0) {
+        ungrouped.push(option);
+        continue;
+      }
+      if (!buckets.has(group)) {
+        buckets.set(group, []);
+        order.push(group);
+      }
+      buckets.get(group)?.push(option);
+    }
+    return [
+      ...order.map((group) => ({
+        label: <span className="calm-select-group-title">{group}</span>,
+        options: (buckets.get(group) ?? []).map(toLeaf),
+      })),
+      ...ungrouped.map(toLeaf),
+    ];
   }, [options]);
 
   const selectedValues: readonly (number | string)[] =
@@ -369,10 +413,7 @@ export const CalmSelect: React.FC<CalmSelectComponentProps> = (props) => {
           props.onBlur?.();
         }
       }}
-      options={options.map((option) => ({
-        ...option,
-        disabled: option.disabled ?? false,
-      }))}
+      options={antdOptions}
       labelRender={(label) => {
         const raw = label.value;
         return raw === undefined ? null : renderTrigger(raw);

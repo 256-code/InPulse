@@ -112,8 +112,22 @@ const COMPLETE_DOCUMENT = [
 ].join("\n");
 
 const DIRECTORY: readonly UserDirectoryItem[] = [
-  { id: 1, name: "林雨", avatarUrl: null, isAdmin: false },
-  { id: 2, name: "陈昊", avatarUrl: null, isAdmin: false },
+  {
+    id: 1,
+    name: "林雨",
+    avatarUrl: null,
+    isAdmin: false,
+    organizationId: null,
+    organizationName: null,
+  },
+  {
+    id: 2,
+    name: "陈昊",
+    avatarUrl: null,
+    isAdmin: false,
+    organizationId: null,
+    organizationName: null,
+  },
 ];
 
 const okAssist: DocumentImportAssistResponse = {
@@ -1585,8 +1599,22 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
     status: "ACTIVE",
   };
   const CREATOR_DIRECTORY: readonly UserDirectoryItem[] = [
-    { id: 1, name: "林雨", avatarUrl: null, isAdmin: false },
-    { id: 9, name: "林雨妍", avatarUrl: null, isAdmin: false },
+    {
+      id: 1,
+      name: "林雨",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
+    {
+      id: 9,
+      name: "林雨妍",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
   ];
   const CREATOR_DOCUMENT = [
     "# 项目：商城结算系统",
@@ -1663,12 +1691,47 @@ describe("创建者是固定成员（ADR-073，2026-10-14）", () => {
 });
 describe("成员字段的账号搜索建议（2026-10-14）", () => {
   const MEMBER_DIRECTORY: readonly UserDirectoryItem[] = [
-    { id: 1, name: "林雨", avatarUrl: null, isAdmin: false },
-    { id: 2, name: "小潘", avatarUrl: null, isAdmin: false },
-    { id: 3, name: "小邵", avatarUrl: null, isAdmin: true },
-    { id: 4, name: "王小二", avatarUrl: null, isAdmin: false },
+    {
+      id: 1,
+      name: "林雨",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
+    {
+      id: 2,
+      name: "小潘",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
+    {
+      id: 3,
+      name: "小邵",
+      avatarUrl: null,
+      isAdmin: true,
+      organizationId: null,
+      organizationName: null,
+    },
+    {
+      id: 4,
+      name: "王小二",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
     // 文档里「初始成员」本就写着陈昊：目录里也有他，点开就只是一个标签，不再出现在候选里。
-    { id: 5, name: "陈昊", avatarUrl: null, isAdmin: false },
+    {
+      id: 5,
+      name: "陈昊",
+      avatarUrl: null,
+      isAdmin: false,
+      organizationId: null,
+      organizationName: null,
+    },
   ];
 
   /**

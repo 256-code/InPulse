@@ -5,7 +5,7 @@ export const USER_DIRECTORY_LIMIT = 300;
 
 /**
  * 用户目录条目。只暴露创建项目成员选择所需的公开字段，不返回
- * `loginName`、`email`、`passwordHash` 或停用状态等敏感/内部字段。
+ * `loginName`、`email`、`passwordHash` 或停用状态等敏感/内部字段；组织归属（ADR-081）用于选择器按组织分组与整组选择，未分配为 null。
  */
 export const userDirectoryItemSchema = z
   .object({
@@ -13,6 +13,8 @@ export const userDirectoryItemSchema = z
     name: z.string().min(1).max(200),
     avatarUrl: z.string().min(1).max(2048).nullable(),
     isAdmin: z.boolean(),
+    organizationId: z.number().int().positive().max(2147483647).nullable(),
+    organizationName: z.string().min(1).max(100).nullable(),
   })
   .strict()
   .meta({ id: "UserDirectoryItem" });

@@ -112,11 +112,43 @@ describe("UserDirectoryService", () => {
         "id",
         "isAdmin",
         "name",
+        "organizationId",
+        "organizationName",
       ]);
       expect(item).not.toHaveProperty("loginName");
       expect(item).not.toHaveProperty("email");
       expect(item).not.toHaveProperty("status");
     }
+  });
+
+  test("返回组织归属：已分配用户带 organizationId/organizationName，未分配为 null", async () => {
+    const organizationName = `F081 目录组织 ${randomBytes(4).toString("hex")}`;
+    const orgRows = (await client!.sql`
+      INSERT INTO app.organizations (name)
+      VALUES (${organizationName})
+      RETURNING id
+    `) as unknown as readonly { id: number }[];
+    const organizationId = orgRows[0]!.id;
+    const assignedId = await createUser(client!.sql);
+    await client!.sql`
+      UPDATE app.users
+         SET organization_id = ${organizationId},
+             row_version = row_version + 1
+       WHERE id = ${assignedId}
+    `;
+    const unassignedId = await createUser(client!.sql);
+    const cookie = await issueSessionCookie(assignedId);
+
+    const directory = await service.getDirectory(cookie);
+
+    expect(directory).toBeDefined();
+    const assigned = directory!.find((item) => item.id === assignedId);
+    expect(assigned).toMatchObject({ organizationId, organizationName });
+    const unassigned = directory!.find((item) => item.id === unassignedId);
+    expect(unassigned).toMatchObject({
+      organizationId: null,
+      organizationName: null,
+    });
   });
 
   test("匿名或停用用户的 Session 不返回目录", async () => {

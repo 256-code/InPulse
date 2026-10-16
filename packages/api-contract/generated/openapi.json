@@ -29271,13 +29271,39 @@
           },
           "isAdmin": {
             "type": "boolean"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "organizationName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "id",
           "name",
           "avatarUrl",
-          "isAdmin"
+          "isAdmin",
+          "organizationId",
+          "organizationName"
         ],
         "additionalProperties": false
       },

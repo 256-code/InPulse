@@ -2183,6 +2183,8 @@ export type UserDirectoryItem = {
   readonly name: string;
   readonly avatarUrl: (string | null);
   readonly isAdmin: boolean;
+  readonly organizationId: (number | null);
+  readonly organizationName: (string | null);
 };
 
 export type UserDirectoryResponse = {

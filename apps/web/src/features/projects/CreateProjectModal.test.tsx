@@ -185,6 +185,139 @@ describe("CreateProjectModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("按组织整组选择：点组织按钮整组加入，再点整组移除并提交", async () => {
+    const issueCsrfToken = vi.fn().mockResolvedValue({ csrfToken: "csrf-1" });
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          name: "开发者 C",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+        {
+          id: 2,
+          name: "开发者 B",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+        {
+          id: 3,
+          name: "开发者 D",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+        {
+          id: 4,
+          name: "管理员 A",
+          avatarUrl: null,
+          isAdmin: true,
+          organizationId: null,
+          organizationName: null,
+        },
+      ],
+    });
+    const createProject = vi.fn().mockResolvedValue(createdProject);
+    const client = {
+      issueCsrfToken,
+      getUserDirectory,
+      createProject,
+    } as unknown as InpulseApiClient;
+    renderModal(client);
+
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    await fillForm(dialog);
+    const groupButton = await within(dialog).findByRole("button", {
+      name: /全选组织 研发一组/,
+    });
+    // 创建者被排除：研发一组的候选只剩 2、3 两人。
+    expect(within(groupButton).getByText("0/2")).toBeInTheDocument();
+
+    fireEvent.click(groupButton);
+    await expect(
+      within(dialog).findByText(/已选择 2 位其他成员/),
+    ).resolves.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: /取消全选组织 研发一组/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /取消全选组织 研发一组/ }),
+    );
+    await expect(
+      within(dialog).findByText(/已选择 0 位其他成员/),
+    ).resolves.toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /全选组织 研发一组/ }),
+    );
+    const user = userEvent.setup();
+    await user.click(within(dialog).getByRole("button", { name: "创建项目" }));
+
+    await waitFor(() => expect(createProject).toHaveBeenCalledTimes(1));
+    expect(createProject).toHaveBeenCalledWith(
+      expect.objectContaining({ memberIds: [2, 3] }),
+      expect.any(Object),
+    );
+  });
+
+  it("组内可单独挑选：单人勾选后组织按钮显示已选进度", async () => {
+    const getUserDirectory = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          name: "开发者 C",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+        {
+          id: 2,
+          name: "开发者 B",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+        {
+          id: 3,
+          name: "开发者 D",
+          avatarUrl: null,
+          isAdmin: false,
+          organizationId: 7,
+          organizationName: "研发一组",
+        },
+      ],
+    });
+    const client = { getUserDirectory } as unknown as InpulseApiClient;
+    renderModal(client);
+
+    const dialog = await screen.findByRole("dialog", { name: "新建项目" });
+    await screen.findByRole("button", { name: /全选组织 研发一组/ });
+    const trigger = within(dialog)
+      .getByLabelText("选择初始成员")
+      .closest(".ant-select");
+    expect(trigger).not.toBeNull();
+    fireEvent.mouseDown(trigger as HTMLElement);
+    fireEvent.click(await screen.findByTitle("开发者 B"));
+
+    await expect(
+      within(dialog).findByText(/已选择 1 位其他成员/),
+    ).resolves.toBeInTheDocument();
+    const groupButton = within(dialog).getByRole("button", {
+      name: /全选组织 研发一组（已选 1\/2 人）/,
+    });
+    expect(groupButton.className).toContain("is-partial");
+    expect(within(groupButton).getByText("1/2")).toBeInTheDocument();
+  });
+
   it("documents the current module rule instead of the removed default module", async () => {
     const getUserDirectory = vi.fn().mockResolvedValue({ items: [] });
     const client = { getUserDirectory } as unknown as InpulseApiClient;

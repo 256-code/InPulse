@@ -4,12 +4,21 @@ import { UserDirectoryController } from "../src/auth/user-directory.controller.j
 import type { UserDirectoryItem } from "@inpulse/api-contract";
 
 const directoryItems: readonly UserDirectoryItem[] = [
-  { id: 2, name: "开发者 B", avatarUrl: null, isAdmin: false },
+  {
+    id: 2,
+    name: "开发者 B",
+    avatarUrl: null,
+    isAdmin: false,
+    organizationId: null,
+    organizationName: null,
+  },
   {
     id: 3,
     name: "管理员 A",
     avatarUrl: "https://example.test/a.png",
     isAdmin: true,
+    organizationId: 7,
+    organizationName: "研发一组",
   },
 ];
 

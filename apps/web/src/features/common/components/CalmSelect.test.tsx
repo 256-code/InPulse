@@ -107,6 +107,35 @@ describe("CalmSelect", () => {
     expect(within(dropdown).getByText("陈默")).toBeInTheDocument();
   });
 
+  it("group 字段：弹层按分组标题聚组渲染，未分组选项平铺在最后", () => {
+    const groupedOptions: readonly CalmSelectOption[] = [
+      { value: 1, label: "张三", group: "研发一组" },
+      { value: 3, label: "王五", group: "市场部" },
+      { value: 2, label: "李四", group: "研发一组" },
+      { value: 4, label: "赵六" },
+    ];
+    const view = mount(
+      <CalmSelect
+        appearance="member"
+        multiple
+        value={[]}
+        onChange={() => {}}
+        options={groupedOptions}
+        ariaLabel="选择成员"
+      />,
+    );
+    openSelect(view.container);
+    const dropdown = dropdownOf();
+    const groupTitles = [
+      ...dropdown.querySelectorAll(".calm-select-group-title"),
+    ].map((element) => element.textContent);
+    expect(groupTitles).toEqual(["研发一组", "市场部"]);
+    const order = [
+      ...dropdown.querySelectorAll(".calm-select-member-name"),
+    ].map((element) => element.textContent);
+    expect(order).toEqual(["张三", "李四", "王五", "赵六"]);
+  });
+
   it("multiple 形态：连续多选按数组回调、标签上限 2 并保留原生输入框类名", () => {
     const onChange = vi.fn();
     function StatefulMulti() {

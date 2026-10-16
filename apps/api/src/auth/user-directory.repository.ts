@@ -16,14 +16,17 @@ export class PostgresUserDirectoryRepository implements UserDirectoryRepository 
     tx: TransactionContext,
   ): Promise<readonly UserDirectoryItem[]> {
     const rows = (await tx.sql`
-      SELECT id,
-             name,
-             avatar_url AS "avatarUrl",
-             is_admin AS "isAdmin"
-        FROM app.users
-       WHERE status = 'ACTIVE'
-         AND disabled_at IS NULL
-       ORDER BY id DESC, name ASC
+      SELECT u.id,
+             u.name,
+             u.avatar_url AS "avatarUrl",
+             u.is_admin AS "isAdmin",
+             u.organization_id AS "organizationId",
+             o.name AS "organizationName"
+        FROM app.users AS u
+        LEFT JOIN app.organizations AS o ON o.id = u.organization_id
+       WHERE u.status = 'ACTIVE'
+         AND u.disabled_at IS NULL
+       ORDER BY u.id DESC, u.name ASC
        LIMIT ${USER_DIRECTORY_LIMIT}
     `) as unknown as readonly UserDirectoryItem[];
     return rows.map((row) => ({ ...row }));

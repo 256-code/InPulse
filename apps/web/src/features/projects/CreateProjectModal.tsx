@@ -72,6 +72,28 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     [creatorUserId, directory.data],
   );
 
+  /** ADR-081：候选成员按组织聚组（未分配归「未分配」），用于整组选择。 */
+  const organizationGroups = useMemo(() => {
+    const order: string[] = [];
+    const buckets = new Map<string, number[]>();
+    for (const user of candidates) {
+      const name = user.organizationName ?? "未分配";
+      if (!buckets.has(name)) {
+        buckets.set(name, []);
+        order.push(name);
+      }
+      buckets.get(name)?.push(user.id);
+    }
+    return order.map((name) => ({
+      name,
+      memberIds: buckets.get(name) ?? [],
+    }));
+  }, [candidates]);
+
+  const hasOrganizationGroups = organizationGroups.some(
+    (group) => group.name !== "未分配",
+  );
+
   useEffect(() => {
     if (open) {
       reset(defaultValues);
@@ -102,6 +124,24 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     } catch {
       // 错误由 mutation.error 展示，服务器内部消息不下发到界面。
     }
+  };
+
+  const toggleOrganization = (memberIds: readonly number[]) => {
+    setSelectedMemberIds((current) => {
+      const selected = new Set(current);
+      const allSelected = memberIds.every((id) => selected.has(id));
+      for (const id of memberIds) {
+        if (allSelected) {
+          selected.delete(id);
+        } else {
+          selected.add(id);
+        }
+      }
+      // 保持与目录一致的稳定顺序，提交的 memberIds 不随点击顺序抖动。
+      return candidates
+        .filter((user) => selected.has(user.id))
+        .map((user) => user.id);
+    });
   };
 
   const handleCancel = () => {
@@ -246,26 +286,82 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               {!directory.isPending &&
               !directory.isError &&
               candidates.length > 0 ? (
-                <div className="calm-field">
-                  <label htmlFor="project-member-candidates">选择成员</label>
-                  <CalmSelect
-                    id="project-member-candidates"
-                    ariaLabel="选择初始成员"
-                    appearance="member"
-                    multiple
-                    value={selectedMemberIds}
-                    onChange={(next) => setSelectedMemberIds(next.map(Number))}
-                    placeholder="输入姓名搜索，可一次选择多位启用用户"
-                    disabled={mutation.isPending}
-                    options={candidates.map((user) => ({
-                      value: user.id,
-                      label: user.name,
-                      avatarUrl: user.avatarUrl ?? null,
-                      description: user.isAdmin ? "系统管理员" : "项目成员",
-                    }))}
-                    animated
-                  />
-                </div>
+                <>
+                  {hasOrganizationGroups ? (
+                    <div
+                      className="member-org-picks"
+                      role="group"
+                      aria-label="按组织选择"
+                    >
+                      {organizationGroups.map((group) => {
+                        const selectedCount = group.memberIds.filter((id) =>
+                          selectedMemberIds.includes(id),
+                        ).length;
+                        const allSelected =
+                          group.memberIds.length > 0 &&
+                          selectedCount === group.memberIds.length;
+                        return (
+                          <button
+                            key={group.name}
+                            type="button"
+                            className={
+                              "member-org-pick" +
+                              (allSelected
+                                ? " is-selected"
+                                : selectedCount > 0
+                                  ? " is-partial"
+                                  : "")
+                            }
+                            aria-pressed={allSelected}
+                            aria-label={
+                              (allSelected ? "取消全选组织 " : "全选组织 ") +
+                              group.name +
+                              "（已选 " +
+                              selectedCount +
+                              "/" +
+                              group.memberIds.length +
+                              " 人）"
+                            }
+                            disabled={mutation.isPending}
+                            onClick={() => toggleOrganization(group.memberIds)}
+                          >
+                            <span className="member-org-pick-name">
+                              {group.name}
+                            </span>
+                            <span className="member-org-pick-count">
+                              {selectedCount}/{group.memberIds.length}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <div className="calm-field">
+                    <label htmlFor="project-member-candidates">选择成员</label>
+                    <CalmSelect
+                      id="project-member-candidates"
+                      ariaLabel="选择初始成员"
+                      appearance="member"
+                      multiple
+                      value={selectedMemberIds}
+                      onChange={(next) =>
+                        setSelectedMemberIds(next.map(Number))
+                      }
+                      placeholder="输入姓名或组织搜索，可一次选择多位启用用户"
+                      disabled={mutation.isPending}
+                      options={candidates.map((user) => ({
+                        value: user.id,
+                        label: user.name,
+                        avatarUrl: user.avatarUrl ?? null,
+                        group: user.organizationName ?? "未分配",
+                        description:
+                          (user.organizationName ?? "未分配") +
+                          (user.isAdmin ? " · 系统管理员" : ""),
+                      }))}
+                      animated
+                    />
+                  </div>
+                </>
               ) : null}
               {directory.isPending ? (
                 /* 占位沿用真字段的 .calm-field + label 结构，控件占位与 CalmSelect 同为 32px；

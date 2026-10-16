@@ -6618,7 +6618,7 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 
 ## 组织（部门）成员分组、批量归属与同组织可见（ADR-081，2026-10-16 本地落库）
 
-需求原话要点：「管理员在成员设置可通过建立组织或部门把成员分开，成员可以看同一组织的其他成员，指派成员时可以选择一整个组织或组织里面选人」「拉取成员进入组织不能一个一个来（需批量）」「不要直接能勾选成员可批量加入或移除组织，设置一个按钮，点这个按钮才会有」「相同部门的成员要放一块」。本批落库迁移 `0046`（`app.organizations` + `app.users.organization_id`）与 6 条路由（119 → 125）；指派选择器的组织视图为第二批，不在本批。
+需求原话要点：「管理员在成员设置可通过建立组织或部门把成员分开，成员可以看同一组织的其他成员，指派成员时可以选择一整个组织或组织里面选人」「拉取成员进入组织不能一个一个来（需批量）」「不要直接能勾选成员可批量加入或移除组织，设置一个按钮，点这个按钮才会有」「相同部门的成员要放一块」。本批落库迁移 `0046`（`app.organizations` + `app.users.organization_id`）与 6 条路由（119 → 125）；指派选择器的组织视图为第二批，不在本批。2026-10-16 同日第二批（部分）落库：新建项目「初始项目成员」选择器按组织分组并支持整组勾选（`getUserDirectory` 增加 `organizationId` / `organizationName`，未分配为 `null`）；任务创建 / 改派选择器仍待落地。同日修正 `/settings` 路由守卫（首批声明对全体成员开放但路由仍带 `requiresAdmin`，已改为 `requiresAuth`）。
 
 | ID | 层级 | 场景 | 通过标准 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -6629,6 +6629,10 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | ORGANIZATION-UI-002 | Web 单元 | 同组织分组显示 | 列表按组织分组（`.member-group-title` 显示名称与人数），当前账号所在组织置顶、其余按组织 id 升序、未分配最后；组内保持原有顺序 | 本地通过（2026-10-16） |
 | ORGANIZATION-UI-003 | Web 单元 | 普通成员只读视图 | 非管理员不调用 `listAdminUsers`；只渲染同组织成员（脱敏）且看不到「组织管理」按钮；未分配显示「尚未加入组织」 | 本地通过（2026-10-16） |
 | ORGANIZATION-UI-004 | Web 单元 | 组织管理弹窗新建 | 打开弹窗、填写名称、点「新建组织」提交（CSRF + `organization-` 前缀幂等 Key） | 本地通过（2026-10-16） |
+| ORGANIZATION-API-004 | 真实 PostgreSQL 集成 | 用户目录组织字段 | 已分配用户返回 `organizationId` / `organizationName`，未分配为 `null`；条目键集合为 `avatarUrl / id / isAdmin / name / organizationId / organizationName`，仍不含登录名、邮箱与停用状态 | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-005 | Web 单元 | 新建项目选择器按组织分组与整组勾选 | `CalmSelect` 按组织分组渲染组标题、未分组选项平铺最后；`CreateProjectModal` 组织按钮整组选择提交 `memberIds`、部分选择显示 `1/2` 与部分选中样式 | 本地通过（2026-10-16） |
+| ORGANIZATION-UI-006 | Web 路由集成 | 普通成员可进入设置页 | 普通成员访问 `/settings` 不再出现「无权访问」管理员门，渲染只读「成员与角色」与同组织成员（mock `getMyOrganizationMembers`） | 本地通过（2026-10-16） |
+| ORGANIZATION-E2E-001 | Playwright 浏览器 | 普通成员只读入口 | 普通成员打开 `/settings` 可见「成员与设置」与只读「成员与角色」，无 `admin-forbidden`、无「组织管理」「批量管理」 | 未运行（用例已改写，本地全量 E2E 待跑） |
 | ORGANIZATION-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 类型 | `contract:validate` 125 条；`permissions:check` 125 条操作 / 125 条路由；`contract:drift` 5 产物无漂移；全 workspace typecheck / lint / format:check 通过；迁移 `0046` 已在 `app_ci` 应用通过 | 本地通过（2026-10-16） |
 
-未运行 / 已知偏差（本批）：① 组织管理弹窗的改名、删除二次确认与「按组织批量拉人」只有实现路径，无专门自动化用例（后续可补）；② 指派选择器「一键选中整个组织 / 按组织选人」为第二批，未实现；③ Playwright E2E 未新增组织场景，全量 E2E 未在本批复跑；④ `pnpm check` 整链未运行、GitHub Actions 未执行。
+未运行 / 已知偏差（本批）：① 组织管理弹窗的改名、删除二次确认与「按组织批量拉人」只有实现路径，无专门自动化用例（后续可补）；② 指派选择器的组织视图：新建项目表单已落地（ORGANIZATION-UI-005），任务创建 / 改派选择器仍待落地；③ Playwright 未新增组织管理场景；普通成员只读入口用例已改写（ORGANIZATION-E2E-001）但未运行，全量 E2E 未在本批复跑；④ `pnpm check` 整链未运行、GitHub Actions 未执行；⑤ `/settings` 普通成员入口修正由 Web 路由集成用例覆盖，未做手工浏览器复核（截至本地提交）。

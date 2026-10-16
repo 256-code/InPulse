@@ -2887,3 +2887,54 @@
   border-top: none;
   padding-top: 6px;
 }
+
+/* ADR-081 选择器按组织整组选择：组织按钮显示已选 / 总数。 */
+.member-org-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.member-org-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid #dfe7ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #132238;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.member-org-pick:hover {
+  border-color: #b9cde4;
+  background: #f7fafd;
+}
+
+.member-org-pick.is-partial {
+  border-color: #9db9dd;
+  background: #f2f7fc;
+}
+
+.member-org-pick.is-selected {
+  border-color: #1467d8;
+  background: #eef4fc;
+  color: #1467d8;
+}
+
+.member-org-pick:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.member-org-pick-count {
+  color: #8492a1;
+  font-size: 11px;
+}
+
+.member-org-pick.is-selected .member-org-pick-count {
+  color: #5d86c2;
+}

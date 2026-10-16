@@ -106,4 +106,70 @@ describe("AppRouter integration", () => {
       window.history.pushState({}, "", "/");
     }
   });
+
+  it("lets a regular member open the settings page without the admin-only gate", async () => {
+    const authClient = {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        id: 9,
+        loginName: "member",
+        name: "林雨妍",
+        email: null,
+        avatarUrl: null,
+        isAdmin: false,
+        status: "ACTIVE",
+      }),
+    } as unknown as InpulseApiClient;
+
+    // 页面内只读组织视图走生成客户端默认 fetch；这里只服务该请求。
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/organizations/me/members")) {
+        return new Response(
+          JSON.stringify({
+            organization: { id: 7, name: "研发一组" },
+            items: [{ id: 9, name: "林雨妍", avatarUrl: null, isAdmin: false }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          code: "NOT_FOUND",
+          message: "Resource not found",
+          details: {},
+          requestId: "test",
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    window.history.pushState({}, "", "/settings");
+    try {
+      render(
+        <AppErrorBoundary>
+          <AppProviders authClient={authClient}>
+            <AppRouter />
+          </AppProviders>
+        </AppErrorBoundary>,
+      );
+
+      expect(
+        await screen.findByRole(
+          "heading",
+          { name: "成员与角色", level: 3 },
+          { timeout: 5_000 },
+        ),
+      ).toBeInTheDocument();
+      expect((await screen.findAllByText(/研发一组/)).length).toBeGreaterThan(
+        0,
+      );
+      expect(
+        screen.queryByText("此区域仅限系统管理员访问。"),
+      ).not.toBeInTheDocument();
+    } finally {
+      window.history.pushState({}, "", "/");
+      vi.unstubAllGlobals();
+    }
+  });
 });
