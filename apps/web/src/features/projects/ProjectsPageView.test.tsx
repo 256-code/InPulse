@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type {
   CreateProjectResponse,
+  CurrentUserResponse,
   InpulseApiClient,
   ProjectListItem,
 } from "@generated/api";
@@ -33,8 +34,19 @@ const project: ProjectListItem = {
   currentUserRole: "MEMBER",
 };
 
+const viewerUser: CurrentUserResponse = {
+  id: 7,
+  loginName: "viewer",
+  name: "查看者",
+  email: null,
+  avatarUrl: null,
+  isAdmin: false,
+  status: "ACTIVE",
+};
+
 function mount(
   overrides: Partial<React.ComponentProps<typeof ProjectsPageView>>,
+  options: { readonly user?: CurrentUserResponse } = {},
 ) {
   const onOpenModules = vi.fn();
   render(
@@ -45,7 +57,12 @@ function mount(
         }
       >
         <MemoryRouter>
-          <AuthStateProvider>
+          <AuthStateProvider
+            value={{
+              status: "authenticated",
+              user: options.user ?? viewerUser,
+            }}
+          >
             <ProjectsPageView
               creatorName="特哥"
               projects={[project]}
@@ -104,24 +121,42 @@ describe("项目卡", () => {
     fireEvent.click(star);
     expect(star.getAttribute("aria-pressed")).toBe("true");
     expect(star.className).toContain("is-starred");
-    expect(globalThis.localStorage.getItem("inpulse.projects.starred")).toBe(
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred.7")).toBe(
       "[2]",
     );
     expect(onOpenModules).not.toHaveBeenCalled();
 
     fireEvent.click(star);
     expect(star.getAttribute("aria-pressed")).toBe("false");
-    expect(globalThis.localStorage.getItem("inpulse.projects.starred")).toBe(
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred.7")).toBe(
       "[]",
     );
   });
 
   it("重新进入页面时按本地记录恢复星标", () => {
-    globalThis.localStorage.setItem("inpulse.projects.starred", "[2]");
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[2]");
     mount({});
     expect(
       screen.getByTestId("star-project-2").getAttribute("aria-pressed"),
     ).toBe("true");
+  });
+
+  it("星标按账号各存一份：换账号登录看不到别人点亮的星", () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[2]");
+
+    mount({}, { user: { ...viewerUser, id: 9, loginName: "other" } });
+    const star = screen.getByTestId("star-project-2");
+    expect(star.getAttribute("aria-pressed")).toBe("false");
+
+    // 另一个账号点星只写自己那份，7 号账号的记录不动。
+    fireEvent.click(star);
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred.9")).toBe(
+      "[2]",
+    );
+    expect(globalThis.localStorage.getItem("inpulse.projects.starred.7")).toBe(
+      "[2]",
+    );
   });
 
   it("keeps GitHub links off the project card, matching the design reference", () => {
@@ -246,7 +281,7 @@ describe("项目星标排序（2026-10-15 用户指示）", () => {
 
   it("点亮的项目排到前面，未标之间保持原有次序", () => {
     globalThis.localStorage.clear();
-    globalThis.localStorage.setItem("inpulse.projects.starred", "[22]");
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[22]");
     mount({ projects: [project, openSecond, openThird] });
 
     expect(cardNames()).toEqual(["乙项目", "InPulse 研发交付平台", "丙项目"]);
@@ -258,7 +293,7 @@ describe("项目星标排序（2026-10-15 用户指示）", () => {
 
   it("取消星标后回到原次序位置", () => {
     globalThis.localStorage.clear();
-    globalThis.localStorage.setItem("inpulse.projects.starred", "[22]");
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[22]");
     mount({ projects: [project, openSecond, openThird] });
 
     fireEvent.click(screen.getByTestId("star-project-22"));
@@ -267,7 +302,7 @@ describe("项目星标排序（2026-10-15 用户指示）", () => {
 
   it("维护中一档同样星标优先，其余仍按进入维护时间从近到远", () => {
     globalThis.localStorage.clear();
-    globalThis.localStorage.setItem("inpulse.projects.starred", "[11]");
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[11]");
     mount({ projects: [maintenanceEarly, maintenanceLate] });
     fireEvent.click(screen.getByRole("button", { name: "维护中" }));
 
@@ -276,7 +311,7 @@ describe("项目星标排序（2026-10-15 用户指示）", () => {
 
   it("搜索过滤后仍按星标优先排序", () => {
     globalThis.localStorage.clear();
-    globalThis.localStorage.setItem("inpulse.projects.starred", "[23]");
+    globalThis.localStorage.setItem("inpulse.projects.starred.7", "[23]");
     mount({ projects: [project, openSecond, openThird] });
     fireEvent.change(screen.getByLabelText("搜索项目"), {
       target: { value: "项目" },

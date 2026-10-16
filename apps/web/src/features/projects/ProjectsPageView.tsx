@@ -43,6 +43,8 @@ const hierarchyNotes = [
 /**
  * 卡片右上角的星标按钮（2026-10-15 用户指示）：位置在状态徽章左侧，只切换「我的关注」，
  * 点亮的项目在列表里排到前面；不改侧栏、不加筛选；点击不冒泡到卡片，不会顺带跳进项目。
+ * 星标是**账号级**偏好（2026-10-16 用户指示）：一个人点亮只改自己那份本地记录与自己的列表，
+ * 同一台浏览器上的其他账号看不到，也不会被排到前面。
  */
 const ProjectStarButton: React.FC<{
   readonly projectId: number;
@@ -124,7 +126,8 @@ export const ProjectsPageView: React.FC<ProjectsPageViewProps> = ({
   // 档位由 AppLayout 的 ProjectTierProvider 持有，侧栏项目树读同一份状态，
   // 因此这里只负责渲染与切换，不再自己 useState。
   const { tier, selectTier } = useProjectTier();
-  // 星标（我的关注）：只存浏览器本地，是卡片右上角的一个开关，点亮的项目排到列表前面。
+  // 星标（我的关注）：按登录账号各存一份浏览器本地记录（2026-10-16 用户指示），是卡片右上角
+  // 的一个开关，点亮的项目只在自己这个账号的列表里排到前面。
   const { isStarred, toggleStar } = useProjectStars();
 
   // 两档计数在关键词之前算：滑块上的数字是当前可见项目的总量，不随搜索词跳动。

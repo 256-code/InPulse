@@ -6599,3 +6599,17 @@ ADR-068 的代码、契约与迁移随同日的提交 `c4ec412` 落库，但当�
 | WECOM-GROUP-UI-005 | Web 单测 | 待用码无明文 | 客户端没有明文时展示「已有一个待用绑定码」与有效期，组长可见「重新生成绑定码」 | 本地通过（2026-10-15） |
 | WECOM-GROUP-UI-006 | Web 单测 | 复制 | 「复制机器人链接」与「复制绑定码」写入剪贴板（后者写入一次性明文码） | 本地通过（2026-10-15） |
 | WECOM-GROUP-GATE-001 | 静态门禁 | 契约 / 权限 / 迁移 / 依赖边界 | `contract:generate` 产物同步；`permissions:check` 119 条操作 / 119 条路由（ADR-023 allowlist 扩为七条并与 `docs/permissions.md` 精确相等）；`db:migrations:check` 43 个（含 0044）；`check:deps` 848 文件无越界（wecom-group 经 `wecom-binding/index.ts` 公开面复用码生成 / 哈希） | 本地通过（2026-10-15） |
+
+## 项目星标按账号分仓（2026-10-16 本地落库，第二百零八条）
+
+定案见开发日志第二百零八条：星标由「一台浏览器一份」改为「一个登录账号一份」——存储 key 从 `inpulse.projects.starred` 改为 `inpulse.projects.starred.<userId>`，`useProjectStars()` 从 `useAuth()` 读当前登录用户 id；拿不到用户 id 时不读也不写；首版全局 key 只被第一个打开项目列表的账号接管一次并随即删除。展示行为不变（自己点亮的项目排在自己列表前面），路由 / 迁移数不变（119 条路由 / 44 个迁移）。
+
+| ID | 层级 | 场景 | 通过标准 | 状态 |
+| --- | --- | --- | --- | --- |
+| PROJECT-STAR-ACCOUNT-001 | Web 单元 | 按账号读写本地记录 | `project-star.test.ts` **6 例**：无记录 → `[]`；`...starred.7` 为 `[2,5]` 时 7 号账号读回 `[2,5]`；`...starred.9=[3]` 不影响 7 号账号读回 `[]`、9 号账号读回 `[3]`；损坏 / 非数组 / 含非法项分别回落 `[]`、`[]`、`[2]`；切换 `[7,2,9]` 去 2 → `[7,9]`、加回 → `[7,9,2]` | 本地通过（2026-10-16） |
+| PROJECT-STAR-ACCOUNT-002 | Web 单元 | 首版全局记录的一次性接管 | legacy `inpulse.projects.starred=[2]` 时 7 号账号读回 `[2]`、写入 `...starred.7`、legacy key 被删除；随后 9 号账号读回 `[]`（不继承上一个人点亮的星） | 本地通过（2026-10-16） |
+| PROJECT-STAR-ACCOUNT-003 | Web 单元 | 换账号不串，点星只落自己那份 | `ProjectsPageView.test.tsx`：7 号账号已点亮 2 号项目时，以 9 号账号渲染卡片 `aria-pressed=false`；9 号账号点星后 `...starred.9=[2]` 而 `...starred.7` 仍为 `[2]`；既有 4 例星标排序用例改用 `...starred.7` 后继续通过（整文件 `pnpm --filter @inpulse/web test` **112 文件 910 例通过**） | 本地通过（2026-10-16） |
+| PROJECT-STAR-ACCOUNT-GATE-001 | 静态门禁 | 类型 / 依赖边界 / Lint | `pnpm --filter @inpulse/web typecheck` 通过；`check:boundaries` 363 模块 / 1808 依赖 0 违规（`features/projects` 新增对 `features/auth` 的依赖与仓库既有 20 处同构，未触发越界规则）；定向 `eslint` 4 个改动文件 exit 0 | 本地通过（2026-10-16） |
+| PROJECT-STAR-ACCOUNT-E2E-001 | 浏览器 E2E（生产构建 + `app_ci`） | 整站回归 | `pnpm test:e2e:local` **85 通过 / 1 失败（6.7 分钟）**：失败项为 `project-members.spec.ts:12` 的 `.settings-panel` 严格模式冲突，根因是本批合并进来的 `ProjectWecomGroupCard` 在成员页多渲染了一个 `.panel.settings-panel`，与本批星标改动无关（本批未改成员页任何文件）；其余 85 例（含项目创建、项目删除、可视化迁移）无回归 | 本地通过（本批范围）／1 例上游回归待修（2026-10-16） |
+
+未运行 / 已知偏差（本批）：① 星标仍只存浏览器本地，跨设备 / 跨浏览器不同步，清 localStorage 即丢失；跨设备需要新表 + `listProjects` 契约 + 权限矩阵 + 迁移 + 集成测试，按仓库规则要另立 ADR，本批不做。② 首版全局 key 的接管是一次性过渡，接管后原 key 已删除、不可回滚。③ `project-members.spec.ts:12` 的 `.settings-panel` 选择器需要收窄到成员面板（上游企业微信卡片批次带进来的 E2E 回归，其条目只记了单测与集成、未跑全量 E2E），本批**未修**，留给该批次或后续单独一条。④ 生产镜像构建与 Trivy 扫描未执行；⑤ GitHub Actions 未执行（`test` 分支不触发工作流）。
