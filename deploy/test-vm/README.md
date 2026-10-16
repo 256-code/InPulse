@@ -21,7 +21,7 @@ Compose + 本地 registry 的测试环境，不是生产发布流程：生产镜
 | 部署目录补充  | `backups/`（同步前的 pg_dump）、`compose.yaml.bak-*`、`.env.deploy.bak-*`（回滚用）                            |
 | 企业微信桥接  | 独立容器 `inpulse-wecom-bridge`（非 compose 管理；源码 `deploy/test-vm/wecom-bridge/` 为本地唯一源，用 `deploy/test-vm/update-bridge.ps1` 同步；个人绑定码自助绑定与项目群绑定兑换均已实现，见「企业微信机器人桥接」） |
 | AI 辅助转换   | 已启用（`AI_ASSIST_ENABLED=1`）；API Key 待管理员在设置页重填（见「AI 辅助转换启用」） |
-| 当前版本      | api/migrate 为 `0.1.0-20261015-7f4d28e`、web 为 `0.1.0-20261016-1498026`；db-bootstrap/ops 仍为 `0.1.0-20261015-6f23ab4`；桥接为 `0.1.0-20261016-bridge525a07f`；`BACKUP_GIT_SHA=1498026`（2026-10-16 最新同步） |
+| 当前版本      | api/migrate 为 `0.1.0-20261015-7f4d28e`、web 为 `0.1.0-20261016-6bfbd56`；db-bootstrap/ops 仍为 `0.1.0-20261015-6f23ab4`；桥接为 `0.1.0-20261016-bridge525a07f`；`BACKUP_GIT_SHA=6bfbd56`（2026-10-16 最新同步） |
 
 ## 一次性准备
 
@@ -72,7 +72,7 @@ api 容器内访问 Casdoor discovery 返回 200（`egress` 生效）。
 
 2026-10-15 18:00 再次实测（`-Targets api,web,migrate -FixEol`，Tag `0.1.0-20261015-8e97c8b`，含企业微信项目群绑定第一批）：EOL 预检零漂移；migrate 报 `0 applied, 43 already present`（迁移 `0044` 已随此前数据同步在库，账本校验和按注释级改动定点修正，见 FAQ）；api/web/db 全部 healthy，探针与 `egress` 校验同上；桥接同步到内容哈希 Tag `0.1.0-20261015-bridgedd2084d` 并订阅成功。
 
-2026-10-15 19:35 同步 `-Targets api,web,migrate -FixEol` 到 `0.1.0-20261015-7f4d28e`（ADR-078 更换机器人自动解绑，含迁移 `0045`）：migrate 报 `1 applied, 43 already present`。2026-10-16 11:02 补齐 `-Targets web` 到 `0.1.0-20261016-1498026`（ADR-080 登录页直达 SSO），桥接同步到 `0.1.0-20261016-bridge525a07f`（欢迎语/限频、项目群投递 PENDING 队列 + 限速）：migrate 重跑报 `0 applied, 44 already present`，api/web/db 全部 healthy，探针同上，桥接订阅 errcode=0。本次未改迁移，未另做数据库备份（前一次为 `pre-sync-20261015-193456.dump`）。
+2026-10-15 19:35 同步 `-Targets api,web,migrate -FixEol` 到 `0.1.0-20261015-7f4d28e`（ADR-078 更换机器人自动解绑，含迁移 `0045`）：migrate 报 `1 applied, 43 already present`。2026-10-16 11:02 补齐 `-Targets web` 到 `0.1.0-20261016-1498026`（ADR-080 登录页直达 SSO），桥接同步到 `0.1.0-20261016-bridge525a07f`（欢迎语/限频、项目群投递 PENDING 队列 + 限速）：migrate 重跑报 `0 applied, 44 already present`，api/web/db 全部 healthy，探针同上，桥接订阅 errcode=0。本次未改迁移，未另做数据库备份（前一次为 `pre-sync-20261015-193456.dump`）。2026-10-16 12:13 再同步 `-Targets web` 到 `0.1.0-20261016-6bfbd56`（设置页权限矩阵说明表跨历史补齐）：migrate 重跑 `0 applied, 44 already present`，探针同上。
 
 常用参数：
 
@@ -279,6 +279,24 @@ sudo docker exec -i inpulse-deploy-db-1 pg_restore --list < backups/<文件名>.
 `secrets/audit_hmac_keyring` 签发，跨环境的审计链全量校验/归档任务会报不匹配；
 `ai_assist_settings` 的密钥密文由本地主密钥加密，VM 当前 `AI_ASSIST_ENABLED=0`
 不读取——要在 VM 试用 AI 助手，在管理页重新填写一次即可。
+### 在测试环境站点内直接录入演示内容（2026-10-16 实作，VM 独有）
+
+用户要求在系统自有的「InPulse 研发交付平台」（项目 1）里，把 2026-10-13 以来的真实交付变化
+整理成新的模块 / 功能 / 任务 / 迭代记录并指派成员。本次没有走「本地导出 → VM 恢复」链路，
+而是以邵晨宇的 SSO 账号登录 `https://test-inpulse.libiaorobot.com/` 后经站点 API 直接录入
+（登录 → CSRF → 带 `Idempotency-Key` 的写接口，全链路走正规审计 / 通知 / 投影）：
+
+- 新增模块：企业微信集成、AI 辅助；并在既有「平台与访问」「前端与体验」下新增 3 个功能（共 7 个功能）。
+- 新增任务 21 个（19 个完成、2 个待办）；邵晨宇出现在 10 个任务、林雨妍出现在 12 个任务（其中 1 个为双负责人）。
+- 发布迭代记录 `INPULSE-CR-139` ~ `INPULSE-CR-145` 共 7 条。
+- 录入脚本为临时工具（只在 `%TEMP%` 下，未入仓库）：按「同名即复用、缺失才创建」实现，可安全重跑；实测重跑全部 exists、无重复。
+
+执行前备份 `backups/pre-entry-20261016-1440.dump`（`pg_restore --list` 709 项）。录入产生的
+48 条站内通知由桥接容器按既有链路推送企业微信（errcode=0）。
+
+注意：本次只改了 VM 数据，本地演示库不含这批内容；且 VM 的用户 / 绑定状态（SSO JIT 账号、
+管理员标记、个人与项目群绑定等）此前已领先本地。两边要完全一致，需要另行做一次 VM → 本地的
+镜像恢复（破坏性，执行前先备份两边）。
 ## 企业微信机器人桥接（2026-10-15 部署）
 
 测试 VM 的企业微信通知推送由一个**独立于 compose 栈**的桥接容器完成：轮询

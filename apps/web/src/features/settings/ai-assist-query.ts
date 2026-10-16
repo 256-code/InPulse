@@ -56,7 +56,7 @@ const TEST_REASON_TEXT: Readonly<Record<string, string>> = {
   NETWORK: "无法连接上游端点（网络故障）",
   CONTEXT_LIMIT: "上游判定请求超出上下文限制",
   INVALID_RESPONSE:
-    "上游返回了无法识别的内容（请确认服务端点填写的是完整的 /chat/completions 地址）",
+    "上游返回了无法识别的内容（请确认服务端点指向 OpenAI 兼容的 chat/completions 服务）",
 };
 
 export function aiAssistTestFailureText(reason: string): string {

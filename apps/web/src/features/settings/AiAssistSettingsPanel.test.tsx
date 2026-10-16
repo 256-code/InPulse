@@ -110,7 +110,7 @@ describe("AiAssistSettingsPanel（ADR-068）", () => {
     expect(screen.getByLabelText("服务端点")).toHaveValue(
       "https://api.example.com/v1/chat/completions",
     );
-    expect(screen.getByText(/chat\/completions 地址/)).toBeInTheDocument();
+    expect(screen.getByText(/可填根地址/)).toBeInTheDocument();
   });
 
   it("保存：留空 API 密钥传 null，先签发 CSRF 再携带 Idempotency-Key", async () => {

@@ -118,6 +118,29 @@ describe("loadAiAssistConfig（fail closed）", () => {
     ).toContain("https");
   });
 
+  test("根地址自动补全 /chat/completions（含尾斜杠与裸域名）", () => {
+    expect(
+      loadAiAssistConfig(
+        enabledEnv({ AI_ASSIST_ENDPOINT: "https://api.example.com/v1" }),
+      ).config?.endpoint,
+    ).toBe("https://api.example.com/v1/chat/completions");
+    expect(
+      loadAiAssistConfig(
+        enabledEnv({ AI_ASSIST_ENDPOINT: "https://api.example.com/v1/" }),
+      ).config?.endpoint,
+    ).toBe("https://api.example.com/v1/chat/completions");
+    expect(
+      loadAiAssistConfig(
+        enabledEnv({ AI_ASSIST_ENDPOINT: "https://api.example.com" }),
+      ).config?.endpoint,
+    ).toBe("https://api.example.com/v1/chat/completions");
+    expect(
+      loadAiAssistConfig(
+        enabledEnv({ AI_ASSIST_ENDPOINT: "http://127.0.0.1:8123/v1" }),
+      ).config?.endpoint,
+    ).toBe("http://127.0.0.1:8123/v1/chat/completions");
+  });
+
   test("密钥文件路径：非 test 逃生时必须位于 /run/secrets", () => {
     expect(
       loadAiAssistConfig(
